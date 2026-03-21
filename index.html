@@ -27,7 +27,6 @@
     appId:             "1:74142920533:web:6aa4b1a9ae82a94125c9dc"
   };
 
-
   // ── Inicializar Firebase ──
   const firebaseApp = initializeApp(firebaseConfig);
   const db_firebase = getFirestore(firebaseApp);
@@ -1272,7 +1271,7 @@ canvas { max-width: 100%; display: block; }
           <table class="data-table">
             <thead>
               <tr>
-                <th>Fecha</th><th>Fuente</th><th>Categoría</th><th>Monto</th><th>Acciones</th>
+                <th>Fecha</th><th>Hora</th><th>Fuente</th><th>Categoría</th><th>Monto</th><th>Acciones</th>
               </tr>
             </thead>
             <tbody id="ing-tbody"></tbody>
@@ -1347,9 +1346,9 @@ canvas { max-width: 100%; display: block; }
         <div id="gas-total-mes" style="margin-bottom:12px;"></div>
         <div class="table-wrap">
           <table class="data-table">
-            <thead>
+            <thead style="position:sticky;top:0;z-index:2;">
               <tr>
-                <th>Fecha</th><th>Descripción</th><th>Categoría</th><th>Monto</th><th>Acciones</th>
+                <th>Fecha</th><th>Hora</th><th>Descripción</th><th>Categoría</th><th>Monto</th><th>Acciones</th>
               </tr>
             </thead>
             <tbody id="gas-tbody"></tbody>
@@ -1997,24 +1996,31 @@ async function loadDb() {
 }
 
 // ── Guardar (Firebase + localStorage como doble respaldo) ──
-async function saveDb() {
-  // 1. Guardar en localStorage siempre (respaldo instantáneo)
+// Rastrea qué colecciones han cambiado para sync selectivo
+const _dirtyCollections = new Set();
+function markDirty(col) { _dirtyCollections.add(col); }
+
+async function saveDb(coleccionesEspecificas = null) {
+  // 1. Guardar en localStorage siempre (instantáneo)
   localStorage.setItem('finanzas_pro_v2', JSON.stringify(STATE.db));
   showSavingDot();
 
-  // 2. Si Firebase está disponible, sincronizar también
+  // 2. Sincronizar con Firebase
   if (window.__FB && window.__FB.ready) {
     try {
-      const colecciones = ['ingresos','gastos','deudas','pass',
-                           'prestamos','gastosFijos','inversiones','ventasInv'];
-      // Usamos saveCollection para cada colección modificada
-      // Para eficiencia, guardamos en paralelo
+      // Si se especifican colecciones, solo guardar esas (más rápido)
+      // Si no, guardar todas
+      const toSave = coleccionesEspecificas ||
+        ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv'];
+
       await Promise.all(
-        colecciones.map(col => window.__FB.saveCollection(col, STATE.db[col] || []))
+        toSave.map(col => window.__FB.saveCollection(col, STATE.db[col] || []))
       );
     } catch (err) {
       console.error('⚠️ Error guardando en Firebase:', err);
-      toast('Guardado localmente (Firebase sin conexión)', 'info');
+      // No mostrar toast en cada operación para no molestar
+      // Solo mostrar si el usuario lo nota
+      console.warn('Datos guardados localmente como respaldo');
     }
   }
 }
@@ -2070,6 +2076,28 @@ async function deleteItem(colName, id) {
 
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+// Convierte "03:45 PM" a minutos totales para comparación
+function convertirHora(horaStr) {
+  if (!horaStr) return 0;
+  try {
+    const match = horaStr.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+    if (!match) return 0;
+    let h = parseInt(match[1]);
+    const m = parseInt(match[2]);
+    const ampm = (match[3]||'').toUpperCase();
+    if (ampm === 'PM' && h !== 12) h += 12;
+    if (ampm === 'AM' && h === 12) h = 0;
+    return h * 60 + m;
+  } catch { return 0; }
+}
+
+// Captura la hora actual del dispositivo
+function horaActual() {
+  return new Date().toLocaleTimeString('es-CO', {
+    hour: '2-digit', minute: '2-digit', hour12: true
+  });
 }
 
 /* ── Firebase UI helpers ── */
@@ -2475,28 +2503,43 @@ function renderDashboard() {
     ? '+ ' + partes.join(' · ')
     : (balance >= 0 ? '↑ Positivo este mes' : '↓ Negativo este mes');
 
-  // Recent transactions
+  // Todas las transacciones ordenadas: más reciente primero
+  // Desempate por hora si misma fecha, luego por creadoEn si existe
   const all = [
     ...STATE.db.ingresos.map(i => ({ ...i, tipo: 'ingreso' })),
     ...STATE.db.gastos.map(g => ({ ...g, tipo: 'gasto' })),
-  ].sort((a, b) => (b.fecha||'').localeCompare(a.fecha||'')).slice(0, 8);
+  ].sort((a, b) => {
+    // Comparar fecha primero
+    const fechaDiff = (b.fecha||'').localeCompare(a.fecha||'');
+    if (fechaDiff !== 0) return fechaDiff;
+    // Misma fecha: comparar hora (formato "03:45 PM")
+    const horaA = a.hora ? convertirHora(a.hora) : 0;
+    const horaB = b.hora ? convertirHora(b.hora) : 0;
+    if (horaB !== horaA) return horaB - horaA;
+    // Último desempate: por creadoEn (timestamp)
+    return (b.creadoEn||'').localeCompare(a.creadoEn||'');
+  });
 
   const tbl = document.getElementById('dash-recent');
   if (!all.length) {
     tbl.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><p>Sin transacciones aún.</p></div>';
     return;
   }
+  // Tabla con scroll: max-height para ver todos deslizando
   tbl.innerHTML = `
-    <div class="table-wrap">
+    <div class="table-wrap" style="max-height:420px;overflow-y:auto;">
     <table class="data-table">
-      <thead><tr><th>Fecha</th><th>Descripción</th><th>Tipo</th><th>Monto</th></tr></thead>
+      <thead style="position:sticky;top:0;z-index:2;">
+        <tr><th>Fecha</th><th>Hora</th><th>Descripción</th><th>Tipo</th><th>Monto</th></tr>
+      </thead>
       <tbody>
         ${all.map(r => `
           <tr>
-            <td>${r.fecha || '-'}</td>
+            <td style="white-space:nowrap">${r.fecha || '-'}</td>
+            <td style="color:var(--muted);font-size:.8rem;white-space:nowrap">${r.hora || '—'}</td>
             <td>${r.fuente || r.desc || '-'}</td>
             <td><span class="badge ${r.tipo === 'ingreso' ? 'badge-green' : 'badge-red'}">${r.tipo}</span></td>
-            <td style="color:${r.tipo==='ingreso' ? 'var(--green)' : 'var(--red)'}">
+            <td style="color:${r.tipo==='ingreso' ? 'var(--green)' : 'var(--red)'};font-weight:600;white-space:nowrap">
               ${r.tipo === 'ingreso' ? '+' : '-'}${fmt(r.monto)}
             </td>
           </tr>`).join('')}
@@ -2661,7 +2704,7 @@ function drawCatChart() {
 /* ============================================================
    INGRESOS
    ============================================================ */
-function saveIngreso() {
+async function saveIngreso() {
   const fecha  = document.getElementById('i-fecha').value;
   const monto  = Number(document.getElementById('i-monto').value);
   const fuente = document.getElementById('i-fuente').value.trim();
@@ -2672,18 +2715,18 @@ function saveIngreso() {
   if (!monto)   return toast('El monto debe ser mayor a 0', 'error');
   if (!fuente)  return toast('La fuente es obligatoria', 'error');
 
+  const hora = horaActual();
   if (editId) {
     const idx = STATE.db.ingresos.findIndex(i => i.id === editId);
-    if (idx !== -1) STATE.db.ingresos[idx] = { ...STATE.db.ingresos[idx], fecha, monto, fuente, cat };
-    toast('Ingreso actualizado', 'success');
+    if (idx !== -1) STATE.db.ingresos[idx] = { ...STATE.db.ingresos[idx], fecha, hora, monto, fuente, cat };
     cancelEditIngreso();
   } else {
-    STATE.db.ingresos.push({ id: uid(), fecha, monto, fuente, cat });
-    toast('Ingreso registrado', 'success');
+    STATE.db.ingresos.push({ id: uid(), fecha, hora, monto, fuente, cat });
   }
-  saveDb();
   clearForm(['i-monto','i-fuente']);
   renderAll();
+  await saveDb(['ingresos']);
+  toast(editId ? 'Ingreso actualizado ✅' : 'Ingreso registrado ✅', 'success');
 }
 
 function editIngreso(id) {
@@ -2706,10 +2749,11 @@ function cancelEditIngreso() {
   clearForm(['i-monto','i-fuente']);
 }
 
-function deleteIngreso(id) {
+async function deleteIngreso(id) {
   if (!confirm('¿Eliminar este ingreso?')) return;
   STATE.db.ingresos = STATE.db.ingresos.filter(i => i.id !== id);
-  saveDb(); renderAll();
+  renderAll();
+  await saveDb(['ingresos']);
   toast('Ingreso eliminado', 'info');
 }
 
@@ -2736,6 +2780,7 @@ function renderIngresos() {
   tbody.innerHTML = list.map(i => `
     <tr>
       <td>${i.fecha}</td>
+      <td style="color:var(--muted);font-size:.8rem;white-space:nowrap">${i.hora || '—'}</td>
       <td>${i.fuente}</td>
       <td><span class="badge badge-blue">${i.cat || '-'}</span></td>
       <td style="color:var(--green);font-weight:600">${fmt(i.monto)}</td>
@@ -2751,7 +2796,7 @@ function renderIngresos() {
 /* ============================================================
    GASTOS
    ============================================================ */
-function saveGasto() {
+async function saveGasto() {
   const fecha  = document.getElementById('g-fecha').value;
   const monto  = Number(document.getElementById('g-monto').value);
   const desc   = document.getElementById('g-desc').value.trim();
@@ -2762,18 +2807,18 @@ function saveGasto() {
   if (!monto)  return toast('El monto debe ser mayor a 0', 'error');
   if (!desc)   return toast('La descripción es obligatoria', 'error');
 
+  const hora = horaActual();
   if (editId) {
     const idx = STATE.db.gastos.findIndex(g => g.id === editId);
-    if (idx !== -1) STATE.db.gastos[idx] = { ...STATE.db.gastos[idx], fecha, monto, desc, cat };
-    toast('Gasto actualizado', 'success');
+    if (idx !== -1) STATE.db.gastos[idx] = { ...STATE.db.gastos[idx], fecha, hora, monto, desc, cat };
     cancelEditGasto();
   } else {
-    STATE.db.gastos.push({ id: uid(), fecha, monto, desc, cat });
-    toast('Gasto registrado', 'success');
+    STATE.db.gastos.push({ id: uid(), fecha, hora, monto, desc, cat });
   }
-  saveDb();
   clearForm(['g-monto','g-desc']);
-  renderAll();
+  renderAll();           // actualiza UI inmediatamente
+  await saveDb();        // guarda en Firebase en background
+  toast(editId ? 'Gasto actualizado ✅' : 'Gasto registrado ✅', 'success');
 }
 
 function editGasto(id) {
@@ -2796,10 +2841,11 @@ function cancelEditGasto() {
   clearForm(['g-monto','g-desc']);
 }
 
-function deleteGasto(id) {
+async function deleteGasto(id) {
   if (!confirm('¿Eliminar este gasto?')) return;
   STATE.db.gastos = STATE.db.gastos.filter(g => g.id !== id);
-  saveDb(); renderAll();
+  renderAll();
+  await saveDb(['gastos']);
   toast('Gasto eliminado', 'info');
 }
 
@@ -2858,6 +2904,7 @@ function renderGastos() {
   tbody.innerHTML = list.map(g => `
     <tr>
       <td>${g.fecha}</td>
+      <td style="color:var(--muted);font-size:.8rem;white-space:nowrap">${g.hora || '—'}</td>
       <td>${g.desc}</td>
       <td><span class="badge badge-yellow">${g.cat || '-'}</span></td>
       <td style="color:var(--red);font-weight:600">${fmt(g.monto)}</td>
@@ -2873,7 +2920,7 @@ function renderGastos() {
 /* ============================================================
    DEUDAS
    ============================================================ */
-function saveDeuda() {
+async function saveDeuda() {
   const nombre  = document.getElementById('d-nombre').value.trim();
   const total   = Number(document.getElementById('d-total').value);
   const fecha   = document.getElementById('d-fecha').value;
@@ -2886,10 +2933,10 @@ function saveDeuda() {
   if (!fecha)  return toast('La fecha de inicio es obligatoria', 'error');
 
   STATE.db.deudas.push({ id: uid(), nombre, total, fecha, cuota, prox, interes, pagado: 0, pagos: [] });
-  saveDb();
   clearForm(['d-nombre','d-total','d-cuota','d-interes']);
   renderAll();
-  toast('Deuda creada', 'success');
+  await saveDb(['deudas']);
+  toast('Deuda creada ✅', 'success');
 }
 
 function openAbonar(idx) {
@@ -2903,7 +2950,7 @@ function openAbonar(idx) {
   openModal('modal-abonar');
 }
 
-function registrarAbono() {
+async function registrarAbono() {
   const idx   = Number(document.getElementById('m-abonar-idx').value);
   const monto = Number(document.getElementById('m-abonar-monto').value);
   const fecha = document.getElementById('m-abonar-fecha').value;
@@ -2926,6 +2973,7 @@ function registrarAbono() {
   STATE.db.gastos.push({
     id: uid(),
     fecha,
+    hora: horaActual(),
     monto,
     desc: 'Abono deuda: ' + d.nombre + (nota ? ' — ' + nota : ''),
     cat: 'Crédito / Deuda',
@@ -2933,27 +2981,29 @@ function registrarAbono() {
     origenAbonoId: abonoId
   });
 
-  saveDb();
-  closeModal('modal-abonar');
   renderAll();
+  closeModal('modal-abonar');
+  await saveDb(['deudas','gastos']);
   toast('Abono registrado y añadido automáticamente a gastos ✅', 'success');
 }
 
-function deleteDeuda(idx) {
+async function deleteDeuda(idx) {
   if (!confirm('¿Eliminar esta deuda y su historial de pagos?')) return;
   STATE.db.deudas.splice(idx, 1);
-  saveDb(); renderAll();
+  renderAll();
+  await saveDb(['deudas']);
   toast('Deuda eliminada', 'info');
 }
 
-function deleteAbono(dIdx, pId) {
+async function deleteAbono(dIdx, pId) {
   if (!confirm('¿Eliminar este abono?')) return;
   const d = STATE.db.deudas[dIdx];
   const p = d.pagos.find(p => p.id === pId);
   if (!p) return;
   d.pagado -= p.monto;
   d.pagos   = d.pagos.filter(p2 => p2.id !== pId);
-  saveDb(); renderAll();
+  renderAll();
+  await saveDb(['deudas','gastos']);
   toast('Abono eliminado', 'info');
 }
 
@@ -3040,7 +3090,7 @@ function renderDeudas() {
 /* ============================================================
    CONTRASEÑAS
    ============================================================ */
-function savePass() {
+async function savePass() {
   const nom   = document.getElementById('p-nom').value.trim();
   const user  = document.getElementById('p-user').value.trim();
   const pass  = document.getElementById('p-pass').value;
@@ -3051,16 +3101,17 @@ function savePass() {
   if (!pass) return toast('La contraseña es obligatoria', 'error');
 
   STATE.db.pass.push({ id: uid(), nom, user, pass, notes });
-  saveDb();
   clearForm(['p-nom','p-user','p-pass','p-notes']);
   renderPass();
-  toast('Contraseña guardada', 'success');
+  await saveDb(['pass']);
+  toast('Contraseña guardada ✅', 'success');
 }
 
-function deletePass(id) {
+async function deletePass(id) {
   if (!confirm('¿Eliminar esta contraseña?')) return;
   STATE.db.pass = STATE.db.pass.filter(p => p.id !== id);
-  saveDb(); renderPass();
+  renderPass();
+  await saveDb(['pass']);
   toast('Contraseña eliminada', 'info');
 }
 
@@ -3111,7 +3162,7 @@ function renderPass(search = '') {
 /* ============================================================
    PRÉSTAMOS A TERCEROS
    ============================================================ */
-function savePrestamo() {
+async function savePrestamo() {
   const nombre   = document.getElementById('pr-nombre').value.trim();
   const contacto = document.getElementById('pr-contacto').value.trim();
   const monto    = Number(document.getElementById('pr-monto').value);
@@ -3131,10 +3182,10 @@ function savePrestamo() {
     id: uid(), nombre, contacto, monto, totalConInteres, fecha, vence, interes, desc,
     cobrado: 0, cobros: []
   });
-  saveDb();
   clearForm(['pr-nombre','pr-contacto','pr-monto','pr-vence','pr-interes','pr-desc']);
   renderAll();
-  toast('Préstamo registrado', 'success');
+  await saveDb(['prestamos']);
+  toast('Préstamo registrado ✅', 'success');
 }
 
 function openCobro(idx) {
@@ -3148,7 +3199,7 @@ function openCobro(idx) {
   openModal('modal-cobro');
 }
 
-function registrarCobro() {
+async function registrarCobro() {
   const idx   = Number(document.getElementById('m-cobro-idx').value);
   const monto = Number(document.getElementById('m-cobro-monto').value);
   const fecha = document.getElementById('m-cobro-fecha').value;
@@ -3165,27 +3216,29 @@ function registrarCobro() {
   p.cobrado = (p.cobrado || 0) + monto;
   p.cobros.push({ id: uid(), fecha, monto, nota });
 
-  saveDb();
-  closeModal('modal-cobro');
   renderAll();
-  toast('Cobro registrado', 'success');
+  closeModal('modal-cobro');
+  await saveDb(['prestamos']);
+  toast('Cobro registrado ✅', 'success');
 }
 
-function deleteCobro(pIdx, cId) {
+async function deleteCobro(pIdx, cId) {
   if (!confirm('¿Eliminar este cobro?')) return;
   const p = STATE.db.prestamos[pIdx];
   const c = p.cobros.find(c => c.id === cId);
   if (!c) return;
   p.cobrado -= c.monto;
   p.cobros   = p.cobros.filter(c2 => c2.id !== cId);
-  saveDb(); renderAll();
+  renderAll();
+  await saveDb(['prestamos']);
   toast('Cobro eliminado', 'info');
 }
 
-function deletePrestamo(idx) {
+async function deletePrestamo(idx) {
   if (!confirm('¿Eliminar este préstamo y su historial de cobros?')) return;
   STATE.db.prestamos.splice(idx, 1);
-  saveDb(); renderAll();
+  renderAll();
+  await saveDb(['prestamos']);
   toast('Préstamo eliminado', 'info');
 }
 
@@ -3306,7 +3359,7 @@ function renderPrestamos() {
 /* ============================================================
    GASTOS FIJOS MENSUALES
    ============================================================ */
-function saveGastoFijo() {
+async function saveGastoFijo() {
   const nombre = document.getElementById('gf-nombre').value.trim();
   const monto  = Number(document.getElementById('gf-monto').value);
   const cat    = document.getElementById('gf-cat').value;
@@ -3317,37 +3370,40 @@ function saveGastoFijo() {
   if (!monto)  return toast('El valor es obligatorio', 'error');
 
   STATE.db.gastosFijos.push({ id: uid(), nombre, monto, cat, dia, notas, pagos: {} });
-  saveDb();
   clearForm(['gf-nombre','gf-monto','gf-dia','gf-notas']);
   renderGastosFijos();
-  toast('Gasto fijo agregado', 'success');
+  await saveDb(['gastosFijos']);
+  toast('Gasto fijo agregado ✅', 'success');
 }
 
-function deleteGastoFijo(id) {
+async function deleteGastoFijo(id) {
   if (!confirm('¿Eliminar este gasto fijo?')) return;
   STATE.db.gastosFijos = STATE.db.gastosFijos.filter(g => g.id !== id);
-  saveDb(); renderGastosFijos();
+  renderGastosFijos();
+  await saveDb(['gastosFijos']);
   toast('Gasto fijo eliminado', 'info');
 }
 
-function togglePagoGF(id) {
+async function togglePagoGF(id) {
   const mesKey = document.getElementById('gf-mes-sel').value || currentYM();
   const gf     = STATE.db.gastosFijos.find(g => g.id === id);
   if (!gf) return;
   if (!gf.pagos) gf.pagos = {};
   gf.pagos[mesKey] = !gf.pagos[mesKey];
-  saveDb(); renderGastosFijos();
+  renderGastosFijos();
+  await saveDb(['gastosFijos']);
   toast(gf.pagos[mesKey] ? '✅ Marcado como pagado' : '↩️ Marcado como pendiente', 'info');
 }
 
-function resetPagosGF() {
+async function resetPagosGF() {
   const mesKey = document.getElementById('gf-mes-sel').value || currentYM();
   if (!confirm(`¿Reiniciar todos los pagos de ${monthLabel(mesKey)}?`)) return;
   STATE.db.gastosFijos.forEach(g => {
     if (!g.pagos) g.pagos = {};
     g.pagos[mesKey] = false;
   });
-  saveDb(); renderGastosFijos();
+  renderGastosFijos();
+  await saveDb(['gastosFijos']);
   toast('Pagos reiniciados para el mes', 'info');
 }
 
@@ -3753,7 +3809,7 @@ function calcPreviewInv() {
   const e2=document.getElementById('prev-inv-unit');  if(e2) e2.textContent=fmtCOP(unit);
 }
 
-function guardarInversion(id=null) {
+async function guardarInversion(id=null) {
   const nombre    = document.getElementById('fi-nombre')?.value.trim();
   const precioUSD = parseFloat(document.getElementById('fi-precio-usd')?.value)||0;
   const tasa      = parseFloat(document.getElementById('fi-tasa')?.value)||0;
@@ -3787,9 +3843,9 @@ function guardarInversion(id=null) {
     STATE.db.inversiones.push({ id:uid(), ...datos });
     toast('Inversión creada','success');
   }
-  saveDb();
-  closeInvModal();
   renderAll();
+  closeInvModal();
+  await saveDb(['inversiones']);
 }
 
 // ─── Modal venta inversión ────────────────────────────────────
@@ -3842,7 +3898,7 @@ function openModalVentaInv(invId) {
   overlay.style.display='flex';
 }
 
-function guardarVentaInv(invId, stockDisp) {
+async function guardarVentaInv(invId, stockDisp) {
   const fecha    = document.getElementById('fv-fecha')?.value;
   const cantidad = parseInt(document.getElementById('fv-cant')?.value)||0;
   const precio   = parseFloat(document.getElementById('fv-precio')?.value)||0;
@@ -3873,6 +3929,7 @@ function guardarVentaInv(invId, stockDisp) {
   if (gananciaVenta > 0) {
     STATE.db.ingresos.push({
       id:uid(), fecha,
+      hora: horaActual(),
       monto: Math.round(gananciaVenta),
       fuente:'Ganancia venta: '+(inv?.nombre||'Producto')+(cliente?' — '+cliente:''),
       cat:'Inversión', autoGenerado:true
@@ -3882,9 +3939,9 @@ function guardarVentaInv(invId, stockDisp) {
     // pero no como ingreso para no inflar los números
     console.log('Venta sin ganancia neta registrada en inv:', inv?.nombre);
   }
-  saveDb();
-  closeInvModal();
   renderAll();
+  closeInvModal();
+  await saveDb(['ventasInv','ingresos']);
   toast('Venta registrada' + (gananciaVenta > 0 ? ' — ganancia: ' + fmtCOP(Math.round(gananciaVenta)) : '') + ' ✅','success');
 }
 
@@ -4004,36 +4061,41 @@ function renderDetalleInv(invId) {
   `;
 }
 
-function eliminarVentaInv(ventaId, invId) {
+async function eliminarVentaInv(ventaId, invId) {
   if(!confirm('¿Eliminar esta venta?')) return;
   deleteVentaInv(ventaId);
   renderDetalleInv(invId);
+  await saveDb(['ventasInv']);
   toast('Venta eliminada','info');
 }
 
-function deleteInversion(idx) {
+async function deleteInversion(idx) {
   const inv = STATE.db.inversiones[idx];
   if(!confirm('¿Eliminar la inversión "'+inv?.nombre+'"? También se eliminarán sus ventas.')) return;
   // Remove associated sales
   STATE.db.ventasInv = (STATE.db.ventasInv||[]).filter(v=>v.invId!==inv.id);
   STATE.db.inversiones.splice(idx,1);
-  saveDb(); renderAll();
+  renderAll();
+  await saveDb(['inversiones','ventasInv']);
   toast('Inversión eliminada','info');
 }
 
-function cambiarEstadoInv(idx, estado) {
+async function cambiarEstadoInv(idx, estado) {
   const inv = STATE.db.inversiones[idx];
   if(!inv) return;
   inv.estado = estado;
   if(estado==='cerrada') {
     const p = enriquecerInversion(inv);
     if(p.ganancia>0) {
-      STATE.db.ingresos.push({ id:uid(), fecha:new Date().toISOString().slice(0,10),
+      STATE.db.ingresos.push({ id:uid(),
+        fecha:new Date().toISOString().slice(0,10),
+        hora: horaActual(),
         monto:p.totalRecuperado, fuente:'Liquidación: '+inv.nombre, cat:'Inversión', autoGenerado:true });
       toast('Inversión cerrada — ingreso registrado ✅','success');
     }
   }
-  saveDb(); renderAll();
+  renderAll();
+  await saveDb(['inversiones','ingresos']);
 }
 
 // ─── These old single-file functions kept for backward compat ──
