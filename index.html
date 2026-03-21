@@ -1259,11 +1259,16 @@ canvas { max-width: 100%; display: block; }
         <div class="section-header">
           <span class="section-title">📋 Mis ingresos</span>
           <div class="filter-bar">
-            <div class="form-group" style="margin:0">
-              <select class="form-control" id="i-filter-month" onchange="renderIngresos()">
-                <option value="">Todos los meses</option>
-              </select>
-            </div>
+            <select class="form-control" id="i-filter-month" style="width:auto" onchange="onIngFilterChange()">
+              <option value="">Todos los meses</option>
+            </select>
+            <select class="form-control" id="i-filter-day" style="width:auto" onchange="renderIngresos()">
+              <option value="">Todos los días</option>
+            </select>
+            <input type="text" class="form-control" id="i-filter-search"
+              style="width:auto;min-width:130px" placeholder="🔍 Buscar..."
+              oninput="renderIngresos()">
+            <button class="btn btn-ghost btn-sm" onclick="clearIngFilters()" title="Limpiar filtros">✕</button>
           </div>
         </div>
         <div id="ing-total-mes" style="margin-bottom:12px;"></div>
@@ -1335,12 +1340,19 @@ canvas { max-width: 100%; display: block; }
         <div class="section-header">
           <span class="section-title">📋 Mis gastos</span>
           <div class="filter-bar">
-            <select class="form-control" id="g-filter-month" style="width:auto" onchange="renderGastos()">
+            <select class="form-control" id="g-filter-month" style="width:auto" onchange="onGasFilterChange()">
               <option value="">Todos los meses</option>
+            </select>
+            <select class="form-control" id="g-filter-day" style="width:auto" onchange="renderGastos()">
+              <option value="">Todos los días</option>
             </select>
             <select class="form-control" id="g-filter-cat" style="width:auto" onchange="renderGastos()">
               <option value="">Todas las categorías</option>
             </select>
+            <input type="text" class="form-control" id="g-filter-search"
+              style="width:auto;min-width:130px" placeholder="🔍 Buscar..."
+              oninput="renderGastos()">
+            <button class="btn btn-ghost btn-sm" onclick="clearGasFilters()" title="Limpiar filtros">✕</button>
           </div>
         </div>
         <div id="gas-total-mes" style="margin-bottom:12px;"></div>
@@ -2415,6 +2427,39 @@ function populateMonthFilters() {
       sel.appendChild(opt);
     });
   });
+  // Repoblar días si hay mes seleccionado
+  populateDayFilter('i-filter-month', 'i-filter-day', STATE.db.ingresos);
+  populateDayFilter('g-filter-month', 'g-filter-day', STATE.db.gastos);
+}
+
+// Poblador de días: muestra los días que tienen registros
+// Si hay un mes seleccionado, filtra por ese mes; si no, muestra todos los días
+function populateDayFilter(monthSelId, daySelId, items) {
+  const monthSel = document.getElementById(monthSelId);
+  const daySel   = document.getElementById(daySelId);
+  if (!monthSel || !daySel) return;
+
+  const selMonth = monthSel.value;
+  const curDay   = daySel.value;
+
+  // Obtener días únicos que tienen registros
+  let filtered = items;
+  if (selMonth) filtered = items.filter(i => ym(i.fecha) === selMonth);
+
+  const days = [...new Set(filtered.map(i => i.fecha).filter(Boolean))].sort().reverse();
+
+  daySel.innerHTML = '<option value="">Todos los días</option>';
+  days.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d;
+    // Formato legible: "Lunes 20 mar"
+    const fecha = new Date(d + 'T12:00:00');
+    opt.textContent = fecha.toLocaleDateString('es-CO', {
+      weekday: 'short', day: 'numeric', month: 'short'
+    });
+    if (d === curDay) opt.selected = true;
+    daySel.appendChild(opt);
+  });
 }
 
 function populateCatFilters() {
@@ -2757,16 +2802,46 @@ async function deleteIngreso(id) {
   toast('Ingreso eliminado', 'info');
 }
 
+// Al cambiar mes, repoblar selector de días
+function onIngFilterChange() {
+  populateDayFilter('i-filter-month', 'i-filter-day', STATE.db.ingresos);
+  renderIngresos();
+}
+
+function clearIngFilters() {
+  document.getElementById('i-filter-month').value = '';
+  document.getElementById('i-filter-day').value   = '';
+  document.getElementById('i-filter-search').value = '';
+  populateDayFilter('i-filter-month', 'i-filter-day', STATE.db.ingresos);
+  renderIngresos();
+}
+
 function renderIngresos() {
-  const filterM = document.getElementById('i-filter-month').value;
+  const filterM  = document.getElementById('i-filter-month').value;
+  const filterD  = document.getElementById('i-filter-day').value;
+  const filterQ  = (document.getElementById('i-filter-search')?.value || '').toLowerCase().trim();
+
   let list = STATE.db.ingresos.slice();
   if (filterM) list = list.filter(i => ym(i.fecha) === filterM);
-  list.sort((a, b) => (b.fecha||'').localeCompare(a.fecha||''));
+  if (filterD) list = list.filter(i => i.fecha === filterD);
+  if (filterQ) list = list.filter(i =>
+    (i.fuente||'').toLowerCase().includes(filterQ) ||
+    (i.cat||'').toLowerCase().includes(filterQ)
+  );
+
+  // Ordenar: más reciente primero (fecha + hora)
+  list.sort((a, b) => {
+    const fd = (b.fecha||'').localeCompare(a.fecha||'');
+    if (fd !== 0) return fd;
+    return convertirHora(b.hora) - convertirHora(a.hora);
+  });
 
   const total = list.reduce((a, b) => a + Number(b.monto), 0);
+  const label = filterD
+    ? `Día ${filterD}` : filterM ? monthLabel(filterM) : 'Total general';
   document.getElementById('ing-total-mes').innerHTML = list.length
-    ? `<span class="badge badge-green">Total: ${fmt(total)}</span>`
-    : '';
+    ? `<span class="badge badge-green">${label}: ${fmt(total)} · ${list.length} registros</span>`
+    : `<span class="badge badge-yellow">Sin resultados para este filtro</span>`;
 
   const tbody = document.getElementById('ing-tbody');
   const empty = document.getElementById('ing-empty');
@@ -2779,11 +2854,11 @@ function renderIngresos() {
   empty.style.display = 'none';
   tbody.innerHTML = list.map(i => `
     <tr>
-      <td>${i.fecha}</td>
+      <td style="white-space:nowrap">${i.fecha}</td>
       <td style="color:var(--muted);font-size:.8rem;white-space:nowrap">${i.hora || '—'}</td>
       <td>${i.fuente}</td>
       <td><span class="badge badge-blue">${i.cat || '-'}</span></td>
-      <td style="color:var(--green);font-weight:600">${fmt(i.monto)}</td>
+      <td style="color:var(--green);font-weight:600;white-space:nowrap">${fmt(i.monto)}</td>
       <td>
         <div class="actions">
           <button class="btn btn-ghost btn-sm" onclick="editIngreso('${i.id}')">✏️</button>
@@ -2849,18 +2924,49 @@ async function deleteGasto(id) {
   toast('Gasto eliminado', 'info');
 }
 
+// Al cambiar mes, repoblar selector de días
+function onGasFilterChange() {
+  populateDayFilter('g-filter-month', 'g-filter-day', STATE.db.gastos);
+  renderGastos();
+}
+
+function clearGasFilters() {
+  document.getElementById('g-filter-month').value = '';
+  document.getElementById('g-filter-day').value   = '';
+  document.getElementById('g-filter-cat').value   = '';
+  document.getElementById('g-filter-search').value = '';
+  populateDayFilter('g-filter-month', 'g-filter-day', STATE.db.gastos);
+  renderGastos();
+}
+
 function renderGastos() {
-  const filterM = document.getElementById('g-filter-month').value;
-  const filterC = document.getElementById('g-filter-cat').value;
+  const filterM  = document.getElementById('g-filter-month').value;
+  const filterD  = document.getElementById('g-filter-day').value;
+  const filterC  = document.getElementById('g-filter-cat').value;
+  const filterQ  = (document.getElementById('g-filter-search')?.value || '').toLowerCase().trim();
+
   let list = STATE.db.gastos.slice();
   if (filterM) list = list.filter(g => ym(g.fecha) === filterM);
+  if (filterD) list = list.filter(g => g.fecha === filterD);
   if (filterC) list = list.filter(g => g.cat === filterC);
-  list.sort((a, b) => (b.fecha||'').localeCompare(a.fecha||''));
+  if (filterQ) list = list.filter(g =>
+    (g.desc||'').toLowerCase().includes(filterQ) ||
+    (g.cat||'').toLowerCase().includes(filterQ)
+  );
+
+  // Ordenar: más reciente primero (fecha + hora)
+  list.sort((a, b) => {
+    const fd = (b.fecha||'').localeCompare(a.fecha||'');
+    if (fd !== 0) return fd;
+    return convertirHora(b.hora) - convertirHora(a.hora);
+  });
 
   const total = list.reduce((a, b) => a + Number(b.monto), 0);
+  const label = filterD
+    ? `Día ${filterD}` : filterM ? monthLabel(filterM) : 'Total general';
   document.getElementById('gas-total-mes').innerHTML = list.length
-    ? `<span class="badge badge-red">Total: ${fmt(total)}</span>`
-    : '';
+    ? `<span class="badge badge-red">${label}: ${fmt(total)} · ${list.length} registros</span>`
+    : `<span class="badge badge-yellow">Sin resultados para este filtro</span>`;
 
   // Category analysis
   const catTotals = {};
