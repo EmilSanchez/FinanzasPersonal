@@ -2783,9 +2783,10 @@ function populateGFBilletera() {
   const cur = sel.value;
   sel.innerHTML = '<option value="">Sin asignar</option>';
   (STATE.db.billeteras||[]).forEach(b => {
+    const saldo = saldoBilletera(b.id);
     const o = document.createElement('option');
     o.value = b.id;
-    o.textContent = (BILL_ICONOS[b.tipo]||'💳') + ' ' + b.nombre;
+    o.textContent = (BILL_ICONOS[b.tipo]||'💳') + ' ' + b.nombre + ' — ' + fmt(saldo);
     if (b.id === cur) o.selected = true;
     sel.appendChild(o);
   });
@@ -3757,6 +3758,7 @@ function openModalPagoFijo(gfId, mesKey) {
           <select class="form-control" id="mpf-billetera">
             <option value="">— Selecciona billetera (obligatorio) —</option>
           </select>
+          <div id="mpf-aviso" style="display:none;margin-top:6px;font-size:.8rem;color:var(--red);font-weight:600;"></div>
         </div>
         <div class="modal-actions">
           <button class="btn btn-ghost" onclick="closeModal('modal-pago-fijo-billetera')">Cancelar</button>
@@ -3773,13 +3775,32 @@ function openModalPagoFijo(gfId, mesKey) {
     `"${gf.nombre}" — ${fmt(gf.monto)}`;
   const sel = document.getElementById('mpf-billetera');
   sel.innerHTML = '<option value="">— Selecciona billetera (obligatorio) —</option>';
+
+  let hayAlguna = false;
   billeteras.forEach(b => {
+    const saldo = saldoBilletera(b.id);
+    const alcanza = saldo >= gf.monto;
     const o = document.createElement('option');
     o.value = b.id;
-    o.textContent = (BILL_ICONOS[b.tipo]||'💳') + ' ' + b.nombre;
-    if (gf.billeteraId === b.id) o.selected = true;
+    o.textContent = (BILL_ICONOS[b.tipo]||'💳') + ' ' + b.nombre +
+      ' — ' + fmt(saldo) + (alcanza ? '' : ' ⛔ saldo insuficiente');
+    o.disabled = !alcanza;
+    if (!alcanza) o.style.color = 'var(--red)';
+    if (gf.billeteraId === b.id && alcanza) o.selected = true;
     sel.appendChild(o);
+    if (alcanza) hayAlguna = true;
   });
+
+  // Aviso si ninguna billetera alcanza
+  const avisoEl = document.getElementById('mpf-aviso');
+  if (avisoEl) {
+    if (!hayAlguna) {
+      avisoEl.style.display = '';
+      avisoEl.textContent = '⚠️ Ninguna billetera tiene saldo suficiente para cubrir ' + fmt(gf.monto);
+    } else {
+      avisoEl.style.display = 'none';
+    }
+  }
   sel.style.border = '';
 
   // Asignar handler al botón confirmar
@@ -3805,6 +3826,12 @@ async function confirmarPagoFijo(gfId, mesKey, billeteraUsada) {
   const gf = STATE.db.gastosFijos.find(g => g.id === gfId);
   if (!gf) return;
   if (!gf.pagos) gf.pagos = {};
+
+  // Validar saldo suficiente
+  const saldo = saldoBilletera(billeteraUsada);
+  if (saldo < gf.monto) {
+    return toast(`⛔ Saldo insuficiente. Disponible: ${fmt(saldo)} — Necesario: ${fmt(gf.monto)}`, 'error');
+  }
 
   const now   = new Date();
   const fecha = now.toISOString().slice(0,10);
