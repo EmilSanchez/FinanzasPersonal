@@ -14,7 +14,7 @@
   // Configuración ⚙️ → Tus apps → Config
   // ──────────────────────────────────────────────────────────────
   import { initializeApp }             from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-  import { getFirestore, collection, doc, getDocs,
+  import { getFirestore, collection, doc, getDocs, getDoc,
            setDoc, deleteDoc, writeBatch,
            onSnapshot, enableIndexedDbPersistence }
     from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -39,7 +39,20 @@
   });
 
   // ── Colecciones en Firestore ──
-  const COLLECTIONS = ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv'];
+  const COLLECTIONS = ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras'];
+
+  // ── Guardar PIN en Firestore ──
+  window.__FB.savePin = async function(pin) {
+    await setDoc(doc(db_firebase, 'config', 'app'), { pin });
+  };
+
+  // ── Leer PIN desde Firestore ──
+  window.__FB.loadPin = async function() {
+    try {
+      const snap = await getDoc(doc(db_firebase, 'config', 'app'));
+      return snap.exists() ? snap.data().pin : null;
+    } catch { return null; }
+  };
 
   // ── Exponer al scope global para que el resto del JS lo use ──
   window.__FB = {
@@ -1353,9 +1366,9 @@ canvas { max-width: 100%; display: block; }
             </select>
           </div>
           <div class="form-group">
-            <label>💳 Sale de</label>
+            <label>💳 Sale de *</label>
             <select class="form-control" id="g-billetera">
-              <option value="">Sin asignar</option>
+              <option value="">— Selecciona billetera (obligatorio) —</option>
             </select>
           </div>
         </div>
@@ -1799,7 +1812,10 @@ canvas { max-width: 100%; display: block; }
           <p class="page-title">Billeteras</p>
           <p class="page-sub" style="margin-bottom:0">Controla dónde tienes tu dinero y lleva el saldo real de cada cuenta</p>
         </div>
-        <button class="btn btn-primary" onclick="openModalBilletera()">+ Nueva billetera</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-ghost" onclick="openModalTransferencia()">🔄 Transferir</button>
+          <button class="btn btn-primary" onclick="openModalBilletera()">+ Nueva billetera</button>
+        </div>
       </div>
 
       <!-- Resumen total -->
@@ -1977,6 +1993,45 @@ canvas { max-width: 100%; display: block; }
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modal-pin')">Cancelar</button>
       <button class="btn btn-primary" onclick="changePin()">Cambiar PIN</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Transferencia entre billeteras -->
+<div class="modal-overlay" id="modal-transferencia">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-title">🔄 Transferir entre billeteras</div>
+    <p style="color:var(--muted);font-size:.88rem;margin-bottom:20px;">Mueve dinero de una cuenta a otra. Se registrará como salida en el origen y entrada en el destino.</p>
+    <div class="form-group" style="margin-bottom:14px;">
+      <label>📤 Billetera origen *</label>
+      <select class="form-control" id="tr-origen">
+        <option value="">— Selecciona origen —</option>
+      </select>
+      <div id="tr-saldo-origen" style="font-size:.78rem;color:var(--muted);margin-top:4px;"></div>
+    </div>
+    <div style="text-align:center;font-size:1.4rem;margin:-4px 0 10px;color:var(--muted);">↓</div>
+    <div class="form-group" style="margin-bottom:14px;">
+      <label>📥 Billetera destino *</label>
+      <select class="form-control" id="tr-destino">
+        <option value="">— Selecciona destino —</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin-bottom:14px;">
+      <label>💵 Monto a transferir *</label>
+      <input type="number" class="form-control" id="tr-monto" placeholder="0" min="1" oninput="onTrMontoChange()">
+      <div id="tr-saldo-post" style="font-size:.78rem;margin-top:4px;display:none;"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:14px;">
+      <label>📅 Fecha</label>
+      <input type="date" class="form-control" id="tr-fecha">
+    </div>
+    <div class="form-group" style="margin-bottom:4px;">
+      <label>📝 Descripción (opcional)</label>
+      <input type="text" class="form-control" id="tr-desc" placeholder="Ej: Consignación a Nequi...">
+    </div>
+    <div class="modal-actions" style="margin-top:20px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-transferencia')">Cancelar</button>
+      <button class="btn btn-primary" onclick="ejecutarTransferencia()">🔄 Transferir</button>
     </div>
   </div>
 </div>
@@ -2177,6 +2232,19 @@ async function loadDb() {
       };
       // También guardar en localStorage como respaldo offline
       localStorage.setItem('finanzas_pro_v2', JSON.stringify(STATE.db));
+
+      // Sincronizar PIN desde Firebase
+      if (window.__FB.loadPin) {
+        const pinRemoto = await window.__FB.loadPin();
+        if (pinRemoto) {
+          localStorage.setItem('fp_pin', pinRemoto);
+        } else {
+          // Primera vez: subir el PIN local a Firebase
+          const pinLocal = localStorage.getItem('fp_pin') || '1234';
+          await window.__FB.savePin(pinLocal).catch(()=>{});
+        }
+      }
+
       hideLoadingOverlay();
       console.log('✅ Datos cargados desde Firestore');
     } catch (err) {
@@ -2366,9 +2434,19 @@ function pinSubmit() {
     const app = document.getElementById('app');
     app.classList.add('visible');
     // initApp es async — esperamos a que cargue Firebase
-    initApp().then(() => {
+    initApp().then(async () => {
       const fbOk = window.__FB && window.__FB.ready;
       updateFbStatus(fbOk);
+      // Sincronizar PIN desde Firebase (por si fue cambiado en otro dispositivo)
+      if (fbOk && window.__FB.loadPin) {
+        try {
+          const pinRemoto = await window.__FB.loadPin();
+          if (pinRemoto && pinRemoto !== localStorage.getItem('fp_pin')) {
+            localStorage.setItem('fp_pin', pinRemoto);
+            console.log('🔑 PIN sincronizado desde Firebase');
+          }
+        } catch (e) { console.warn('No se pudo sincronizar PIN:', e); }
+      }
     });
   } else {
     document.getElementById('pin-error').textContent = 'PIN incorrecto. Intenta de nuevo.';
@@ -2386,7 +2464,7 @@ function lockApp() {
   document.getElementById('app').classList.remove('visible');
 }
 
-function changePin() {
+async function changePin() {
   const old = document.getElementById('m-pin-old').value;
   const nw  = document.getElementById('m-pin-new').value;
   const cf  = document.getElementById('m-pin-conf').value;
@@ -2397,9 +2475,23 @@ function changePin() {
   if (!/^\d+$/.test(nw))      return toast('El PIN sólo puede contener números', 'error');
   if (nw !== cf)               return toast('Los PINs no coinciden', 'error');
 
+  // Guardar en localStorage siempre
   localStorage.setItem('fp_pin', nw);
+
+  // Sincronizar con Firebase
+  if (window.__FB && window.__FB.ready && window.__FB.savePin) {
+    try {
+      await window.__FB.savePin(nw);
+      toast('PIN actualizado y sincronizado en la nube ✅', 'success');
+    } catch (e) {
+      console.warn('No se pudo guardar PIN en Firebase:', e);
+      toast('PIN actualizado localmente (Firebase no disponible)', 'info');
+    }
+  } else {
+    toast('PIN actualizado correctamente', 'success');
+  }
+
   closeModal('modal-pin');
-  toast('PIN actualizado correctamente', 'success');
   ['m-pin-old','m-pin-new','m-pin-conf'].forEach(id => document.getElementById(id).value = '');
 }
 
@@ -2944,6 +3036,11 @@ async function saveGasto() {
 
   const hora = horaActual();
   const billeteraId = document.getElementById('g-billetera')?.value || '';
+  if (!billeteraId) {
+    const sel = document.getElementById('g-billetera');
+    if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(() => sel.style.border = '', 2000); }
+    return toast('⚠️ Debes seleccionar de qué billetera sale el dinero', 'error');
+  }
   if (editId) {
     const idx = STATE.db.gastos.findIndex(g => g.id === editId);
     if (idx !== -1) STATE.db.gastos[idx] = { ...STATE.db.gastos[idx], fecha, hora, monto, desc, cat, billeteraId };
@@ -3625,43 +3722,8 @@ async function togglePagoGF(id) {
   const estabaPagado = !!gf.pagos[mesKey];
 
   if (!estabaPagado) {
-    // Marcar como pagado — preguntar billetera si tiene una por defecto
-    const billId = gf.billeteraId || '';
-    const bill   = billId ? STATE.db.billeteras?.find(b=>b.id===billId) : null;
-
-    // Si tiene billetera configurada, confirmar; si no, preguntar
-    let billeteraUsada = billId;
-    if (!billId && STATE.db.billeteras?.length > 0) {
-      // Mostrar mini-selector rápido via confirm
-      const opts = STATE.db.billeteras.map((b,i)=>`${i+1}. ${BILL_ICONOS[b.tipo]||'💳'} ${b.nombre}`).join('\n');
-      const sel  = prompt(`¿De qué billetera pagas "${gf.nombre}"?\n\n${opts}\n\nEscribe el número (o Enter para sin asignar):`);
-      if (sel && !isNaN(parseInt(sel))) {
-        const idx2 = parseInt(sel) - 1;
-        if (STATE.db.billeteras[idx2]) billeteraUsada = STATE.db.billeteras[idx2].id;
-      }
-    }
-
-    const now   = new Date();
-    const fecha = now.toISOString().slice(0,10);
-    const hora  = horaActual();
-
-    gf.pagos[mesKey] = { pagado: true, fecha, hora, billeteraId: billeteraUsada };
-
-    // Registrar como gasto real
-    const billObj = billeteraUsada ? STATE.db.billeteras?.find(b=>b.id===billeteraUsada) : null;
-    STATE.db.gastos.push({
-      id: uid(), fecha, hora,
-      monto: gf.monto,
-      desc: 'Gasto fijo: ' + gf.nombre,
-      cat: gf.cat || 'Servicios',
-      billeteraId: billeteraUsada,
-      autoGenerado: true
-    });
-
-    renderAll();
-    await saveDb(['gastosFijos','gastos']);
-    const dest = billObj ? ` (de ${billObj.nombre})` : '';
-    toast(`✅ Pagado${dest} — ${fmt(gf.monto)} registrado como gasto`, 'success');
+    // Abrir mini-modal para seleccionar billetera
+    openModalPagoFijo(id, mesKey);
   } else {
     // Desmarcar como pagado
     gf.pagos[mesKey] = false;
@@ -3669,6 +3731,97 @@ async function togglePagoGF(id) {
     await saveDb(['gastosFijos']);
     toast('↩️ Marcado como pendiente', 'info');
   }
+}
+
+function openModalPagoFijo(gfId, mesKey) {
+  const gf = STATE.db.gastosFijos.find(g => g.id === gfId);
+  if (!gf) return;
+  const billeteras = STATE.db.billeteras || [];
+
+  // Crear modal si no existe
+  let modal = document.getElementById('modal-pago-fijo-billetera');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-pago-fijo-billetera';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:380px;">
+        <div class="modal-title" id="mpf-titulo">💳 ¿De qué billetera pagas?</div>
+        <p style="color:var(--muted);font-size:.88rem;margin-bottom:16px;" id="mpf-desc"></p>
+        <div class="form-group">
+          <label>Billetera *</label>
+          <select class="form-control" id="mpf-billetera">
+            <option value="">— Selecciona billetera (obligatorio) —</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="closeModal('modal-pago-fijo-billetera')">Cancelar</button>
+          <button class="btn btn-primary" id="mpf-confirmar">✅ Confirmar pago</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    // Cerrar al hacer click en overlay
+    modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
+  }
+
+  // Poblar datos
+  document.getElementById('mpf-desc').textContent =
+    `"${gf.nombre}" — ${fmt(gf.monto)}`;
+  const sel = document.getElementById('mpf-billetera');
+  sel.innerHTML = '<option value="">— Selecciona billetera (obligatorio) —</option>';
+  billeteras.forEach(b => {
+    const o = document.createElement('option');
+    o.value = b.id;
+    o.textContent = (BILL_ICONOS[b.tipo]||'💳') + ' ' + b.nombre;
+    if (gf.billeteraId === b.id) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.style.border = '';
+
+  // Asignar handler al botón confirmar
+  const btn = document.getElementById('mpf-confirmar');
+  const newBtn = btn.cloneNode(true);
+  btn.parentNode.replaceChild(newBtn, btn);
+  newBtn.addEventListener('click', async () => {
+    const billeteraUsada = document.getElementById('mpf-billetera').value;
+    if (!billeteraUsada) {
+      const s = document.getElementById('mpf-billetera');
+      s.style.border = '2px solid var(--red)';
+      setTimeout(() => s.style.border = '', 2000);
+      return toast('⚠️ Debes seleccionar de qué billetera sale el dinero', 'error');
+    }
+    closeModal('modal-pago-fijo-billetera');
+    await confirmarPagoFijo(gfId, mesKey, billeteraUsada);
+  });
+
+  openModal('modal-pago-fijo-billetera');
+}
+
+async function confirmarPagoFijo(gfId, mesKey, billeteraUsada) {
+  const gf = STATE.db.gastosFijos.find(g => g.id === gfId);
+  if (!gf) return;
+  if (!gf.pagos) gf.pagos = {};
+
+  const now   = new Date();
+  const fecha = now.toISOString().slice(0,10);
+  const hora  = horaActual();
+
+  gf.pagos[mesKey] = { pagado: true, fecha, hora, billeteraId: billeteraUsada };
+
+  const billObj = STATE.db.billeteras?.find(b=>b.id===billeteraUsada);
+  STATE.db.gastos.push({
+    id: uid(), fecha, hora,
+    monto: gf.monto,
+    desc: 'Gasto fijo: ' + gf.nombre,
+    cat: gf.cat || 'Servicios',
+    billeteraId: billeteraUsada,
+    autoGenerado: true
+  });
+
+  renderAll();
+  await saveDb(['gastosFijos','gastos']);
+  const dest = billObj ? ` (de ${billObj.nombre})` : '';
+  toast(`✅ Pagado${dest} — ${fmt(gf.monto)} registrado como gasto`, 'success');
 }
 
 async function resetPagosGF() {
@@ -4203,6 +4356,13 @@ function openModalVentaInv(invId) {
           <div class="form-group"><label>Observación</label>
             <input type="text" class="form-control" id="fv-obs" placeholder="Notas opcionales">
           </div>
+          <div class="form-group" style="grid-column:1/-1"><label>💳 Dinero ingresa a *</label>
+            <select class="form-control" id="fv-billetera">
+              <option value="">— Selecciona billetera (obligatorio) —</option>
+              ${(STATE.db.billeteras||[]).map(b=>`<option value="${b.id}">${(BILL_ICONOS[b.tipo]||'💳')+' '+b.nombre}</option>`).join('')}
+            </select>
+            <small style="color:var(--muted);font-size:.72rem">El dinero de la venta se sumará a esta billetera</small>
+          </div>
         </div>
       </div>
       <div class="modal-actions">
@@ -4219,15 +4379,22 @@ async function guardarVentaInv(invId, stockDisp) {
   const precio   = parseFloat(document.getElementById('fv-precio')?.value)||0;
   const cliente  = document.getElementById('fv-cliente')?.value.trim();
   const obs      = document.getElementById('fv-obs')?.value.trim();
+  const billeteraId = document.getElementById('fv-billetera')?.value || '';
 
   if(!fecha)    return toast('La fecha es obligatoria','error');
   if(!cantidad) return toast('La cantidad debe ser mayor a 0','error');
   if(cantidad>stockDisp) return toast('Stock insuficiente. Disponible: '+stockDisp,'error');
   if(!precio)   return toast('El precio de venta es obligatorio','error');
+  if(!billeteraId) {
+    const sel = document.getElementById('fv-billetera');
+    if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(() => sel.style.border = '', 2000); }
+    return toast('⚠️ Debes seleccionar en qué billetera ingresa el dinero de la venta','error');
+  }
 
-  addVentaInv({ invId, fecha, cantidad, precioUnitario:precio, cliente, obs });
+  addVentaInv({ invId, fecha, cantidad, precioUnitario:precio, cliente, obs, billeteraId });
 
   const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  const billNombre = STATE.db.billeteras?.find(b=>b.id===billeteraId)?.nombre || '';
   // Calcular ganancia real: precio_venta - costo_unitario
   const totalInvCap = inv ? (
     Number(inv.capitalCOP||0) +
@@ -4236,28 +4403,24 @@ async function guardarVentaInv(invId, stockDisp) {
   ) : 0;
   const costoUnit = (inv && inv.unidades > 0) ? totalInvCap / inv.unidades : 0;
   const gananciaVenta = (precio - costoUnit) * cantidad; // solo la ganancia neta
+  const totalVenta = precio * cantidad;
 
-  // Registrar SOLO la ganancia neta como ingreso del mes.
-  // El capital invertido ya está contado en el balance como activo,
-  // así que solo la ganancia real (precio - costo) se agrega como ingreso
-  // para evitar contar el mismo dinero dos veces.
-  if (gananciaVenta > 0) {
-    STATE.db.ingresos.push({
-      id:uid(), fecha,
-      hora: horaActual(),
-      monto: Math.round(gananciaVenta),
-      fuente:'Ganancia venta: '+(inv?.nombre||'Producto')+(cliente?' — '+cliente:''),
-      cat:'Inversión', autoGenerado:true
-    });
-  } else {
-    // Si no hay ganancia (vendió al costo o menos), igual registrar como 0 de ganancia
-    // pero no como ingreso para no inflar los números
-    console.log('Venta sin ganancia neta registrada en inv:', inv?.nombre);
-  }
+  // Registrar el ingreso total de la venta en la billetera seleccionada
+  STATE.db.ingresos.push({
+    id:uid(), fecha,
+    hora: horaActual(),
+    monto: Math.round(totalVenta),
+    fuente:'Venta inversión: '+(inv?.nombre||'Producto')+(cliente?' — '+cliente:''),
+    cat:'Inversión',
+    billeteraId,
+    autoGenerado:true
+  });
+
   renderAll();
   closeInvModal();
   await saveDb(['ventasInv','ingresos']);
-  toast('Venta registrada' + (gananciaVenta > 0 ? ' — ganancia: ' + fmtCOP(Math.round(gananciaVenta)) : '') + ' ✅','success');
+  const destino = billNombre ? ` → ${billNombre}` : '';
+  toast('Venta registrada' + destino + (gananciaVenta > 0 ? ' — ganancia: ' + fmtCOP(Math.round(gananciaVenta)) : '') + ' ✅','success');
 }
 
 // ─── Detalle inversión (vista completa) ───────────────────────
@@ -4666,6 +4829,143 @@ async function deleteBilletera(id) {
   toast('Billetera eliminada', 'info');
 }
 
+// ─── Transferencia entre billeteras ──────────────────────────
+function openModalTransferencia() {
+  const list = getBilleteras();
+  if (list.length < 2) {
+    return toast('Necesitas al menos 2 billeteras para transferir', 'error');
+  }
+
+  // Poblar selects
+  ['tr-origen','tr-destino'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = `<option value="">— Selecciona ${id==='tr-origen'?'origen':'destino'} —</option>`;
+    list.forEach(b => {
+      const opt = document.createElement('option');
+      opt.value = b.id;
+      opt.textContent = (BILL_ICONOS[b.tipo]||'💳') + ' ' + b.nombre + ' — ' + fmt(saldoBilletera(b.id));
+      sel.appendChild(opt);
+    });
+  });
+
+  // Fecha por defecto = hoy
+  const fechaEl = document.getElementById('tr-fecha');
+  if (fechaEl) fechaEl.value = new Date().toISOString().slice(0,10);
+
+  // Limpiar campos
+  const montoEl = document.getElementById('tr-monto');
+  const descEl  = document.getElementById('tr-desc');
+  if (montoEl) montoEl.value = '';
+  if (descEl)  descEl.value  = '';
+  document.getElementById('tr-saldo-origen').textContent = '';
+  document.getElementById('tr-saldo-post').style.display = 'none';
+
+  // Listener origen para mostrar saldo disponible
+  const origenSel = document.getElementById('tr-origen');
+  origenSel.onchange = () => {
+    const id = origenSel.value;
+    const saldoEl = document.getElementById('tr-saldo-origen');
+    if (id) {
+      const s = saldoBilletera(id);
+      saldoEl.textContent = 'Saldo disponible: ' + fmt(s);
+      saldoEl.style.color = s > 0 ? 'var(--green)' : 'var(--red)';
+    } else {
+      saldoEl.textContent = '';
+    }
+    onTrMontoChange();
+  };
+
+  openModal('modal-transferencia');
+}
+
+function onTrMontoChange() {
+  const origenId = document.getElementById('tr-origen')?.value;
+  const monto    = parseFloat(document.getElementById('tr-monto')?.value) || 0;
+  const postEl   = document.getElementById('tr-saldo-post');
+  if (!postEl) return;
+  if (origenId && monto > 0) {
+    const saldoActual = saldoBilletera(origenId);
+    const saldoPost   = saldoActual - monto;
+    postEl.style.display = '';
+    postEl.innerHTML = `Saldo restante en origen: <strong style="color:${saldoPost>=0?'var(--green)':'var(--red)'}">${fmt(saldoPost)}</strong>`;
+  } else {
+    postEl.style.display = 'none';
+  }
+}
+
+function openModalTransferenciaDesde(billId) {
+  openModalTransferencia();
+  // Pre-seleccionar origen
+  setTimeout(() => {
+    const sel = document.getElementById('tr-origen');
+    if (sel) {
+      sel.value = billId;
+      sel.dispatchEvent(new Event('change'));
+    }
+  }, 50);
+}
+
+async function ejecutarTransferencia() {
+  const origenId  = document.getElementById('tr-origen')?.value;
+  const destinoId = document.getElementById('tr-destino')?.value;
+  const monto     = parseFloat(document.getElementById('tr-monto')?.value) || 0;
+  const fecha     = document.getElementById('tr-fecha')?.value;
+  const descExtra = document.getElementById('tr-desc')?.value.trim();
+
+  if (!origenId)  {
+    document.getElementById('tr-origen').style.border = '2px solid var(--red)';
+    setTimeout(() => document.getElementById('tr-origen').style.border = '', 2000);
+    return toast('Selecciona la billetera de origen', 'error');
+  }
+  if (!destinoId) {
+    document.getElementById('tr-destino').style.border = '2px solid var(--red)';
+    setTimeout(() => document.getElementById('tr-destino').style.border = '', 2000);
+    return toast('Selecciona la billetera de destino', 'error');
+  }
+  if (origenId === destinoId) return toast('El origen y destino no pueden ser iguales', 'error');
+  if (!monto || monto <= 0)  return toast('El monto debe ser mayor a 0', 'error');
+  if (!fecha)                return toast('La fecha es obligatoria', 'error');
+
+  const saldoOrigen = saldoBilletera(origenId);
+  if (monto > saldoOrigen) {
+    return toast(`Saldo insuficiente en origen. Disponible: ${fmt(saldoOrigen)}`, 'error');
+  }
+
+  const bOrigen  = getBilleteras().find(b=>b.id===origenId);
+  const bDestino = getBilleteras().find(b=>b.id===destinoId);
+  const hora     = horaActual();
+  const label    = descExtra || `Transferencia ${bOrigen?.nombre} → ${bDestino?.nombre}`;
+  const tId      = uid(); // ID compartido para vincular los dos movimientos
+
+  // Gasto en origen (salida)
+  STATE.db.gastos.push({
+    id: uid(), fecha, hora,
+    monto,
+    desc: label,
+    cat: 'Transferencia',
+    billeteraId: origenId,
+    autoGenerado: true,
+    transferId: tId
+  });
+
+  // Ingreso en destino (entrada)
+  STATE.db.ingresos.push({
+    id: uid(), fecha, hora,
+    monto,
+    fuente: label,
+    cat: 'Transferencia',
+    billeteraId: destinoId,
+    autoGenerado: true,
+    transferId: tId
+  });
+
+  closeModal('modal-transferencia');
+  renderAll();
+  await saveDb(['gastos','ingresos']);
+  toast(`✅ ${fmt(monto)} transferido de ${bOrigen?.nombre} a ${bDestino?.nombre}`, 'success');
+}
+
 function verMovimientosBilletera(id) {
   const b = getBilleteras().find(b=>b.id===id);
   if (!b) return;
@@ -4709,7 +5009,7 @@ function verMovimientosBilletera(id) {
       <td style="white-space:nowrap">${m.fecha||'—'}</td>
       <td style="color:var(--muted);font-size:.8rem;white-space:nowrap">${m.hora||'—'}</td>
       <td>${m.fuente||m.desc||'—'}</td>
-      <td><span class="badge ${m.tipo==='ingreso'?'badge-green':'badge-red'}">${m.tipo}</span></td>
+      <td><span class="badge ${m.tipo==='ingreso'?'badge-green':'badge-red'}">${m.cat==='Transferencia'?'🔄 transferencia':m.tipo}</span></td>
       <td style="color:${m.tipo==='ingreso'?'var(--green)':'var(--red)'};font-weight:600;white-space:nowrap">
         ${m.tipo==='ingreso'?'+':'-'}${fmt(m.monto)}
       </td>
@@ -4753,6 +5053,7 @@ function renderBilleteras() {
         <div style="font-size:.72rem;color:var(--muted)">${numIng} ingresos · ${numGas} gastos</div>
         <div class="bill-actions">
           <button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center" onclick="verMovimientosBilletera('${b.id}')">📋 Ver</button>
+          <button class="btn btn-ghost btn-sm" title="Transferir" onclick="openModalTransferenciaDesde('${b.id}')">🔄</button>
           <button class="btn btn-ghost btn-sm" onclick="openModalBilletera('${b.id}')">✏️</button>
           <button class="btn btn-danger btn-sm" onclick="deleteBilletera('${b.id}')">🗑️</button>
         </div>
