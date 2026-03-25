@@ -41,6 +41,16 @@
   // ── Colecciones en Firestore ──
   const COLLECTIONS = ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras'];
 
+  // ── Exponer al scope global para que el resto del JS lo use ──
+  window.__FB = {
+    db: db_firebase,
+    col: (name) => collection(db_firebase, name),
+    doc: (colName, id) => doc(db_firebase, colName, id),
+    getDocs, setDoc, deleteDoc, writeBatch, onSnapshot,
+    COLLECTIONS,
+    ready: false,
+  };
+
   // ── Guardar PIN en Firestore ──
   window.__FB.savePin = async function(pin) {
     await setDoc(doc(db_firebase, 'config', 'app'), { pin });
@@ -52,16 +62,6 @@
       const snap = await getDoc(doc(db_firebase, 'config', 'app'));
       return snap.exists() ? snap.data().pin : null;
     } catch { return null; }
-  };
-
-  // ── Exponer al scope global para que el resto del JS lo use ──
-  window.__FB = {
-    db: db_firebase,
-    col: (name) => collection(db_firebase, name),
-    doc: (colName, id) => doc(db_firebase, colName, id),
-    getDocs, setDoc, deleteDoc, writeBatch, onSnapshot,
-    COLLECTIONS,
-    ready: false,
   };
 
   // ── Cargar todos los datos al inicio ──
@@ -2230,21 +2230,8 @@ async function loadDb() {
         ventasInv:   data.ventasInv   || [],
         billeteras:  data.billeteras  || [],
       };
-      // También guardar en localStorage como respaldo offline
+      // Guardar en localStorage como respaldo offline
       localStorage.setItem('finanzas_pro_v2', JSON.stringify(STATE.db));
-
-      // Sincronizar PIN desde Firebase
-      if (window.__FB.loadPin) {
-        const pinRemoto = await window.__FB.loadPin();
-        if (pinRemoto) {
-          localStorage.setItem('fp_pin', pinRemoto);
-        } else {
-          // Primera vez: subir el PIN local a Firebase
-          const pinLocal = localStorage.getItem('fp_pin') || '1234';
-          await window.__FB.savePin(pinLocal).catch(()=>{});
-        }
-      }
-
       hideLoadingOverlay();
       console.log('✅ Datos cargados desde Firestore');
     } catch (err) {
@@ -2253,6 +2240,23 @@ async function loadDb() {
       hideLoadingOverlay();
       toast('Modo offline: usando datos locales', 'info');
     }
+
+    // Sincronizar PIN — en bloque separado para que un error aquí
+    // nunca afecte la carga de datos ni muestre "modo offline"
+    try {
+      if (window.__FB.loadPin) {
+        const pinRemoto = await window.__FB.loadPin();
+        if (pinRemoto) {
+          localStorage.setItem('fp_pin', pinRemoto);
+        } else {
+          const pinLocal = localStorage.getItem('fp_pin') || '1234';
+          await window.__FB.savePin(pinLocal).catch(()=>{});
+        }
+      }
+    } catch (e) {
+      console.warn('PIN sync omitido:', e);
+    }
+
   } else {
     // Firebase aún no está listo — usar localStorage
     loadDbLocal();
