@@ -735,6 +735,8 @@ canvas { max-width: 100%; display: block; }
 .inv-evento:last-child { border-bottom: none; }
 
 .det-grid { display: grid; grid-template-columns: 300px 1fr; gap: 20px; }
+.rep-charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+@media (max-width: 768px) { .rep-charts-grid { grid-template-columns: 1fr; } }
 @media (max-width: 960px) { .det-grid { grid-template-columns: 1fr; } }
 
 /* ── Billeteras ── */
@@ -1144,6 +1146,11 @@ canvas { max-width: 100%; display: block; }
         </button>
       </li>
       <li class="nav-item">
+        <button class="nav-btn" onclick="navigate('reportes')" data-page="reportes">
+          <span class="nav-icon">📊</span> Reportes
+        </button>
+      </li>
+      <li class="nav-item">
         <button class="nav-btn" onclick="navigate('claves')" data-page="claves">
           <span class="nav-icon">🔐</span> Contraseñas
         </button>
@@ -1218,25 +1225,13 @@ canvas { max-width: 100%; display: block; }
       </div>
 
       <!-- Billeteras widget -->
-      <div class="section" id="dash-billeteras-widget" style="display:none;margin-bottom:20px;"></div>
+      <div class="section" id="dash-billeteras-widget" style="display:none;margin-bottom:16px;"></div>
 
-      <!-- Charts row -->
-      <div class="chart-grid">
-        <div class="chart-card">
-          <div class="chart-title">💹 Ingresos vs Gastos (últimos 6 meses)</div>
-          <canvas id="chart-balance" height="190"></canvas>
-        </div>
-        <div class="chart-card">
-          <div class="chart-title">🍩 Gastos por categoría</div>
-          <canvas id="chart-cats" height="190"></canvas>
-        </div>
-      </div>
-
-      <!-- Top expense categories -->
+      <!-- Últimas transacciones -->
       <div class="section">
         <div class="section-header">
           <span class="section-title">📋 Últimas transacciones</span>
-          <button class="btn btn-ghost btn-sm" onclick="navigate('ingresos')">Ver ingresos →</button>
+          <button class="btn btn-ghost btn-sm" onclick="navigate('reportes')">Ver reportes →</button>
         </div>
         <div id="dash-recent"></div>
       </div>
@@ -1421,6 +1416,13 @@ canvas { max-width: 100%; display: block; }
         <div class="section-title" style="margin-bottom:16px;">➕ Nueva deuda</div>
         <div class="form-grid">
           <div class="form-group">
+            <label>Tipo de deuda *</label>
+            <select class="form-control" id="d-tipo" onchange="onDeudaTipoChange()">
+              <option value="compra">🛒 Compra a crédito</option>
+              <option value="prestamo">💵 Préstamo de dinero recibido</option>
+            </select>
+          </div>
+          <div class="form-group">
             <label>Nombre / Acreedor *</label>
             <input type="text" class="form-control" id="d-nombre" placeholder="Ej: Banco, préstamo...">
           </div>
@@ -1443,6 +1445,13 @@ canvas { max-width: 100%; display: block; }
           <div class="form-group">
             <label>Tasa de interés % (anual)</label>
             <input type="number" class="form-control" id="d-interes" placeholder="0" step="0.01">
+          </div>
+          <div class="form-group" id="d-billetera-group" style="display:none">
+            <label>💳 Dinero recibido en (billetera)</label>
+            <select class="form-control" id="d-billetera">
+              <option value="">Sin asignar</option>
+            </select>
+            <small style="color:var(--muted);font-size:.72rem">El dinero del préstamo se sumará a esta billetera</small>
           </div>
         </div>
         <div class="form-actions">
@@ -1574,6 +1583,13 @@ canvas { max-width: 100%; display: block; }
             <input type="number" class="form-control" id="gf-dia" placeholder="Ej: 5" min="1" max="31">
           </div>
           <div class="form-group">
+            <label>💳 Billetera por defecto</label>
+            <select class="form-control" id="gf-billetera">
+              <option value="">Sin asignar</option>
+            </select>
+            <small style="color:var(--muted);font-size:.72rem">Se usará al marcar como pagado</small>
+          </div>
+          <div class="form-group">
             <label>Notas</label>
             <input type="text" class="form-control" id="gf-notas" placeholder="Opcional...">
           </div>
@@ -1698,6 +1714,80 @@ canvas { max-width: 100%; display: block; }
         <div id="inversiones-empty" class="empty-state" style="display:none;padding:40px 20px;text-align:center;color:var(--muted);">
           <div style="font-size:2.5rem;margin-bottom:12px;">📦</div>
           <p>Sin inversiones registradas aún. Haz clic en <strong>+ Nueva inversión</strong> para comenzar.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ====== REPORTES ====== -->
+    <div class="page" id="page-reportes">
+      <p class="page-title">Reportes & Métricas</p>
+      <p class="page-sub">Análisis visual de tus ingresos y gastos mes a mes</p>
+
+      <!-- Selector de periodo -->
+      <div class="section" style="padding:14px 18px;margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <span style="font-size:.85rem;color:var(--muted);font-weight:600;">Ver período:</span>
+          <select class="form-control" style="width:auto" id="rep-periodo" onchange="renderReportes()">
+            <option value="6">Últimos 6 meses</option>
+            <option value="12">Últimos 12 meses</option>
+            <option value="3">Últimos 3 meses</option>
+          </select>
+          <select class="form-control" style="width:auto" id="rep-mes-detalle" onchange="renderReportes()">
+            <option value="">— Detalle de un mes —</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- KPIs del período -->
+      <div class="stats-grid" id="rep-kpis"></div>
+
+      <!-- Gráfico ingresos vs gastos -->
+      <div class="chart-card section" style="margin-bottom:16px;">
+        <div class="chart-title">💹 Ingresos vs Gastos por mes</div>
+        <canvas id="chart-balance" height="200"></canvas>
+      </div>
+
+      <!-- Gráfico donut categorías -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;" class="rep-charts-grid">
+        <div class="chart-card section">
+          <div class="chart-title">🍩 Gastos por categoría</div>
+          <canvas id="chart-cats" height="200"></canvas>
+        </div>
+        <div class="chart-card section">
+          <div class="chart-title">🟢 Ingresos por categoría</div>
+          <canvas id="chart-ing-cats" height="200"></canvas>
+        </div>
+      </div>
+
+      <!-- Tabla resumen mensual -->
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">📅 Resumen mes a mes</span>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="rep-tabla-meses">
+            <thead>
+              <tr>
+                <th>Mes</th><th>Ingresos</th><th>Gastos</th>
+                <th>Balance</th><th>Nº Ingresos</th><th>Nº Gastos</th>
+              </tr>
+            </thead>
+            <tbody id="rep-tbody-meses"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Top gastos e ingresos del mes seleccionado -->
+      <div id="rep-detalle-mes" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;" class="rep-charts-grid">
+          <div class="section">
+            <div class="section-header"><span class="section-title">🔴 Mayores gastos del mes</span></div>
+            <div id="rep-top-gastos"></div>
+          </div>
+          <div class="section">
+            <div class="section-header"><span class="section-title">🟢 Mayores ingresos del mes</span></div>
+            <div id="rep-top-ingresos"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -1832,6 +1922,9 @@ canvas { max-width: 100%; display: block; }
   </button>
   <button class="drawer-item" data-page="billeteras" onclick="mobileNav('billeteras');closeDrawer()">
     <span class="di-icon">👛</span> Billeteras
+  </button>
+  <button class="drawer-item" data-page="reportes" onclick="mobileNav('reportes');closeDrawer()">
+    <span class="di-icon">📊</span> Reportes
   </button>
   <button class="drawer-item" data-page="claves" onclick="mobileNav('claves');closeDrawer()">
     <span class="di-icon">🔐</span> Contraseñas
@@ -2573,6 +2666,7 @@ function renderAll() {
   populateMonthFilters();
   populateCatFilters();
   populateBilleteraSelects();
+  populateGFBilletera();
   renderDashboard();
   renderIngresos();
   renderGastos();
@@ -2582,7 +2676,23 @@ function renderAll() {
   renderInversiones();
   renderBilleteras();
   renderBilleterasDashWidget();
+  renderReportes();
   renderPass();
+}
+
+// Populate GF billetera select
+function populateGFBilletera() {
+  const sel = document.getElementById('gf-billetera');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Sin asignar</option>';
+  (STATE.db.billeteras||[]).forEach(b => {
+    const o = document.createElement('option');
+    o.value = b.id;
+    o.textContent = (BILL_ICONOS[b.tipo]||'💳') + ' ' + b.nombre;
+    if (b.id === cur) o.selected = true;
+    sel.appendChild(o);
+  });
 }
 
 /* ============================================================
@@ -2685,160 +2795,15 @@ function renderDashboard() {
       </tbody>
     </table></div>`;
 
-  drawBalanceChart();
-  drawCatChart();
+  // charts now in Reportes page
 }
 
 /* ============================================================
    CHARTS (pure Canvas)
    ============================================================ */
-function drawBalanceChart() {
-  const canvas = document.getElementById('chart-balance');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  canvas.width = canvas.offsetWidth || 400;
-  canvas.height = 190;
+// drawBalanceChart moved to renderReportes module
 
-  // Build last 6 months
-  const months = [];
-  const now = new Date();
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
-  }
-
-  const ingData = months.map(m =>
-    STATE.db.ingresos.filter(i => ym(i.fecha) === m).reduce((a, b) => a + Number(b.monto), 0));
-  const gasData = months.map(m =>
-    STATE.db.gastos.filter(g => ym(g.fecha) === m).reduce((a, b) => a + Number(b.monto), 0));
-
-  const labels = months.map(m => {
-    const [y, mo] = m.split('-');
-    const d = new Date(Number(y), Number(mo)-1, 1);
-    return d.toLocaleDateString('es-CO', { month: 'short' });
-  });
-
-  const W = canvas.width, H = canvas.height;
-  const pad = { top: 20, bottom: 36, left: 50, right: 16 };
-  const gW = W - pad.left - pad.right;
-  const gH = H - pad.top - pad.bottom;
-
-  const maxVal = Math.max(...ingData, ...gasData, 1);
-
-  ctx.clearRect(0, 0, W, H);
-
-  // Grid lines
-  ctx.strokeStyle = 'rgba(42,51,73,0.6)';
-  ctx.lineWidth = 1;
-  for (let i = 0; i <= 4; i++) {
-    const y = pad.top + (gH / 4) * i;
-    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
-    ctx.fillStyle = 'rgba(100,116,139,0.7)';
-    ctx.font = '10px sans-serif';
-    ctx.fillText(fmt(maxVal - (maxVal / 4) * i).replace('$','') , 2, y + 4);
-  }
-
-  const barW = (gW / months.length) * 0.35;
-
-  months.forEach((_, i) => {
-    const x = pad.left + (gW / months.length) * i + (gW / months.length) * 0.1;
-
-    // Ingreso bar (green)
-    const ingH = (ingData[i] / maxVal) * gH;
-    const grd1 = ctx.createLinearGradient(0, pad.top + gH - ingH, 0, pad.top + gH);
-    grd1.addColorStop(0, '#10b981'); grd1.addColorStop(1, 'rgba(16,185,129,0.3)');
-    ctx.fillStyle = grd1;
-    ctx.beginPath();
-    ctx.roundRect(x, pad.top + gH - ingH, barW, ingH, 3);
-    ctx.fill();
-
-    // Gasto bar (red)
-    const gasH = (gasData[i] / maxVal) * gH;
-    const grd2 = ctx.createLinearGradient(0, pad.top + gH - gasH, 0, pad.top + gH);
-    grd2.addColorStop(0, '#ef4444'); grd2.addColorStop(1, 'rgba(239,68,68,0.3)');
-    ctx.fillStyle = grd2;
-    ctx.beginPath();
-    ctx.roundRect(x + barW + 3, pad.top + gH - gasH, barW, gasH, 3);
-    ctx.fill();
-
-    // Label
-    ctx.fillStyle = 'rgba(100,116,139,0.8)';
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(labels[i], x + barW, H - 10);
-  });
-
-  // Legend
-  ctx.fillStyle = '#10b981'; ctx.fillRect(pad.left, H - 14, 10, 8);
-  ctx.fillStyle = 'rgba(100,116,139,0.8)'; ctx.font = '10px sans-serif';
-  ctx.textAlign = 'left'; ctx.fillText('Ingresos', pad.left + 13, H - 7);
-  ctx.fillStyle = '#ef4444'; ctx.fillRect(pad.left + 80, H - 14, 10, 8);
-  ctx.fillStyle = 'rgba(100,116,139,0.8)'; ctx.fillText('Gastos', pad.left + 93, H - 7);
-}
-
-function drawCatChart() {
-  const canvas = document.getElementById('chart-cats');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  canvas.width = canvas.offsetWidth || 300;
-  canvas.height = 190;
-
-  const ym0 = currentYM();
-  const gasMes = STATE.db.gastos.filter(g => ym(g.fecha) === ym0);
-
-  const catTotals = {};
-  gasMes.forEach(g => {
-    catTotals[g.cat] = (catTotals[g.cat] || 0) + Number(g.monto);
-  });
-  const cats  = Object.keys(catTotals);
-  const vals  = cats.map(c => catTotals[c]);
-  const total = vals.reduce((a, b) => a + b, 0);
-
-  if (!total) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = 'rgba(100,116,139,0.6)';
-    ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('Sin datos este mes', canvas.width / 2, canvas.height / 2);
-    return;
-  }
-
-  const COLORS = ['#3b82f6','#10b981','#ef4444','#f59e0b','#8b5cf6','#ec4899','#14b8a6','#f97316','#06b6d4','#84cc16'];
-  const cx = canvas.width * 0.36, cy = canvas.height / 2, r = Math.min(cx, cy) - 10;
-  let angle = -Math.PI / 2;
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  vals.forEach((v, i) => {
-    const slice = (v / total) * Math.PI * 2;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, r, angle, angle + slice);
-    ctx.closePath();
-    ctx.fillStyle = COLORS[i % COLORS.length];
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(15,17,23,.6)';
-    ctx.lineWidth = 2; ctx.stroke();
-    angle += slice;
-  });
-
-  // Donut hole
-  ctx.beginPath(); ctx.arc(cx, cy, r * 0.55, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(22,27,39,1)'; ctx.fill();
-  ctx.fillStyle = 'rgba(226,232,240,0.9)'; ctx.font = 'bold 11px sans-serif';
-  ctx.textAlign = 'center'; ctx.fillText(fmt(total), cx, cy + 4);
-
-  // Legend
-  const legX = cx * 2 + 8;
-  cats.slice(0, 6).forEach((c, i) => {
-    const y = 20 + i * 26;
-    ctx.fillStyle = COLORS[i % COLORS.length];
-    ctx.beginPath(); ctx.arc(legX + 6, y + 6, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(226,232,240,0.8)'; ctx.font = '10px sans-serif';
-    ctx.textAlign = 'left'; ctx.fillText(c.slice(0,11), legX + 14, y + 10);
-    ctx.fillStyle = 'rgba(100,116,139,0.8)';
-    ctx.fillText(Math.round(vals[i] / total * 100) + '%', legX + 14, y + 22);
-  });
-}
+// drawCatChart moved to renderReportes module
 
 /* ============================================================
    INGRESOS
@@ -3122,23 +3087,66 @@ function renderGastos() {
 /* ============================================================
    DEUDAS
    ============================================================ */
+function onDeudaTipoChange() {
+  const tipo = document.getElementById('d-tipo').value;
+  const grp  = document.getElementById('d-billetera-group');
+  if (grp) grp.style.display = tipo === 'prestamo' ? '' : 'none';
+  // populate billetera select
+  populateBilleteraSelects();
+  const sel = document.getElementById('d-billetera');
+  if (sel && tipo === 'prestamo') {
+    sel.innerHTML = '<option value="">Sin asignar</option>';
+    (STATE.db.billeteras||[]).forEach(b => {
+      const o = document.createElement('option');
+      o.value = b.id;
+      o.textContent = (BILL_ICONOS[b.tipo]||'💳') + ' ' + b.nombre;
+      sel.appendChild(o);
+    });
+  }
+}
+
 async function saveDeuda() {
-  const nombre  = document.getElementById('d-nombre').value.trim();
-  const total   = Number(document.getElementById('d-total').value);
-  const fecha   = document.getElementById('d-fecha').value;
-  const cuota   = Number(document.getElementById('d-cuota').value) || 0;
-  const prox    = document.getElementById('d-prox').value;
-  const interes = Number(document.getElementById('d-interes').value) || 0;
+  const nombre     = document.getElementById('d-nombre').value.trim();
+  const total      = Number(document.getElementById('d-total').value);
+  const fecha      = document.getElementById('d-fecha').value;
+  const cuota      = Number(document.getElementById('d-cuota').value) || 0;
+  const prox       = document.getElementById('d-prox').value;
+  const interes    = Number(document.getElementById('d-interes').value) || 0;
+  const tipo       = document.getElementById('d-tipo')?.value || 'compra';
+  const billeteraId = tipo === 'prestamo' ? (document.getElementById('d-billetera')?.value || '') : '';
 
   if (!nombre) return toast('El nombre es obligatorio', 'error');
   if (!total)  return toast('El monto total es obligatorio', 'error');
   if (!fecha)  return toast('La fecha de inicio es obligatoria', 'error');
+  if (tipo === 'prestamo' && !billeteraId) {
+    if (!confirm('No seleccionaste una billetera. El dinero del préstamo no se sumará a ninguna cuenta. ¿Continuar?')) return;
+  }
 
-  STATE.db.deudas.push({ id: uid(), nombre, total, fecha, cuota, prox, interes, pagado: 0, pagos: [] });
+  STATE.db.deudas.push({ id: uid(), nombre, total, fecha, cuota, prox, interes, tipo, billeteraId, pagado: 0, pagos: [] });
+
+  // Si es préstamo recibido, registrar como ingreso en la billetera
+  if (tipo === 'prestamo') {
+    const bill = STATE.db.billeteras?.find(b=>b.id===billeteraId);
+    STATE.db.ingresos.push({
+      id: uid(), fecha,
+      hora: horaActual(),
+      monto: total,
+      fuente: 'Préstamo recibido: ' + nombre,
+      cat: 'Préstamo recibido',
+      billeteraId,
+      autoGenerado: true
+    });
+    const billNombre = bill ? ` → ${bill.nombre}` : '';
+    toast(`Deuda creada${billNombre}. Dinero sumado como ingreso ✅`, 'success');
+  } else {
+    toast('Deuda de compra creada ✅', 'success');
+  }
+
   clearForm(['d-nombre','d-total','d-cuota','d-interes']);
+  document.getElementById('d-tipo').value = 'compra';
+  onDeudaTipoChange();
   renderAll();
-  await saveDb(['deudas']);
-  toast('Deuda creada ✅', 'success');
+  await saveDb(['deudas','ingresos']);
 }
 
 function openAbonar(idx) {
@@ -3583,16 +3591,17 @@ function renderPrestamos() {
    GASTOS FIJOS MENSUALES
    ============================================================ */
 async function saveGastoFijo() {
-  const nombre = document.getElementById('gf-nombre').value.trim();
-  const monto  = Number(document.getElementById('gf-monto').value);
-  const cat    = document.getElementById('gf-cat').value;
-  const dia    = Number(document.getElementById('gf-dia').value) || 0;
-  const notas  = document.getElementById('gf-notas').value.trim();
+  const nombre     = document.getElementById('gf-nombre').value.trim();
+  const monto      = Number(document.getElementById('gf-monto').value);
+  const cat        = document.getElementById('gf-cat').value;
+  const dia        = Number(document.getElementById('gf-dia').value) || 0;
+  const notas      = document.getElementById('gf-notas').value.trim();
+  const billeteraId = document.getElementById('gf-billetera')?.value || '';
 
   if (!nombre) return toast('El nombre es obligatorio', 'error');
   if (!monto)  return toast('El valor es obligatorio', 'error');
 
-  STATE.db.gastosFijos.push({ id: uid(), nombre, monto, cat, dia, notas, pagos: {} });
+  STATE.db.gastosFijos.push({ id: uid(), nombre, monto, cat, dia, notas, billeteraId, pagos: {} });
   clearForm(['gf-nombre','gf-monto','gf-dia','gf-notas']);
   renderGastosFijos();
   await saveDb(['gastosFijos']);
@@ -3612,10 +3621,54 @@ async function togglePagoGF(id) {
   const gf     = STATE.db.gastosFijos.find(g => g.id === id);
   if (!gf) return;
   if (!gf.pagos) gf.pagos = {};
-  gf.pagos[mesKey] = !gf.pagos[mesKey];
-  renderGastosFijos();
-  await saveDb(['gastosFijos']);
-  toast(gf.pagos[mesKey] ? '✅ Marcado como pagado' : '↩️ Marcado como pendiente', 'info');
+
+  const estabaPagado = !!gf.pagos[mesKey];
+
+  if (!estabaPagado) {
+    // Marcar como pagado — preguntar billetera si tiene una por defecto
+    const billId = gf.billeteraId || '';
+    const bill   = billId ? STATE.db.billeteras?.find(b=>b.id===billId) : null;
+
+    // Si tiene billetera configurada, confirmar; si no, preguntar
+    let billeteraUsada = billId;
+    if (!billId && STATE.db.billeteras?.length > 0) {
+      // Mostrar mini-selector rápido via confirm
+      const opts = STATE.db.billeteras.map((b,i)=>`${i+1}. ${BILL_ICONOS[b.tipo]||'💳'} ${b.nombre}`).join('\n');
+      const sel  = prompt(`¿De qué billetera pagas "${gf.nombre}"?\n\n${opts}\n\nEscribe el número (o Enter para sin asignar):`);
+      if (sel && !isNaN(parseInt(sel))) {
+        const idx2 = parseInt(sel) - 1;
+        if (STATE.db.billeteras[idx2]) billeteraUsada = STATE.db.billeteras[idx2].id;
+      }
+    }
+
+    const now   = new Date();
+    const fecha = now.toISOString().slice(0,10);
+    const hora  = horaActual();
+
+    gf.pagos[mesKey] = { pagado: true, fecha, hora, billeteraId: billeteraUsada };
+
+    // Registrar como gasto real
+    const billObj = billeteraUsada ? STATE.db.billeteras?.find(b=>b.id===billeteraUsada) : null;
+    STATE.db.gastos.push({
+      id: uid(), fecha, hora,
+      monto: gf.monto,
+      desc: 'Gasto fijo: ' + gf.nombre,
+      cat: gf.cat || 'Servicios',
+      billeteraId: billeteraUsada,
+      autoGenerado: true
+    });
+
+    renderAll();
+    await saveDb(['gastosFijos','gastos']);
+    const dest = billObj ? ` (de ${billObj.nombre})` : '';
+    toast(`✅ Pagado${dest} — ${fmt(gf.monto)} registrado como gasto`, 'success');
+  } else {
+    // Desmarcar como pagado
+    gf.pagos[mesKey] = false;
+    renderGastosFijos();
+    await saveDb(['gastosFijos']);
+    toast('↩️ Marcado como pendiente', 'info');
+  }
 }
 
 async function resetPagosGF() {
@@ -3656,8 +3709,8 @@ function renderGastosFijos() {
   const resumen = document.getElementById('gf-resumen');
 
   const totalMes    = list.reduce((a, g) => a + g.monto, 0);
-  const pagados     = list.filter(g => g.pagos && g.pagos[mesKey]);
-  const pendientes  = list.filter(g => !g.pagos || !g.pagos[mesKey]);
+  const pagados     = list.filter(g => { const p = g.pagos && g.pagos[mesKey]; return p === true || (p && p.pagado); });
+  const pendientes  = list.filter(g => { const p = g.pagos && g.pagos[mesKey]; return !p || (p && !p.pagado); });
   const totalPagado = pagados.reduce((a, g) => a + g.monto, 0);
   const totalPend   = pendientes.reduce((a, g) => a + g.monto, 0);
   const pct         = totalMes > 0 ? Math.round(totalPagado / totalMes * 100) : 0;
@@ -3710,7 +3763,9 @@ function renderGastosFijos() {
   });
 
   grid.innerHTML = sorted.map(g => {
-    const pagado = g.pagos && g.pagos[mesKey];
+    const _pval = g.pagos && g.pagos[mesKey];
+    const pagado = _pval === true || (_pval && _pval.pagado);
+    const pagadoInfo = (_pval && _pval.fecha) ? `${_pval.fecha} ${_pval.hora||''}` : '';
     const now    = new Date();
     const diasMes = g.dia > 0 ? g.dia - now.getDate() : null;
     let diasStr = '';
@@ -3736,6 +3791,7 @@ function renderGastosFijos() {
       <div class="gf-info">
         ${diasStr}
         <span class="badge ${pagado ? 'badge-green' : 'badge-red'}">${pagado ? '✅ Pagado' : '⏳ Pendiente'}</span>
+        ${pagadoInfo ? `<span style="font-size:.68rem;color:var(--muted)">${pagadoInfo}</span>` : ''}
       </div>
       <div class="gf-actions">
         <button class="toggle-pago ${pagado ? 'pagado' : ''}" onclick="togglePagoGF('${g.id}')">
@@ -3987,7 +4043,7 @@ function openModalNuevaInversion(id=null) {
           </div>
         </div>
         <div>
-          <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin-bottom:10px;">Estado y fechas</div>
+          <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin-bottom:10px;">Estado y fuente de dinero</div>
           <div class="form-grid">
             <div class="form-group"><label>Fecha de compra *</label>
               <input type="date" class="form-control" id="fi-fecha" value="${inv?.fecha||ymd}">
@@ -3998,6 +4054,17 @@ function openModalNuevaInversion(id=null) {
                 <option value="pausada" ${inv?.estado==='pausada'?'selected':''}>Pausada</option>
                 <option value="cerrada" ${inv?.estado==='cerrada'?'selected':''}>Cerrada</option>
               </select>
+            </div>
+            <div class="form-group"><label>💳 Dinero sale de</label>
+              <select class="form-control" id="fi-billetera">
+                <option value="">Sin asignar</option>
+                ${(STATE.db.billeteras||[]).map(b=>`<option value="${b.id}" ${(inv?.billeteraId||''===b.id)?'selected':''}>${(BILL_ICONOS[b.tipo]||'💳')+' '+b.nombre}</option>`).join('')}
+              </select>
+              <small style="color:var(--muted);font-size:.72rem">El costo total se descontará de esta billetera</small>
+            </div>
+            <div class="form-group"><label>📦 Unidades en bodega (recibidas)</label>
+              <input type="number" class="form-control" id="fi-bodega" value="${inv?.unidadesEnBodega||''}" placeholder="0">
+              <small style="color:var(--muted);font-size:.72rem">Cuántas ya tienes físicamente</small>
             </div>
             <div class="form-group" style="grid-column:1/-1"><label>Notas / Observaciones</label>
               <input type="text" class="form-control" id="fi-notas" value="${inv?.notas||''}" placeholder="Pedido Amazon #, observaciones...">
@@ -4044,6 +4111,11 @@ async function guardarInversion(id=null) {
   if(!precioUSD && !document.getElementById('fi-envio')?.value) return toast('Ingresa el costo de compra','error');
   if(!fecha)  return toast('La fecha es obligatoria','error');
 
+  const billeteraId = document.getElementById('fi-billetera')?.value || '';
+  const envioVal    = parseFloat(document.getElementById('fi-envio')?.value)||0;
+  const otrosVal    = parseFloat(document.getElementById('fi-otros')?.value)||0;
+  const invTotal    = (precioUSD * tasa * unidades) + envioVal + otrosVal;
+
   const datos = {
     nombre, sku: document.getElementById('fi-sku')?.value.trim(),
     tipo: document.getElementById('fi-tipo')?.value,
@@ -4052,11 +4124,14 @@ async function guardarInversion(id=null) {
     imagen: document.getElementById('fi-imagen')?.value.trim(),
     categoria: document.getElementById('fi-cat')?.value.trim(),
     precioUSD, capitalUSD: precioUSD * unidades, tasa, capitalCOP: 0,
-    unidades, envio: parseFloat(document.getElementById('fi-envio')?.value)||0,
-    otrosCostos: parseFloat(document.getElementById('fi-otros')?.value)||0,
+    unidades,
+    unidadesEnBodega: parseInt(document.getElementById('fi-bodega')?.value)||unidades,
+    envio: envioVal,
+    otrosCostos: otrosVal,
     precioSugerido: parseFloat(document.getElementById('fi-precio-sugerido')?.value)||0,
     fecha, estado: document.getElementById('fi-estado')?.value||'activa',
     notas: document.getElementById('fi-notas')?.value.trim(),
+    billeteraId,
   };
 
   if(id && id!=='') {
@@ -4065,11 +4140,27 @@ async function guardarInversion(id=null) {
     toast('Inversión actualizada','success');
   } else {
     STATE.db.inversiones.push({ id:uid(), ...datos });
-    toast('Inversión creada','success');
+    // Descontar de billetera si fue seleccionada
+    if (billeteraId && invTotal > 0) {
+      const bill = STATE.db.billeteras?.find(b=>b.id===billeteraId);
+      STATE.db.gastos.push({
+        id: uid(), fecha,
+        hora: horaActual(),
+        monto: Math.round(invTotal),
+        desc: 'Inversión: ' + nombre,
+        cat: 'Inversión',
+        billeteraId,
+        autoGenerado: true
+      });
+      const bn = bill ? ` (de ${bill.nombre})` : '';
+      toast(`Inversión creada${bn} · ${fmtCOP(invTotal)} descontado ✅`, 'success');
+    } else {
+      toast('Inversión creada ✅', 'success');
+    }
   }
   renderAll();
   closeInvModal();
-  await saveDb(['inversiones']);
+  await saveDb(['inversiones','gastos']);
 }
 
 // ─── Modal venta inversión ────────────────────────────────────
@@ -4716,6 +4807,237 @@ function renderBilleterasDashWidget() {
     <div style="margin-top:10px;font-size:.82rem;color:var(--muted);text-align:right">Total: <strong style="color:var(--green)">${fmt(total)}</strong></div>`;
 }
 
+/* ============================================================
+   REPORTES & MÉTRICAS
+   ============================================================ */
+function renderReportes() {
+  const periodoSel = document.getElementById('rep-periodo');
+  const mesDetSel  = document.getElementById('rep-mes-detalle');
+  if (!periodoSel) return;
+
+  const nMeses = parseInt(periodoSel.value) || 6;
+  const now    = new Date();
+
+  // Construir lista de meses
+  const meses = [];
+  for (let i = nMeses - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    meses.push(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'));
+  }
+
+  // Populate mes detalle select
+  if (mesDetSel) {
+    const curMesDet = mesDetSel.value;
+    mesDetSel.innerHTML = '<option value="">— Detalle de un mes —</option>';
+    [...meses].reverse().forEach(m => {
+      const o = document.createElement('option');
+      o.value = m; o.textContent = monthLabel(m);
+      if (m === curMesDet) o.selected = true;
+      mesDetSel.appendChild(o);
+    });
+  }
+
+  // Calcular datos por mes
+  const datos = meses.map(m => {
+    const ings  = STATE.db.ingresos.filter(i => ym(i.fecha) === m);
+    const gass  = STATE.db.gastos.filter(g => ym(g.fecha) === m);
+    const totalIng = ings.reduce((a,b) => a+Number(b.monto), 0);
+    const totalGas = gass.reduce((a,b) => a+Number(b.monto), 0);
+    return { m, ings, gass, totalIng, totalGas, balance: totalIng - totalGas };
+  });
+
+  // KPIs del período
+  const kpisEl = document.getElementById('rep-kpis');
+  if (kpisEl) {
+    const totIng = datos.reduce((a,d)=>a+d.totalIng, 0);
+    const totGas = datos.reduce((a,d)=>a+d.totalGas, 0);
+    const mejorMes = datos.reduce((a,d)=>d.balance>a.balance?d:a, datos[0]);
+    const peorMes  = datos.reduce((a,d)=>d.balance<a.balance?d:a, datos[0]);
+    kpisEl.innerHTML = `
+      <div class="stat-card green"><div class="stat-icon-box"><span>📈</span></div>
+        <div class="stat-body"><div class="stat-label">Total ingresos (${nMeses}m)</div>
+          <div class="stat-value positive">${fmt(totIng)}</div></div></div>
+      <div class="stat-card red"><div class="stat-icon-box"><span>📉</span></div>
+        <div class="stat-body"><div class="stat-label">Total gastos (${nMeses}m)</div>
+          <div class="stat-value negative">${fmt(totGas)}</div></div></div>
+      <div class="stat-card blue"><div class="stat-icon-box"><span>⚖️</span></div>
+        <div class="stat-body"><div class="stat-label">Balance período</div>
+          <div class="stat-value ${totIng-totGas>=0?'positive':'negative'}">${fmt(totIng-totGas)}</div></div></div>
+      <div class="stat-card teal"><div class="stat-icon-box"><span>🏆</span></div>
+        <div class="stat-body"><div class="stat-label">Mejor mes</div>
+          <div class="stat-value">${mejorMes ? monthLabel(mejorMes.m) : '—'}</div>
+          <div class="stat-sub">${mejorMes ? fmt(mejorMes.balance) : ''}</div></div></div>`;
+  }
+
+  // Tabla mes a mes
+  const tbody = document.getElementById('rep-tbody-meses');
+  if (tbody) {
+    tbody.innerHTML = [...datos].reverse().map(d => {
+      const bal = d.balance;
+      return `<tr>
+        <td style="font-weight:600">${monthLabel(d.m)}</td>
+        <td style="color:var(--green);font-weight:600">${fmt(d.totalIng)}</td>
+        <td style="color:var(--red);font-weight:600">${fmt(d.totalGas)}</td>
+        <td style="font-weight:700;color:${bal>=0?'var(--green)':'var(--red)'}">${fmt(bal)}</td>
+        <td>${d.ings.length}</td>
+        <td>${d.gass.length}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Gráfico barras ingresos vs gastos
+  drawBalanceChart(meses, datos);
+
+  // Gráfico donut gastos por categoría (período completo)
+  drawCatChart(meses);
+
+  // Gráfico donut ingresos por categoría
+  drawIngCatChart(meses);
+
+  // Detalle mes seleccionado
+  const mesDet = mesDetSel?.value;
+  const detEl  = document.getElementById('rep-detalle-mes');
+  if (mesDet && detEl) {
+    detEl.style.display = '';
+    const dMes = datos.find(d=>d.m===mesDet) || { ings:[], gass:[] };
+
+    const topGas = [...dMes.gass].sort((a,b)=>Number(b.monto)-Number(a.monto)).slice(0,8);
+    const topIng = [...dMes.ings].sort((a,b)=>Number(b.monto)-Number(a.monto)).slice(0,8);
+
+    const topGasEl = document.getElementById('rep-top-gastos');
+    const topIngEl = document.getElementById('rep-top-ingresos');
+
+    if (topGasEl) topGasEl.innerHTML = topGas.length
+      ? topGas.map(g=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border-light);font-size:.85rem">
+          <span>${g.desc||g.fuente||'—'} <span class="badge badge-yellow" style="font-size:.66rem">${g.cat||''}</span></span>
+          <span style="color:var(--red);font-weight:600;white-space:nowrap">${fmt(g.monto)}</span>
+        </div>`).join('')
+      : '<div style="color:var(--muted);font-size:.85rem;padding:12px 0">Sin gastos este mes</div>';
+
+    if (topIngEl) topIngEl.innerHTML = topIng.length
+      ? topIng.map(i=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border-light);font-size:.85rem">
+          <span>${i.fuente||i.desc||'—'} <span class="badge badge-blue" style="font-size:.66rem">${i.cat||''}</span></span>
+          <span style="color:var(--green);font-weight:600;white-space:nowrap">${fmt(i.monto)}</span>
+        </div>`).join('')
+      : '<div style="color:var(--muted);font-size:.85rem;padding:12px 0">Sin ingresos este mes</div>';
+  } else if (detEl) {
+    detEl.style.display = 'none';
+  }
+}
+
+// Gráfico barras — ahora acepta datos calculados para no repetir
+function drawBalanceChart(meses, datos) {
+  const canvas = document.getElementById('chart-balance');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth || 500;
+  canvas.height = 200;
+
+  if (!meses || !datos) {
+    // fallback: build from DB
+    const now2 = new Date();
+    meses = [];
+    for (let i=5;i>=0;i--) { const d2=new Date(now2.getFullYear(),now2.getMonth()-i,1); meses.push(d2.getFullYear()+'-'+String(d2.getMonth()+1).padStart(2,'0')); }
+    datos = meses.map(m=>({ m, totalIng: STATE.db.ingresos.filter(i=>ym(i.fecha)===m).reduce((a,b)=>a+Number(b.monto),0), totalGas: STATE.db.gastos.filter(g=>ym(g.fecha)===m).reduce((a,b)=>a+Number(b.monto),0) }));
+  }
+
+  const ingData  = datos.map(d=>d.totalIng);
+  const gasData  = datos.map(d=>d.totalGas);
+  const labels   = meses.map(m=>{ const [y,mo]=m.split('-'); return new Date(Number(y),Number(mo)-1,1).toLocaleDateString('es-CO',{month:'short'}); });
+  const W=canvas.width, H=canvas.height;
+  const pad={top:20,bottom:36,left:55,right:16};
+  const gW=W-pad.left-pad.right, gH=H-pad.top-pad.bottom;
+  const maxVal=Math.max(...ingData,...gasData,1);
+
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle='rgba(221,227,237,0.8)'; ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){
+    const y=pad.top+(gH/4)*i;
+    ctx.beginPath();ctx.moveTo(pad.left,y);ctx.lineTo(W-pad.right,y);ctx.stroke();
+    ctx.fillStyle='rgba(100,116,139,0.7)';ctx.font='10px Inter,sans-serif';ctx.textAlign='right';
+    ctx.fillText((fmt(maxVal-(maxVal/4)*i)).replace('$',''),pad.left-4,y+4);
+  }
+  const barW=(gW/meses.length)*0.32;
+  meses.forEach((_,i)=>{
+    const x=pad.left+(gW/meses.length)*i+(gW/meses.length)*0.08;
+    const ingH=(ingData[i]/maxVal)*gH;
+    const g1=ctx.createLinearGradient(0,pad.top+gH-ingH,0,pad.top+gH);
+    g1.addColorStop(0,'#059669');g1.addColorStop(1,'rgba(5,150,105,.2)');
+    ctx.fillStyle=g1;ctx.beginPath();ctx.roundRect(x,pad.top+gH-ingH,barW,ingH,3);ctx.fill();
+    const gasH=(gasData[i]/maxVal)*gH;
+    const g2=ctx.createLinearGradient(0,pad.top+gH-gasH,0,pad.top+gH);
+    g2.addColorStop(0,'#dc2626');g2.addColorStop(1,'rgba(220,38,38,.2)');
+    ctx.fillStyle=g2;ctx.beginPath();ctx.roundRect(x+barW+3,pad.top+gH-gasH,barW,gasH,3);ctx.fill();
+    ctx.fillStyle='rgba(100,116,139,0.8)';ctx.font='10px Inter,sans-serif';ctx.textAlign='center';
+    ctx.fillText(labels[i],x+barW,H-10);
+  });
+  ctx.fillStyle='#059669';ctx.fillRect(pad.left,H-14,10,8);
+  ctx.fillStyle='rgba(100,116,139,0.8)';ctx.font='10px sans-serif';ctx.textAlign='left';ctx.fillText('Ingresos',pad.left+13,H-7);
+  ctx.fillStyle='#dc2626';ctx.fillRect(pad.left+80,H-14,10,8);
+  ctx.fillStyle='rgba(100,116,139,0.8)';ctx.fillText('Gastos',pad.left+93,H-7);
+}
+
+function drawCatChart(meses) {
+  const canvas=document.getElementById('chart-cats');
+  if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  canvas.width=canvas.offsetWidth||300;canvas.height=200;
+  const gasAll = meses
+    ? STATE.db.gastos.filter(g=>meses.includes(ym(g.fecha)))
+    : STATE.db.gastos.filter(g=>ym(g.fecha)===currentYM());
+  const catT={};
+  gasAll.forEach(g=>{catT[g.cat]=(catT[g.cat]||0)+Number(g.monto);});
+  drawDonutChart(ctx,canvas,catT,'Sin gastos en el período');
+}
+
+function drawIngCatChart(meses) {
+  const canvas=document.getElementById('chart-ing-cats');
+  if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  canvas.width=canvas.offsetWidth||300;canvas.height=200;
+  const ingAll = meses
+    ? STATE.db.ingresos.filter(i=>meses.includes(ym(i.fecha)))
+    : STATE.db.ingresos.filter(i=>ym(i.fecha)===currentYM());
+  const catT={};
+  ingAll.forEach(i=>{catT[i.cat]=(catT[i.cat]||0)+Number(i.monto);});
+  drawDonutChart(ctx,canvas,catT,'Sin ingresos en el período');
+}
+
+function drawDonutChart(ctx, canvas, catTotals, emptyMsg) {
+  const cats=Object.keys(catTotals);
+  const vals=cats.map(c=>catTotals[c]);
+  const total=vals.reduce((a,b)=>a+b,0);
+  if(!total){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle='rgba(100,116,139,0.6)';ctx.font='12px Inter,sans-serif';ctx.textAlign='center';
+    ctx.fillText(emptyMsg,canvas.width/2,canvas.height/2);return;
+  }
+  const COLORS=['#2563eb','#059669','#dc2626','#d97706','#7c3aed','#0d9488','#ea580c','#ec4899','#06b6d4','#84cc16'];
+  const cx=canvas.width*0.34,cy=canvas.height/2,r=Math.min(cx,cy)-8;
+  let angle=-Math.PI/2;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  vals.forEach((v,i)=>{
+    const sl=(v/total)*Math.PI*2;
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,angle,angle+sl);ctx.closePath();
+    ctx.fillStyle=COLORS[i%COLORS.length];ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.8)';ctx.lineWidth=1.5;ctx.stroke();
+    angle+=sl;
+  });
+  ctx.beginPath();ctx.arc(cx,cy,r*.52,0,Math.PI*2);
+  ctx.fillStyle='#fff';ctx.fill();
+  ctx.fillStyle='rgba(26,35,50,.8)';ctx.font='bold 10px Inter,sans-serif';ctx.textAlign='center';
+  ctx.fillText(fmt(total),cx,cy+4);
+  const legX=cx*2+6;
+  cats.slice(0,7).forEach((c,i)=>{
+    const y2=14+i*24;
+    ctx.fillStyle=COLORS[i%COLORS.length];ctx.beginPath();ctx.arc(legX+5,y2+5,4,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(26,35,50,.8)';ctx.font='9px Inter,sans-serif';ctx.textAlign='left';
+    ctx.fillText(c.slice(0,12),legX+12,y2+9);
+    const pct2=vals[i];
+    ctx.fillStyle='rgba(100,116,139,.8)';ctx.fillText(Math.round(pct2/total*100)+'%',legX+12,y2+20);
+  });
+}
+
 // ── Forzar sincronización con Firebase ──
 async function forceSyncFirebase() {
   if (!window.__FB || !window.__FB.ready) {
@@ -4834,9 +5156,8 @@ let resizeTimer;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
-    if (STATE.currentPage === 'dashboard') {
-      drawBalanceChart();
-      drawCatChart();
+    if (STATE.currentPage === 'reportes') {
+      renderReportes();
     }
   }, 200);
 });
