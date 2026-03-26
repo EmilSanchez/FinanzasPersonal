@@ -4239,12 +4239,20 @@ function openModalNuevaInversion(id=null) {
                 <option value="cerrada" ${inv?.estado==='cerrada'?'selected':''}>Cerrada</option>
               </select>
             </div>
-            <div class="form-group"><label>💳 Dinero sale de</label>
-              <select class="form-control" id="fi-billetera">
-                <option value="">Sin asignar</option>
-                ${(STATE.db.billeteras||[]).map(b=>`<option value="${b.id}" ${(inv?.billeteraId||''===b.id)?'selected':''}>${(BILL_ICONOS[b.tipo]||'💳')+' '+b.nombre}</option>`).join('')}
+            <div class="form-group"><label>💳 Dinero sale de *</label>
+              <select class="form-control" id="fi-billetera" onchange="calcPreviewInv()">
+                <option value="">— Selecciona billetera (obligatorio) —</option>
+                ${(STATE.db.billeteras||[]).map(b=>{
+                  const saldo = saldoBilletera(b.id);
+                  const invTotalPreview = 0; // se validará al guardar
+                  return `<option value="${b.id}"
+                    ${(inv?.billeteraId===b.id)?'selected':''}
+                    style="color:${saldo>0?'inherit':'var(--red)'}"
+                  >${(BILL_ICONOS[b.tipo]||'💳')+' '+b.nombre+' — '+fmt(saldo)}</option>`;
+                }).join('')}
               </select>
               <small style="color:var(--muted);font-size:.72rem">El costo total se descontará de esta billetera</small>
+              <div id="fi-bill-aviso" style="display:none;margin-top:5px;font-size:.78rem;color:var(--red);font-weight:600;"></div>
             </div>
             <div class="form-group"><label>📦 Unidades en bodega (recibidas)</label>
               <input type="number" class="form-control" id="fi-bodega" value="${inv?.unidadesEnBodega||''}" placeholder="0">
@@ -4282,6 +4290,23 @@ function calcPreviewInv() {
   const unit = cant>0?inv/cant:0;
   const e1=document.getElementById('prev-inv-total'); if(e1) e1.textContent=fmtCOP(inv);
   const e2=document.getElementById('prev-inv-unit');  if(e2) e2.textContent=fmtCOP(unit);
+
+  // Actualizar aviso de saldo en tiempo real
+  const billSel = document.getElementById('fi-billetera');
+  const aviso   = document.getElementById('fi-bill-aviso');
+  if (billSel && aviso && billSel.value && inv > 0) {
+    const saldo = saldoBilletera(billSel.value);
+    if (saldo < inv) {
+      aviso.style.display = '';
+      aviso.textContent = `⛔ Saldo insuficiente. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(inv)}`;
+    } else {
+      aviso.style.display = '';
+      aviso.textContent = `✅ Saldo suficiente. Quedarán ${fmt(saldo - inv)} tras la compra`;
+      aviso.style.color = 'var(--green)';
+    }
+  } else if (aviso) {
+    aviso.style.display = 'none';
+  }
 }
 
 async function guardarInversion(id=null) {
@@ -4299,6 +4324,28 @@ async function guardarInversion(id=null) {
   const envioVal    = parseFloat(document.getElementById('fi-envio')?.value)||0;
   const otrosVal    = parseFloat(document.getElementById('fi-otros')?.value)||0;
   const invTotal    = (precioUSD * tasa * unidades) + envioVal + otrosVal;
+
+  // Solo validar billetera obligatoria al CREAR (al editar no se descuenta dinero)
+  if (!id || id === '') {
+    if (!billeteraId) {
+      const sel = document.getElementById('fi-billetera');
+      if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(()=>sel.style.border='',2000); }
+      const aviso = document.getElementById('fi-bill-aviso');
+      if (aviso) { aviso.style.display=''; aviso.textContent='⚠️ Debes seleccionar de qué billetera sale el dinero'; }
+      return toast('⚠️ Debes seleccionar de qué billetera sale el dinero', 'error');
+    }
+    if (invTotal > 0) {
+      const saldo = saldoBilletera(billeteraId);
+      if (saldo < invTotal) {
+        const sel = document.getElementById('fi-billetera');
+        if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(()=>sel.style.border='',2000); }
+        const aviso = document.getElementById('fi-bill-aviso');
+        const bill = STATE.db.billeteras?.find(b=>b.id===billeteraId);
+        if (aviso) { aviso.style.display=''; aviso.textContent=`⛔ Saldo insuficiente en ${bill?.nombre||'billetera'}. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(invTotal)}`; }
+        return toast(`⛔ Saldo insuficiente. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(invTotal)}`, 'error');
+      }
+    }
+  }
 
   const datos = {
     nombre, sku: document.getElementById('fi-sku')?.value.trim(),
