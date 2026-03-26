@@ -4003,10 +4003,16 @@ function deleteVentaInv(id)   { STATE.db.ventasInv=(STATE.db.ventasInv||[]).filt
 
 // ─── Calculations ─────────────────────────────────────────────
 function calcInversion(inv) {
-  // Capital total COP: campo directo + conversión USD
-  const capitalCOP = Number(inv.capitalCOP||0);
-  const usdPart    = Number(inv.capitalUSD||0) * Number(inv.tasa||0);
-  return capitalCOP + usdPart + Number(inv.envio||0) + Number(inv.otrosCostos||0);
+  // Capital del pedido inicial: precio USD × unidades iniciales × tasa
+  const capitalBase = Number(inv.precioUSD||0) * Number(inv.unidadesIniciales||inv.unidades||0) * Number(inv.tasa||0);
+  // Costos iniciales fijos (guardados al crear la inversión)
+  const envioBase  = Number(inv.envioInicial !== undefined ? inv.envioInicial : inv.envio||0);
+  const otrosBase  = Number(inv.otrosCostosInicial !== undefined ? inv.otrosCostosInicial : inv.otrosCostos||0);
+  // Capital de cada renovación de stock
+  const capitalRenovaciones = (inv.renovaciones||[]).reduce((s,r) => s + Number(r.inversionNueva||0), 0);
+  // Gastos adicionales de la inversión
+  const totalGastosAdicionales = (inv.gastosAdicionales||[]).reduce((s,g) => s + Number(g.monto||0), 0);
+  return capitalBase + envioBase + otrosBase + capitalRenovaciones + totalGastosAdicionales;
 }
 
 function enriquecerInversion(inv) {
@@ -4358,9 +4364,12 @@ async function guardarInversion(id=null) {
     categoria: document.getElementById('fi-cat')?.value.trim(),
     precioUSD, capitalUSD: precioUSD * unidades, tasa, capitalCOP: 0,
     unidades,
+    unidadesIniciales: unidades,
     unidadesEnBodega: parseInt(document.getElementById('fi-bodega')?.value)||unidades,
     envio: envioVal,
+    envioInicial: envioVal,
     otrosCostos: otrosVal,
+    otrosCostosInicial: otrosVal,
     precioSugerido: parseFloat(document.getElementById('fi-precio-sugerido')?.value)||0,
     fecha, estado: document.getElementById('fi-estado')?.value||'activa',
     notas: document.getElementById('fi-notas')?.value.trim(),
@@ -4425,10 +4434,10 @@ function openModalVentaInv(invId) {
             <input type="date" class="form-control" id="fv-fecha" value="${ymd}">
           </div>
           <div class="form-group"><label>Cantidad *</label>
-            <input type="number" class="form-control" id="fv-cant" min="1" max="${p.stockActual}" placeholder="Ej: 2">
+            <input type="number" class="form-control" id="fv-cant" min="1" max="${p.stockActual}" placeholder="Ej: 2" oninput="onFvBilleteraChange()">
           </div>
           <div class="form-group" style="grid-column:1/-1"><label>Precio unitario de venta (COP) *</label>
-            <input type="number" class="form-control" id="fv-precio" min="1" placeholder="${inv.precioSugerido||'Ej: 180000'}">
+            <input type="number" class="form-control" id="fv-precio" min="1" placeholder="${inv.precioSugerido||'Ej: 180000'}" oninput="onFvBilleteraChange()">
           </div>
           <div class="form-group"><label>Cliente / Referencia</label>
             <input type="text" class="form-control" id="fv-cliente" placeholder="Nombre opcional">
@@ -4437,10 +4446,14 @@ function openModalVentaInv(invId) {
             <input type="text" class="form-control" id="fv-obs" placeholder="Notas opcionales">
           </div>
           <div class="form-group" style="grid-column:1/-1"><label>💳 Dinero ingresa a *</label>
-            <select class="form-control" id="fv-billetera">
+            <select class="form-control" id="fv-billetera" onchange="onFvBilleteraChange()">
               <option value="">— Selecciona billetera (obligatorio) —</option>
-              ${(STATE.db.billeteras||[]).map(b=>`<option value="${b.id}">${(BILL_ICONOS[b.tipo]||'💳')+' '+b.nombre}</option>`).join('')}
+              ${(STATE.db.billeteras||[]).map(b=>{
+                const s=saldoBilletera(b.id);
+                return `<option value="${b.id}">${(BILL_ICONOS[b.tipo]||'💳')+' '+b.nombre+' — '+fmt(s)}</option>`;
+              }).join('')}
             </select>
+            <div id="fv-bill-preview" style="display:none;margin-top:6px;padding:8px 12px;border-radius:var(--radius-sm);font-size:.83rem;font-weight:600;"></div>
             <small style="color:var(--muted);font-size:.72rem">El dinero de la venta se sumará a esta billetera</small>
           </div>
         </div>
@@ -4451,6 +4464,28 @@ function openModalVentaInv(invId) {
       </div>
     </div>`;
   overlay.style.display='flex';
+}
+
+function onFvBilleteraChange() {
+  const sel     = document.getElementById('fv-billetera');
+  const preview = document.getElementById('fv-bill-preview');
+  if (!preview || !sel) return;
+  const precio = parseFloat(document.getElementById('fv-precio')?.value)||0;
+  const cant   = parseInt(document.getElementById('fv-cant')?.value)||0;
+  if (!sel.value) { preview.style.display='none'; return; }
+  const saldo       = saldoBilletera(sel.value);
+  const totalVenta  = precio * cant;
+  const saldoFuturo = saldo + totalVenta;
+  preview.style.display = '';
+  if (totalVenta > 0) {
+    preview.style.background = 'var(--green-light)';
+    preview.style.color = 'var(--green)';
+    preview.innerHTML = `✅ Saldo actual: <strong>${fmt(saldo)}</strong> → tras venta: <strong>${fmt(saldoFuturo)}</strong> <span style="color:var(--muted);font-weight:400">(+${fmt(totalVenta)})</span>`;
+  } else {
+    preview.style.background = 'var(--bg2)';
+    preview.style.color = 'var(--muted)';
+    preview.innerHTML = `Saldo actual: <strong>${fmt(saldo)}</strong> — ingresa cantidad y precio para ver el total`;
+  }
 }
 
 async function guardarVentaInv(invId, stockDisp) {
@@ -4852,12 +4887,10 @@ async function confirmarRenovarStock(invId, stockActual) {
     return toast(`⛔ Saldo insuficiente en ${bill?.nombre||'billetera'}. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(inversionNueva)}`, 'error');
   }
 
-  // Actualizar inversión: sumar unidades y actualizar costos
+  // Actualizar inversión: sumar unidades (costos se leen de renovaciones[] en calcInversion)
   inv.unidades    = (inv.unidades || 0) + nuevas;
   inv.precioUSD   = precioUSD;
   inv.tasa        = tasa;
-  inv.envio       = (inv.envio || 0) + envio;
-  inv.otrosCostos = (inv.otrosCostos || 0) + otros;
   if (precioV > 0) inv.precioSugerido = precioV;
 
   // Guardar en historial de renovaciones
