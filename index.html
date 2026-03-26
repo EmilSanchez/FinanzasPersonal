@@ -4024,7 +4024,9 @@ function enriquecerInversion(inv) {
   if (stockActual === 0) estadoStock = 'agotado';
   else if (cantidad > 0 && stockActual <= Math.ceil(cantidad*0.2)) estadoStock = 'bajo';
   return { ...inv, inversionTotal, costoUnitario, unidadesVendidas,
-    totalRecuperado, stockActual, ganancia, recuperacionPct, estadoStock, ventas };
+    totalRecuperado, stockActual, ganancia, recuperacionPct, estadoStock, ventas,
+    gastosAdicionales: inv.gastosAdicionales || [],
+    renovaciones: inv.renovaciones || [] };
 }
 
 function getResumenInversiones() {
@@ -4525,6 +4527,7 @@ function renderDetalleInv(invId) {
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-primary" onclick="openModalVentaInv('${p.id}')">+ Registrar venta</button>
         <button class="btn btn-success" onclick="openModalRenovarStock('${p.id}')">📦 Renovar stock</button>
+        <button class="btn btn-danger btn-sm" onclick="openModalGastoAdicionalInv('${p.id}')">💸 Gasto adicional</button>
         <button class="btn btn-ghost" onclick="openModalNuevaInversion('${p.id}')">✏️ Editar</button>
       </div>
     </div>
@@ -4616,6 +4619,36 @@ function renderDetalleInv(invId) {
 
     <div class="section">
       <div class="section-header">
+        <span class="section-title">💸 Gastos adicionales de la inversión</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:.82rem;color:var(--muted)">${(p.gastosAdicionales||[]).length} registros · Total: <strong style="color:var(--red)">${fmtCOP((p.gastosAdicionales||[]).reduce((a,g)=>a+Number(g.monto),0))}</strong></span>
+          <button class="btn btn-danger btn-sm" onclick="openModalGastoAdicionalInv('${p.id}')">+ Agregar</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Fecha</th><th>Concepto</th><th>Monto</th><th>Billetera</th><th>Notas</th><th></th></tr></thead>
+          <tbody>
+            ${!(p.gastosAdicionales||[]).length
+              ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;font-style:italic">Sin gastos adicionales registrados</td></tr>'
+              : [...(p.gastosAdicionales||[])].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).map(g => {
+                  const bill = STATE.db.billeteras?.find(b=>b.id===g.billeteraId);
+                  return `<tr>
+                    <td style="white-space:nowrap">${g.fecha||'—'}</td>
+                    <td style="font-weight:600">${g.desc}</td>
+                    <td style="color:var(--red);font-weight:600">${fmtCOP(g.monto)}</td>
+                    <td style="color:var(--muted);font-size:.82rem">${bill?(BILL_ICONOS[bill.tipo]||'💳')+' '+bill.nombre:'—'}</td>
+                    <td style="color:var(--muted);font-size:.82rem">${g.notas||'—'}</td>
+                    <td><button class="btn btn-danger btn-sm" onclick="eliminarGastoAdicionalInv('${g.id}','${p.id}')">🗑️</button></td>
+                  </tr>`;
+                }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
         <span class="section-title">📋 Historial de ventas</span>
         <span style="font-size:.82rem;color:var(--muted)">${p.ventas.length} registros</span>
       </div>
@@ -4686,6 +4719,13 @@ function openModalRenovarStock(invId) {
   const p = enriquecerInversion(inv);
   const ymd = new Date().toISOString().slice(0,10);
 
+  const billeterasOpts = (STATE.db.billeteras||[]).map(b => {
+    const s = saldoBilletera(b.id);
+    return `<option value="${b.id}" style="color:${s>0?'inherit':'var(--red)'}">
+      ${BILL_ICONOS[b.tipo]||'💳'} ${b.nombre} — ${fmt(s)}
+    </option>`;
+  }).join('');
+
   const overlay = document.getElementById('modal-inv-form-overlay');
   overlay.innerHTML = `
     <div class="modal" style="max-width:480px;width:100%;">
@@ -4716,7 +4756,15 @@ function openModalRenovarStock(invId) {
           <div class="form-group"><label>Nuevo precio sugerido venta</label>
             <input type="number" class="form-control" id="rs-precio-venta" value="${inv.precioSugerido||''}" placeholder="0">
           </div>
-          <div class="form-group" style="grid-column:1/-1"><label>Fecha</label>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>💳 Dinero sale de *</label>
+            <select class="form-control" id="rs-billetera" onchange="calcRenovarPreview()">
+              <option value="">— Selecciona billetera (obligatorio) —</option>
+              ${billeterasOpts}
+            </select>
+            <div id="rs-bill-aviso" style="display:none;margin-top:5px;font-size:.78rem;font-weight:600;"></div>
+          </div>
+          <div class="form-group" style="grid-column:1/-1"><label>Fecha *</label>
             <input type="date" class="form-control" id="rs-fecha" value="${ymd}">
           </div>
           <div class="form-group" style="grid-column:1/-1"><label>Notas</label>
@@ -4748,29 +4796,61 @@ function calcRenovarPreview() {
   const unit   = nuevas>0?inv/nuevas:0;
   const e1=document.getElementById('rs-inv-total');  if(e1) e1.textContent=fmtCOP(inv);
   const e2=document.getElementById('rs-inv-unit');   if(e2) e2.textContent=fmtCOP(unit);
-  // Stock result needs stockActual — passed via closure not available here, just show nuevas
   const e3=document.getElementById('rs-stock-result'); if(e3) e3.textContent=nuevas+' uds nuevas';
+
+  // Aviso de saldo en tiempo real
+  const billSel = document.getElementById('rs-billetera');
+  const aviso   = document.getElementById('rs-bill-aviso');
+  if (billSel && aviso && billSel.value && inv > 0) {
+    const saldo = saldoBilletera(billSel.value);
+    if (saldo < inv) {
+      aviso.style.display = '';
+      aviso.style.color = 'var(--red)';
+      aviso.textContent = `⛔ Saldo insuficiente. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(inv)}`;
+    } else {
+      aviso.style.display = '';
+      aviso.style.color = 'var(--green)';
+      aviso.textContent = `✅ Saldo suficiente. Quedarán ${fmt(saldo - inv)} tras la compra`;
+    }
+  } else if (aviso) {
+    aviso.style.display = 'none';
+  }
 }
 
 async function confirmarRenovarStock(invId, stockActual) {
-  const nuevas    = parseInt(document.getElementById('rs-unidades')?.value)||0;
-  const precioUSD = parseFloat(document.getElementById('rs-precio-usd')?.value)||0;
-  const tasa      = parseFloat(document.getElementById('rs-tasa')?.value)||0;
-  const envio     = parseFloat(document.getElementById('rs-envio')?.value)||0;
-  const otros     = parseFloat(document.getElementById('rs-otros')?.value)||0;
-  const precioV   = parseFloat(document.getElementById('rs-precio-venta')?.value)||0;
-  const fecha     = document.getElementById('rs-fecha')?.value;
-  const notas     = document.getElementById('rs-notas')?.value.trim();
+  const nuevas      = parseInt(document.getElementById('rs-unidades')?.value)||0;
+  const precioUSD   = parseFloat(document.getElementById('rs-precio-usd')?.value)||0;
+  const tasa        = parseFloat(document.getElementById('rs-tasa')?.value)||0;
+  const envio       = parseFloat(document.getElementById('rs-envio')?.value)||0;
+  const otros       = parseFloat(document.getElementById('rs-otros')?.value)||0;
+  const precioV     = parseFloat(document.getElementById('rs-precio-venta')?.value)||0;
+  const fecha       = document.getElementById('rs-fecha')?.value;
+  const notas       = document.getElementById('rs-notas')?.value.trim();
+  const billeteraId = document.getElementById('rs-billetera')?.value || '';
 
   if (!nuevas)    return toast('Ingresa la cantidad de unidades', 'error');
   if (!precioUSD) return toast('Ingresa el precio de compra en USD', 'error');
   if (!fecha)     return toast('La fecha es obligatoria', 'error');
+
+  // Billetera obligatoria
+  if (!billeteraId) {
+    const sel = document.getElementById('rs-billetera');
+    if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(()=>sel.style.border='',2000); }
+    return toast('⚠️ Debes seleccionar de qué billetera sale el dinero', 'error');
+  }
 
   const idx = STATE.db.inversiones.findIndex(i=>i.id===invId);
   if (idx === -1) return toast('Inversión no encontrada', 'error');
 
   const inv = STATE.db.inversiones[idx];
   const inversionNueva = (precioUSD * tasa * nuevas) + envio + otros;
+
+  // Validar saldo suficiente
+  const saldo = saldoBilletera(billeteraId);
+  if (saldo < inversionNueva) {
+    const bill = STATE.db.billeteras?.find(b=>b.id===billeteraId);
+    return toast(`⛔ Saldo insuficiente en ${bill?.nombre||'billetera'}. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(inversionNueva)}`, 'error');
+  }
 
   // Actualizar inversión: sumar unidades y actualizar costos
   inv.unidades    = (inv.unidades || 0) + nuevas;
@@ -4785,19 +4865,170 @@ async function confirmarRenovarStock(invId, stockActual) {
   inv.renovaciones.push({
     id: uid(), fecha, nuevasUnidades: nuevas,
     precioUSD, tasa, envio, otros, inversionNueva,
-    notas: notas || ''
+    billeteraId, notas: notas || ''
+  });
+
+  // Descontar de billetera
+  const bill = STATE.db.billeteras?.find(b=>b.id===billeteraId);
+  STATE.db.gastos.push({
+    id: uid(), fecha,
+    hora: horaActual(),
+    monto: Math.round(inversionNueva),
+    desc: `Renovación stock: ${inv.nombre}${notas?' — '+notas:''}`,
+    cat: 'Inversión',
+    billeteraId,
+    autoGenerado: true
   });
 
   closeInvModal();
   renderAll();
-  await saveDb(['inversiones']);
-  toast(`Stock renovado: +${nuevas} unidades · ${fmtCOP(inversionNueva)} invertido ✅`, 'success');
+  await saveDb(['inversiones','gastos']);
+  const bn = bill ? ` (de ${bill.nombre})` : '';
+  toast(`Stock renovado: +${nuevas} uds · ${fmtCOP(inversionNueva)} descontado${bn} ✅`, 'success');
 }
 
 // ─── These old single-file functions kept for backward compat ──
 function saveInversion() { openModalNuevaInversion(); }
 function openActualizarInversion() {}
 function actualizarInversion() {}
+
+// ─── Gasto adicional de inversión ────────────────────────────
+function openModalGastoAdicionalInv(invId) {
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  if (!inv) return;
+  const ymd = new Date().toISOString().slice(0,10);
+
+  const billeterasOpts = (STATE.db.billeteras||[]).map(b => {
+    const s = saldoBilletera(b.id);
+    return `<option value="${b.id}" style="color:${s>0?'inherit':'var(--red)'}">
+      ${BILL_ICONOS[b.tipo]||'💳'} ${b.nombre} — ${fmt(s)}
+    </option>`;
+  }).join('');
+
+  const overlay = document.getElementById('modal-inv-form-overlay');
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:440px;width:100%;">
+      <div class="modal-title">💸 Gasto adicional — ${inv.nombre}
+        <button onclick="closeInvModal()" style="float:right;background:none;border:none;font-size:1rem;color:var(--muted);cursor:pointer;">✕</button>
+      </div>
+      <div class="modal-body-wrap">
+        <p style="color:var(--muted);font-size:.85rem;margin-bottom:16px;">
+          Registra cualquier gasto relacionado con esta inversión: publicidad, empaque, envío local, comisiones, etc.
+        </p>
+        <div class="form-grid">
+          <div class="form-group"><label>Fecha *</label>
+            <input type="date" class="form-control" id="ga-fecha" value="${ymd}">
+          </div>
+          <div class="form-group"><label>Monto (COP) *</label>
+            <input type="number" class="form-control" id="ga-monto" placeholder="0" min="1" oninput="calcGastoAdicPreview()">
+          </div>
+          <div class="form-group" style="grid-column:1/-1"><label>Concepto / Detalle *</label>
+            <input type="text" class="form-control" id="ga-desc" placeholder="Ej: Publicidad Meta, empaque, envío local...">
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>💳 Dinero sale de *</label>
+            <select class="form-control" id="ga-billetera" onchange="calcGastoAdicPreview()">
+              <option value="">— Selecciona billetera (obligatorio) —</option>
+              ${billeterasOpts}
+            </select>
+            <div id="ga-bill-aviso" style="display:none;margin-top:5px;font-size:.78rem;font-weight:600;"></div>
+          </div>
+          <div class="form-group" style="grid-column:1/-1"><label>Notas adicionales</label>
+            <input type="text" class="form-control" id="ga-notas" placeholder="Observaciones opcionales...">
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeInvModal()">Cancelar</button>
+        <button class="btn btn-danger" onclick="confirmarGastoAdicionalInv('${invId}')">💸 Registrar gasto</button>
+      </div>
+    </div>`;
+  overlay.style.display = 'flex';
+}
+
+function calcGastoAdicPreview() {
+  const monto   = parseFloat(document.getElementById('ga-monto')?.value)||0;
+  const billSel = document.getElementById('ga-billetera');
+  const aviso   = document.getElementById('ga-bill-aviso');
+  if (!billSel || !aviso) return;
+  if (billSel.value && monto > 0) {
+    const saldo = saldoBilletera(billSel.value);
+    if (saldo < monto) {
+      aviso.style.display = '';
+      aviso.style.color   = 'var(--red)';
+      aviso.textContent   = `⛔ Saldo insuficiente. Disponible: ${fmt(saldo)} — Necesario: ${fmt(monto)}`;
+    } else {
+      aviso.style.display = '';
+      aviso.style.color   = 'var(--green)';
+      aviso.textContent   = `✅ Saldo suficiente. Quedarán ${fmt(saldo - monto)} tras el gasto`;
+    }
+  } else {
+    aviso.style.display = 'none';
+  }
+}
+
+async function confirmarGastoAdicionalInv(invId) {
+  const fecha       = document.getElementById('ga-fecha')?.value;
+  const monto       = parseFloat(document.getElementById('ga-monto')?.value)||0;
+  const desc        = document.getElementById('ga-desc')?.value.trim();
+  const billeteraId = document.getElementById('ga-billetera')?.value || '';
+  const notas       = document.getElementById('ga-notas')?.value.trim();
+
+  if (!fecha)  return toast('La fecha es obligatoria', 'error');
+  if (!monto)  return toast('El monto debe ser mayor a 0', 'error');
+  if (!desc)   return toast('El concepto es obligatorio', 'error');
+  if (!billeteraId) {
+    const sel = document.getElementById('ga-billetera');
+    if (sel) { sel.style.border='2px solid var(--red)'; setTimeout(()=>sel.style.border='',2000); }
+    return toast('⚠️ Debes seleccionar de qué billetera sale el dinero', 'error');
+  }
+
+  const saldo = saldoBilletera(billeteraId);
+  if (saldo < monto) {
+    const bill = STATE.db.billeteras?.find(b=>b.id===billeteraId);
+    return toast(`⛔ Saldo insuficiente en ${bill?.nombre||'billetera'}. Disponible: ${fmt(saldo)}`, 'error');
+  }
+
+  const idx = STATE.db.inversiones.findIndex(i=>i.id===invId);
+  if (idx === -1) return toast('Inversión no encontrada', 'error');
+  const inv = STATE.db.inversiones[idx];
+
+  // Guardar en historial de gastos adicionales de la inversión
+  if (!inv.gastosAdicionales) inv.gastosAdicionales = [];
+  const gastoId = uid();
+  inv.gastosAdicionales.push({ id: gastoId, fecha, monto, desc, billeteraId, notas: notas||'', hora: horaActual() });
+
+  // Registrar como gasto real (descuenta de billetera)
+  const bill = STATE.db.billeteras?.find(b=>b.id===billeteraId);
+  STATE.db.gastos.push({
+    id: uid(), fecha,
+    hora: horaActual(),
+    monto: Math.round(monto),
+    desc: `Gasto inv. [${inv.nombre}]: ${desc}`,
+    cat: 'Inversión',
+    billeteraId,
+    autoGenerado: true,
+    invGastoId: gastoId
+  });
+
+  closeInvModal();
+  renderDetalleInv(invId);
+  await saveDb(['inversiones','gastos']);
+  const bn = bill ? ` (de ${bill.nombre})` : '';
+  toast(`Gasto registrado${bn}: ${fmt(monto)} ✅`, 'success');
+}
+
+async function eliminarGastoAdicionalInv(gastoId, invId) {
+  if (!confirm('¿Eliminar este gasto adicional?')) return;
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  if (!inv || !inv.gastosAdicionales) return;
+  inv.gastosAdicionales = inv.gastosAdicionales.filter(g=>g.id!==gastoId);
+  // También eliminar el gasto real vinculado
+  STATE.db.gastos = STATE.db.gastos.filter(g=>g.invGastoId!==gastoId);
+  renderDetalleInv(invId);
+  await saveDb(['inversiones','gastos']);
+  toast('Gasto eliminado', 'info');
+}
 
 /* ============================================================
    EXPORT
