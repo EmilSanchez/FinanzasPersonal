@@ -1379,8 +1379,15 @@ canvas { max-width: 100%; display: block; }
         <input type="hidden" id="gas-edit-id" value="">
       </div>
 
-      <!-- Análisis por categoría -->
-      <div class="section" id="gas-analysis"></div>
+
+      <!-- Análisis por categoría (ocultable) -->
+      <div class="section" id="gas-analysis-wrapper" style="margin-bottom:20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:4px 0;" onclick="toggleAnalisisCat()">
+          <span class="section-title">📊 Análisis por categoría</span>
+          <button class="btn btn-ghost btn-sm" id="btn-toggle-cat">▼ Ver análisis</button>
+        </div>
+        <div id="gas-analysis" style="display:none;margin-top:14px;"></div>
+      </div>
 
       <!-- Lista -->
       <div class="section">
@@ -1539,6 +1546,13 @@ canvas { max-width: 100%; display: block; }
           <div class="form-group">
             <label>Interés % (si aplica)</label>
             <input type="number" class="form-control" id="pr-interes" placeholder="0" step="0.1">
+          </div>
+          <div class="form-group">
+          <label>💳 Sale de billetera *</label>
+          <select class="form-control" id="pr-billetera">
+            <option value="">— Selecciona billetera —</option>
+          </select>
+          <small style="color:var(--muted);font-size:.72rem">El monto se descontará de esta billetera</small>
           </div>
           <div class="form-group" style="grid-column:1/-1">
             <label>Descripción / Motivo</label>
@@ -3102,6 +3116,14 @@ function clearGasFilters() {
   renderGastos();
 }
 
+function toggleAnalisisCat() {
+  const panel = document.getElementById('gas-analysis');
+  const btn   = document.getElementById('btn-toggle-cat');
+  const visible = panel.style.display !== 'none';
+  panel.style.display = visible ? 'none' : '';
+  btn.textContent = visible ? '▼ Ver análisis' : '▲ Ocultar';
+}
+
 function renderGastos() {
   const filterM  = document.getElementById('g-filter-month').value;
   const filterD  = document.getElementById('g-filter-day').value;
@@ -3143,8 +3165,7 @@ function renderGastos() {
   const analysisEl = document.getElementById('gas-analysis');
   if (sorted.length) {
     analysisEl.innerHTML = `
-      <div class="section-header">
-        <span class="section-title">📊 Análisis por categoría</span>
+      <div style="margin-bottom:8px;">
         <span class="badge badge-red">Mayor gasto: ${sorted[0][0]}</span>
       </div>
       ${sorted.map(([cat, val], i) => `
@@ -3478,31 +3499,49 @@ function renderPass(search = '') {
    PRÉSTAMOS A TERCEROS
    ============================================================ */
 async function savePrestamo() {
-  const nombre   = document.getElementById('pr-nombre').value.trim();
-  const contacto = document.getElementById('pr-contacto').value.trim();
-  const monto    = Number(document.getElementById('pr-monto').value);
-  const fecha    = document.getElementById('pr-fecha').value;
-  const vence    = document.getElementById('pr-vence').value;
-  const interes  = Number(document.getElementById('pr-interes').value) || 0;
-  const desc     = document.getElementById('pr-desc').value.trim();
+  const nombre      = document.getElementById('pr-nombre').value.trim();
+  const contacto    = document.getElementById('pr-contacto').value.trim();
+  const monto       = Number(document.getElementById('pr-monto').value);
+  const fecha       = document.getElementById('pr-fecha').value;
+  const vence       = document.getElementById('pr-vence').value;
+  const interes     = Number(document.getElementById('pr-interes').value) || 0;
+  const desc        = document.getElementById('pr-desc').value.trim();
+  const billeteraId = document.getElementById('pr-billetera')?.value || '';
 
-  if (!nombre) return toast('El nombre del deudor es obligatorio', 'error');
-  if (!monto)  return toast('El monto es obligatorio', 'error');
-  if (!fecha)  return toast('La fecha es obligatoria', 'error');
+  if (!nombre)      return toast('El nombre del deudor es obligatorio', 'error');
+  if (!monto)       return toast('El monto es obligatorio', 'error');
+  if (!fecha)       return toast('La fecha es obligatoria', 'error');
+  if (!billeteraId) return toast('⚠️ Debes seleccionar de qué billetera sale el dinero', 'error');
 
-  // Si tiene interés, calcular monto total con interés
+  // Verificar saldo suficiente
+  const saldo = saldoBilletera(billeteraId);
+  if (saldo < monto) {
+    const bill = STATE.db.billeteras.find(b => b.id === billeteraId);
+    return toast(`⛔ Saldo insuficiente en ${bill?.nombre || 'la billetera'} (${fmt(saldo)})`, 'error');
+  }
+
   const totalConInteres = interes > 0 ? monto * (1 + interes / 100) : monto;
+  const billNombre = STATE.db.billeteras.find(b => b.id === billeteraId)?.nombre || '';
+
+  // Registrar como gasto para que se descuente de la billetera
+  STATE.db.gastos.push({
+    id: uid(), fecha, hora: horaActual(), monto,
+    desc: 'Préstamo a: ' + nombre + (desc ? ' — ' + desc : ''),
+    cat: 'Préstamo otorgado',
+    billeteraId,
+    autoGenerado: true
+  });
 
   STATE.db.prestamos.push({
     id: uid(), nombre, contacto, monto, totalConInteres, fecha, vence, interes, desc,
-    cobrado: 0, cobros: []
+    cobrado: 0, cobros: [], billeteraOrigen: billeteraId
   });
+
   clearForm(['pr-nombre','pr-contacto','pr-monto','pr-vence','pr-interes','pr-desc']);
   renderAll();
-  await saveDb(['prestamos']);
-  toast('Préstamo registrado ✅', 'success');
+  await saveDb(['prestamos', 'gastos']);
+  toast(`Préstamo registrado ✅ — descontado de ${billNombre}`, 'success');
 }
-
 function openCobro(idx) {
   const p = STATE.db.prestamos[idx];
   if (!p) return;
@@ -3687,6 +3726,7 @@ function renderPrestamos() {
         </div>` : ''}
     </div>`;
   }).join('');
+  populateBilleteraSelects();
 }
 
 /* ============================================================
@@ -5405,7 +5445,7 @@ function renderBilleteras() {
 
 // Poblar todos los selects de billetera en los formularios
 function populateBilleteraSelects() {
-  const ids = ['i-billetera','g-billetera','m-cobro-billetera','m-abonar-billetera'];
+  const ids = ['i-billetera','g-billetera','m-cobro-billetera','m-abonar-billetera', 'pr-billetera'];
   const list = getBilleteras();
   ids.forEach(id => {
     const sel = document.getElementById(id);
