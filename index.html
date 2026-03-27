@@ -2833,7 +2833,7 @@ function renderDashboard() {
     }, 0);
 
   // Balance total = líquido mensual + lo que te deben + lo que tienes invertido (como activo)
-  const balance = totalIng - totalGas + totalPrestPendiente + totalInvCapital;
+  const balance = totalIng - totalGas + totalPrestPendiente;
 
   document.getElementById('d-ing').textContent = fmt(totalIng);
   document.getElementById('d-gas').textContent = fmt(totalGas);
@@ -4043,15 +4043,14 @@ function deleteVentaInv(id)   { STATE.db.ventasInv=(STATE.db.ventasInv||[]).filt
 
 // ─── Calculations ─────────────────────────────────────────────
 function calcInversion(inv) {
-  // Capital del pedido inicial: precio USD × unidades iniciales × tasa
-  const capitalBase = Number(inv.precioUSD||0) * Number(inv.unidadesIniciales||inv.unidades||0) * Number(inv.tasa||0);
-  // Costos iniciales fijos (guardados al crear la inversión)
-  const envioBase  = Number(inv.envioInicial !== undefined ? inv.envioInicial : inv.envio||0);
-  const otrosBase  = Number(inv.otrosCostosInicial !== undefined ? inv.otrosCostosInicial : inv.otrosCostos||0);
-  // Capital de cada renovación de stock
-  const capitalRenovaciones = (inv.renovaciones||[]).reduce((s,r) => s + Number(r.inversionNueva||0), 0);
-  // Gastos adicionales de la inversión
-  const totalGastosAdicionales = (inv.gastosAdicionales||[]).reduce((s,g) => s + Number(g.monto||0), 0);
+  // Capital del pedido INICIAL únicamente (usando unidadesIniciales, no inv.unidades)
+  const unidadesIniciales = Number(inv.unidadesIniciales || inv.unidades || 0);
+  const capitalBase = Number(inv.precioUSD || 0) * unidadesIniciales * Number(inv.tasa || 0);
+  const envioBase   = Number(inv.envioInicial !== undefined ? inv.envioInicial : inv.envio || 0);
+  const otrosBase   = Number(inv.otrosCostosInicial !== undefined ? inv.otrosCostosInicial : inv.otrosCostos || 0);
+  // Cada renovación ya guarda su propio costo total (inversionNueva)
+  const capitalRenovaciones = (inv.renovaciones || []).reduce((s, r) => s + Number(r.inversionNueva || 0), 0);
+  const totalGastosAdicionales = (inv.gastosAdicionales || []).reduce((s, g) => s + Number(g.monto || 0), 0);
   return capitalBase + envioBase + otrosBase + capitalRenovaciones + totalGastosAdicionales;
 }
 
@@ -4561,15 +4560,6 @@ async function guardarVentaInv(invId, stockDisp) {
   const totalVenta = precio * cantidad;
 
   // Registrar el ingreso total de la venta en la billetera seleccionada
-  STATE.db.ingresos.push({
-    id:uid(), fecha,
-    hora: horaActual(),
-    monto: Math.round(totalVenta),
-    fuente:'Venta inversión: '+(inv?.nombre||'Producto')+(cliente?' — '+cliente:''),
-    cat:'Inversión',
-    billeteraId,
-    autoGenerado:true
-  });
 
   renderAll();
   closeInvModal();
@@ -4771,20 +4761,28 @@ async function deleteInversion(idx) {
 
 async function cambiarEstadoInv(idx, estado) {
   const inv = STATE.db.inversiones[idx];
-  if(!inv) return;
+  if (!inv) return;
   inv.estado = estado;
-  if(estado==='cerrada') {
+  if (estado === 'cerrada') {
     const p = enriquecerInversion(inv);
-    if(p.ganancia>0) {
-      STATE.db.ingresos.push({ id:uid(),
-        fecha:new Date().toISOString().slice(0,10),
+    if (p.ganancia > 0) {
+      // Al cerrar: solo registrar la GANANCIA NETA como ingreso
+      STATE.db.ingresos.push({
+        id: uid(),
+        fecha: new Date().toISOString().slice(0, 10),
         hora: horaActual(),
-        monto:p.totalRecuperado, fuente:'Liquidación: '+inv.nombre, cat:'Inversión', autoGenerado:true });
-      toast('Inversión cerrada — ingreso registrado ✅','success');
+        monto: Math.round(p.ganancia),
+        fuente: 'Ganancia inversión cerrada: ' + inv.nombre,
+        cat: 'Inversión',
+        autoGenerado: true
+      });
+      toast(`Inversión cerrada — ganancia ${fmtCOP(Math.round(p.ganancia))} registrada ✅`, 'success');
+    } else {
+      toast('Inversión cerrada ✅', 'success');
     }
   }
   renderAll();
-  await saveDb(['inversiones','ingresos']);
+  await saveDb(['inversiones', 'ingresos']);
 }
 
 // ─── Renovar stock ───────────────────────────────────────────
