@@ -2812,7 +2812,7 @@ function populateGFBilletera() {
 function renderDashboard() {
   const ym0 = currentYM();
 
-  const ingMes  = STATE.db.ingresos.filter(i => ym(i.fecha) === ym0);
+  const ingMes  = STATE.db.ingresos.filter(i => ym(i.fecha) === ym0 && !i.esRecuperacionInversion);
   const gasMes  = STATE.db.gastos.filter(g => ym(g.fecha) === ym0);
   const totalIng = ingMes.reduce((a, b) => a + Number(b.monto), 0);
   const totalGas = gasMes.reduce((a, b) => a + Number(b.monto), 0);
@@ -4560,6 +4560,16 @@ async function guardarVentaInv(invId, stockDisp) {
   const totalVenta = precio * cantidad;
 
   // Registrar el ingreso total de la venta en la billetera seleccionada
+  STATE.db.ingresos.push({
+    id:uid(), fecha,
+    hora: horaActual(),
+    monto: Math.round(totalVenta),
+    fuente:'Venta inversión: '+(inv?.nombre||'Producto')+(cliente?' — '+cliente:''),
+    cat:'Inversión',
+    billeteraId,
+    autoGenerado:true,
+    esRecuperacionInversion: true   // ← AGREGA ESTA LÍNEA
+  });
 
   renderAll();
   closeInvModal();
