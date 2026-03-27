@@ -4544,8 +4544,8 @@ async function guardarVentaInv(invId, stockDisp) {
     if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(() => sel.style.border = '', 2000); }
     return toast('⚠️ Debes seleccionar en qué billetera ingresa el dinero de la venta','error');
   }
-
-  addVentaInv({ invId, fecha, cantidad, precioUnitario:precio, cliente, obs, billeteraId });
+  const ventaId = uid();
+  addVentaInv({ id: ventaId, invId, fecha, cantidad, precioUnitario:precio, cliente, obs, billeteraId });
 
   const inv = STATE.db.inversiones.find(i=>i.id===invId);
   const billNombre = STATE.db.billeteras?.find(b=>b.id===billeteraId)?.nombre || '';
@@ -4568,7 +4568,8 @@ async function guardarVentaInv(invId, stockDisp) {
     cat:'Inversión',
     billeteraId,
     autoGenerado:true,
-    esRecuperacionInversion: true   // ← AGREGA ESTA LÍNEA
+    esRecuperacionInversion: true,
+    origenVentaId: ventaId   // ← AGREGA ESTA LÍNEA
   });
 
   renderAll();
@@ -4752,10 +4753,16 @@ function renderDetalleInv(invId) {
 
 async function eliminarVentaInv(ventaId, invId) {
   if(!confirm('¿Eliminar esta venta?')) return;
+
+  // Eliminar el ingreso asociado en billeteras e ingresos
+  const idx = STATE.db.ingresos.findIndex(i => i.origenVentaId === ventaId);
+  if (idx !== -1) STATE.db.ingresos.splice(idx, 1);
+
   deleteVentaInv(ventaId);
   renderDetalleInv(invId);
-  await saveDb(['ventasInv']);
-  toast('Venta eliminada','info');
+  renderAll();
+  await saveDb(['ventasInv', 'ingresos']);
+  toast('Venta e ingreso asociado eliminados', 'info');
 }
 
 async function deleteInversion(idx) {
