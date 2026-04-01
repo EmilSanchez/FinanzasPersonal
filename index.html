@@ -1036,6 +1036,72 @@ canvas { max-width: 100%; display: block; }
   .section-header > div select { width: 100% !important; height: 38px; }
 }
 
+
+/* ══ Dashboard Balance Hero ══ */
+.dash-balance-hero {
+  background: linear-gradient(135deg, #1a2332 0%, #243049 60%, #1e3a5f 100%);
+  border-radius: var(--radius);
+  padding: 24px 28px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 0 4px 20px rgba(26,35,50,.25);
+  flex-wrap: wrap;
+}
+.dash-balance-label {
+  font-size: .78rem;
+  color: rgba(255,255,255,.55);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.dash-balance-amount {
+  font-size: 2.4rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -.03em;
+  line-height: 1;
+  font-family: var(--font-head);
+}
+.dash-balance-sub {
+  font-size: .78rem;
+  color: rgba(255,255,255,.5);
+  margin-top: 6px;
+}
+.dash-eye-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(255,255,255,.1);
+  border: 1px solid rgba(255,255,255,.2);
+  color: rgba(255,255,255,.85);
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: .82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+  font-family: var(--font-body);
+  flex-shrink: 0;
+}
+.dash-eye-btn:hover {
+  background: rgba(255,255,255,.18);
+  border-color: rgba(255,255,255,.4);
+}
+.dash-eye-btn:active { transform: scale(.97); }
+#dash-detail-cards { animation: fadeSlide .25s ease; }
+@media (max-width: 768px) {
+  .dash-balance-hero { padding: 18px 16px; gap: 12px; margin-bottom: 12px; }
+  .dash-balance-amount { font-size: 1.9rem; }
+}
+@media (max-width: 400px) {
+  .dash-balance-amount { font-size: 1.6rem; }
+}
+
 /* ── Small phone (≤400px) ── */
 @media (max-width: 400px) {
   .stats-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
@@ -1202,37 +1268,45 @@ canvas { max-width: 100%; display: block; }
       <p class="page-title">Resumen financiero</p>
       <p class="page-sub" id="dash-month-label">Cargando...</p>
 
-      <div class="stats-grid">
-        <div class="stat-card blue">
-          <div class="stat-icon-box"><span>💰</span></div>
-          <div class="stat-body">
-            <div class="stat-label">Balance neto</div>
-            <div class="stat-value" id="d-balance">$0</div>
-            <div class="stat-sub" id="d-balance-sub"></div>
-          </div>
+      <!-- ═══ BALANCE PRINCIPAL — Siempre visible ═══ -->
+      <div class="dash-balance-hero">
+        <div class="dash-balance-left">
+          <div class="dash-balance-label">💰 Total en billeteras</div>
+          <div class="dash-balance-amount" id="d-balance">$0</div>
+          <div class="dash-balance-sub" id="d-balance-sub"></div>
         </div>
-        <div class="stat-card green">
-          <div class="stat-icon-box"><span>📈</span></div>
-          <div class="stat-body">
-            <div class="stat-label">Ingresos del mes</div>
-            <div class="stat-value" id="d-ing">$0</div>
-            <div class="stat-sub" id="d-ing-sub"></div>
+        <button class="dash-eye-btn" id="dash-eye-btn" onclick="toggleDashDetails()" title="Mostrar / ocultar detalles">
+          <span id="dash-eye-icon">👁️</span>
+          <span id="dash-eye-label">Ver detalle</span>
+        </button>
+      </div>
+
+      <!-- ═══ DETALLE — Oculto por defecto, toggle con ojito ═══ -->
+      <div id="dash-detail-cards" style="display:none;">
+        <div class="stats-grid" style="margin-bottom:16px;">
+          <div class="stat-card green">
+            <div class="stat-icon-box"><span>📈</span></div>
+            <div class="stat-body">
+              <div class="stat-label">Ingresos del mes</div>
+              <div class="stat-value" id="d-ing">$0</div>
+              <div class="stat-sub" id="d-ing-sub"></div>
+            </div>
           </div>
-        </div>
-        <div class="stat-card red">
-          <div class="stat-icon-box"><span>📉</span></div>
-          <div class="stat-body">
-            <div class="stat-label">Gastos del mes</div>
-            <div class="stat-value" id="d-gas">$0</div>
-            <div class="stat-sub" id="d-gas-sub"></div>
+          <div class="stat-card red">
+            <div class="stat-icon-box"><span>📉</span></div>
+            <div class="stat-body">
+              <div class="stat-label">Gastos del mes</div>
+              <div class="stat-value" id="d-gas">$0</div>
+              <div class="stat-sub" id="d-gas-sub"></div>
+            </div>
           </div>
-        </div>
-        <div class="stat-card yellow">
-          <div class="stat-icon-box"><span>⚠️</span></div>
-          <div class="stat-body">
-            <div class="stat-label">Deudas pendientes</div>
-            <div class="stat-value" id="d-deu">$0</div>
-            <div class="stat-sub" id="d-deu-sub"></div>
+          <div class="stat-card yellow">
+            <div class="stat-icon-box"><span>⚠️</span></div>
+            <div class="stat-body">
+              <div class="stat-label">Deudas pendientes</div>
+              <div class="stat-value" id="d-deu">$0</div>
+              <div class="stat-sub" id="d-deu-sub"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -1291,6 +1365,12 @@ canvas { max-width: 100%; display: block; }
         <div class="form-actions">
           <button class="btn btn-success" onclick="saveIngreso()">💾 Guardar ingreso</button>
           <button class="btn btn-ghost" id="ing-cancel-btn" style="display:none" onclick="cancelEditIngreso()">✕ Cancelar</button>
+        </div>
+        <!-- Campo hora: solo visible al editar -->
+        <div class="form-group" id="i-hora-edit-group" style="display:none;margin-top:10px;max-width:220px;">
+          <label>🕐 Hora original</label>
+          <input type="text" class="form-control" id="i-hora-edit" placeholder="Ej: 02:30 PM" style="font-family:var(--font-mono)">
+          <small style="color:var(--muted);font-size:.72rem">Puedes corregir la hora si es necesario (formato: HH:MM AM/PM)</small>
         </div>
         <input type="hidden" id="ing-edit-id" value="">
       </div>
@@ -1375,6 +1455,12 @@ canvas { max-width: 100%; display: block; }
         <div class="form-actions">
           <button class="btn btn-primary" onclick="saveGasto()">💾 Guardar gasto</button>
           <button class="btn btn-ghost" id="gas-cancel-btn" style="display:none" onclick="cancelEditGasto()">✕ Cancelar</button>
+        </div>
+        <!-- Campo hora: solo visible al editar -->
+        <div class="form-group" id="g-hora-edit-group" style="display:none;margin-top:10px;max-width:220px;">
+          <label>🕐 Hora original</label>
+          <input type="text" class="form-control" id="g-hora-edit" placeholder="Ej: 02:30 PM" style="font-family:var(--font-mono)">
+          <small style="color:var(--muted);font-size:.72rem">Puedes corregir la hora si es necesario (formato: HH:MM AM/PM)</small>
         </div>
         <input type="hidden" id="gas-edit-id" value="">
       </div>
@@ -2168,6 +2254,118 @@ canvas { max-width: 100%; display: block; }
   </div>
 </div>
 
+<!-- Modal EDITAR DEUDA -->
+<div class="modal-overlay" id="modal-edit-deuda">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-title">✏️ Editar deuda</div>
+    <div class="modal-body-wrap">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Nombre / Acreedor *</label>
+          <input type="text" class="form-control" id="med-nombre" placeholder="Nombre...">
+        </div>
+        <div class="form-group">
+          <label>Cuota mensual sugerida</label>
+          <input type="number" class="form-control" id="med-cuota" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label>Próximo pago</label>
+          <input type="date" class="form-control" id="med-prox">
+        </div>
+        <div class="form-group">
+          <label>Tasa de interés % (anual)</label>
+          <input type="number" class="form-control" id="med-interes" placeholder="0" step="0.01">
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-deuda')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveEditDeuda()">💾 Guardar cambios</button>
+    </div>
+    <input type="hidden" id="med-idx">
+  </div>
+</div>
+
+<!-- Modal SUMAR MÁS SALDO A DEUDA (préstamo adicional o compra a crédito) -->
+<div class="modal-overlay" id="modal-sumar-deuda">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-title">➕ Agregar saldo a la deuda</div>
+    <div class="modal-body-wrap">
+      <div id="msd-deuda-info" style="background:var(--bg2);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;font-size:.85rem;color:var(--muted);"></div>
+      <!-- Tipo de incremento -->
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>¿Por qué aumenta la deuda? *</label>
+        <select class="form-control" id="msd-tipo" onchange="onMsdTipoChange()">
+          <option value="prestamo">💵 Me prestaron más dinero</option>
+          <option value="compra">🛒 Compra a crédito (no entra dinero)</option>
+        </select>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Monto adicional *</label>
+          <input type="number" class="form-control" id="msd-monto" placeholder="Ej: 50000" min="1">
+        </div>
+        <div class="form-group">
+          <label>Fecha *</label>
+          <input type="date" class="form-control" id="msd-fecha">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Motivo / Detalle *</label>
+          <input type="text" class="form-control" id="msd-desc" placeholder="Ej: Compra electrodoméstico, préstamo adicional...">
+        </div>
+        <div class="form-group" style="grid-column:1/-1" id="msd-billetera-group">
+          <label>💳 Entra a billetera (opcional)</label>
+          <select class="form-control" id="msd-billetera">
+            <option value="">Sin asignar</option>
+          </select>
+          <small style="color:var(--muted);font-size:.72rem">Si seleccionas billetera, el dinero adicional se sumará a ella como ingreso</small>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-sumar-deuda')">Cancelar</button>
+      <button class="btn btn-success" onclick="confirmarSumarDeuda()">✅ Agregar a la deuda</button>
+    </div>
+    <input type="hidden" id="msd-idx">
+  </div>
+</div>
+
+<!-- Modal AMPLIAR PRÉSTAMO A TERCERO -->
+<div class="modal-overlay" id="modal-ampliar-prestamo">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-title">💸 Prestar más dinero</div>
+    <div class="modal-body-wrap">
+      <div id="map-prest-info" style="background:var(--bg2);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;font-size:.85rem;color:var(--muted);"></div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Monto adicional *</label>
+          <input type="number" class="form-control" id="map-monto" placeholder="Ej: 100000" min="1">
+        </div>
+        <div class="form-group">
+          <label>Fecha *</label>
+          <input type="date" class="form-control" id="map-fecha">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Motivo / Detalle *</label>
+          <input type="text" class="form-control" id="map-desc" placeholder="Ej: Para arriendo, emergencia médica...">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>💳 Sale de billetera *</label>
+          <select class="form-control" id="map-billetera">
+            <option value="">— Selecciona billetera —</option>
+          </select>
+          <small style="color:var(--muted);font-size:.72rem">El dinero se descontará de la billetera seleccionada</small>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-ampliar-prestamo')">Cancelar</button>
+      <button class="btn btn-success" onclick="confirmarAmpliarPrestamo()">✅ Registrar desembolso</button>
+    </div>
+    <input type="hidden" id="map-idx">
+  </div>
+</div>
+
 <!-- Toast container -->
 <div class="toast-container" id="toast-container"></div>
 
@@ -2832,18 +3030,24 @@ function renderDashboard() {
       return a + cap;
     }, 0);
 
-  // Balance total = líquido mensual + lo que te deben + lo que tienes invertido (como activo)
-  const balance = totalIng - totalGas + totalPrestPendiente;
+  // Balance mensual = ingresos - gastos del mes
+  const balanceMes = totalIng - totalGas;
+
+  // ══ HERO: Total real en todas las billeteras ══
+  const totalBilleteras = (STATE.db.billeteras || []).reduce((a, b) => a + saldoBilletera(b.id), 0);
 
   document.getElementById('d-ing').textContent = fmt(totalIng);
   document.getElementById('d-gas').textContent = fmt(totalGas);
   document.getElementById('d-deu').textContent = fmt(totalDeu);
-  document.getElementById('d-balance').textContent = fmt(balance);
 
+  // El balance del hero = total billeteras (dinero real disponible)
   const bEl = document.getElementById('d-balance');
-  bEl.className = 'stat-value ' + (balance >= 0 ? 'positive' : 'negative');
+  if (bEl) {
+    bEl.textContent = fmt(totalBilleteras);
+    bEl.className = 'dash-balance-amount';
+  }
 
-  // Color the other values too
+  // Color de las tarjetas de detalle
   const ingEl = document.getElementById('d-ing');
   if(ingEl) ingEl.className = 'stat-value positive';
   const gasEl = document.getElementById('d-gas');
@@ -2855,13 +3059,13 @@ function renderDashboard() {
   document.getElementById('d-gas-sub').textContent  = gasMes.length + ' transacciones';
   document.getElementById('d-deu-sub').textContent  = STATE.db.deudas.filter(d => d.total - (d.pagado||0) > 0).length + ' deudas activas';
 
-  // Sub del balance: muestra desglose
+  // Sub del hero balance: desglose de activos adicionales
   const partes = [];
+  const balMesPos = balanceMes >= 0;
+  partes.push((balMesPos ? '↑ +' : '↓ ') + fmt(Math.abs(balanceMes)) + ' este mes');
   if (totalPrestPendiente > 0) partes.push(fmt(totalPrestPendiente) + ' por cobrar');
   if (totalInvCapital > 0)     partes.push(fmt(totalInvCapital) + ' invertido');
-  document.getElementById('d-balance-sub').textContent = partes.length
-    ? '+ ' + partes.join(' · ')
-    : (balance >= 0 ? '↑ Positivo este mes' : '↓ Negativo este mes');
+  document.getElementById('d-balance-sub').textContent = partes.join(' · ');
 
   // Todas las transacciones ordenadas: más reciente primero
   // Desempate por hora si misma fecha, luego por creadoEn si existe
@@ -2910,6 +3114,29 @@ function renderDashboard() {
 }
 
 /* ============================================================
+   DASHBOARD EYE TOGGLE
+   ============================================================ */
+let _dashDetailsVisible = false;
+
+function toggleDashDetails() {
+  _dashDetailsVisible = !_dashDetailsVisible;
+  const panel    = document.getElementById('dash-detail-cards');
+  const eyeIcon  = document.getElementById('dash-eye-icon');
+  const eyeLabel = document.getElementById('dash-eye-label');
+  if (!panel) return;
+  if (_dashDetailsVisible) {
+    panel.style.display = '';
+    panel.style.animation = 'fadeSlide .25s ease';
+    if (eyeIcon)  eyeIcon.textContent  = '🙈';
+    if (eyeLabel) eyeLabel.textContent = 'Ocultar';
+  } else {
+    panel.style.display = 'none';
+    if (eyeIcon)  eyeIcon.textContent  = '👁️';
+    if (eyeLabel) eyeLabel.textContent = 'Ver detalle';
+  }
+}
+
+/* ============================================================
    CHARTS (pure Canvas)
    ============================================================ */
 // drawBalanceChart moved to renderReportes module
@@ -2934,7 +3161,10 @@ async function saveIngreso() {
   const billeteraId = document.getElementById('i-billetera')?.value || '';
   if (editId) {
     const idx = STATE.db.ingresos.findIndex(i => i.id === editId);
-    if (idx !== -1) STATE.db.ingresos[idx] = { ...STATE.db.ingresos[idx], fecha, hora, monto, fuente, cat, billeteraId };
+    if (idx !== -1) {
+      const horaEdit = document.getElementById('i-hora-edit')?.value || STATE.db.ingresos[idx].hora || hora;
+      STATE.db.ingresos[idx] = { ...STATE.db.ingresos[idx], fecha, hora: horaEdit, monto, fuente, cat, billeteraId };
+    }
     cancelEditIngreso();
   } else {
     STATE.db.ingresos.push({ id: uid(), fecha, hora, monto, fuente, cat, billeteraId });
@@ -2953,6 +3183,11 @@ function editIngreso(id) {
   document.getElementById('i-fuente').value = item.fuente;
   document.getElementById('i-cat').value    = item.cat || 'Otro';
   document.getElementById('ing-edit-id').value = id;
+  // Mostrar hora original
+  const horaEl = document.getElementById('i-hora-edit');
+  if (horaEl) horaEl.value = item.hora || '';
+  const horaGroup = document.getElementById('i-hora-edit-group');
+  if (horaGroup) horaGroup.style.display = '';
   document.getElementById('ing-form-title').textContent = '✏️ Editar ingreso';
   document.getElementById('ing-cancel-btn').style.display = '';
   document.getElementById('page-ingresos').scrollIntoView({ behavior: 'smooth' });
@@ -2962,6 +3197,8 @@ function cancelEditIngreso() {
   document.getElementById('ing-edit-id').value = '';
   document.getElementById('ing-form-title').textContent = '➕ Nuevo ingreso';
   document.getElementById('ing-cancel-btn').style.display = 'none';
+  const horaGroup = document.getElementById('i-hora-edit-group');
+  if (horaGroup) horaGroup.style.display = 'none';
   clearForm(['i-monto','i-fuente']);
 }
 
@@ -3053,7 +3290,6 @@ async function saveGasto() {
   if (!monto)  return toast('El monto debe ser mayor a 0', 'error');
   if (!desc)   return toast('La descripción es obligatoria', 'error');
 
-  const hora = horaActual();
   const billeteraId = document.getElementById('g-billetera')?.value || '';
   if (!billeteraId) {
     const sel = document.getElementById('g-billetera');
@@ -3062,10 +3298,14 @@ async function saveGasto() {
   }
   if (editId) {
     const idx = STATE.db.gastos.findIndex(g => g.id === editId);
-    if (idx !== -1) STATE.db.gastos[idx] = { ...STATE.db.gastos[idx], fecha, hora, monto, desc, cat, billeteraId };
+    if (idx !== -1) {
+      // Conservar hora original; si el usuario la editó, usar la nueva
+      const horaEdit = document.getElementById('g-hora-edit')?.value || STATE.db.gastos[idx].hora || horaActual();
+      STATE.db.gastos[idx] = { ...STATE.db.gastos[idx], fecha, hora: horaEdit, monto, desc, cat, billeteraId };
+    }
     cancelEditGasto();
   } else {
-    STATE.db.gastos.push({ id: uid(), fecha, hora, monto, desc, cat, billeteraId });
+    STATE.db.gastos.push({ id: uid(), fecha, hora: horaActual(), monto, desc, cat, billeteraId });
   }
   clearForm(['g-monto','g-desc']);
   renderAll();           // actualiza UI inmediatamente
@@ -3081,6 +3321,11 @@ function editGasto(id) {
   document.getElementById('g-desc').value   = item.desc;
   document.getElementById('g-cat').value    = item.cat || 'Otro';
   document.getElementById('gas-edit-id').value = id;
+  // Mostrar hora original si existe
+  const horaEl = document.getElementById('g-hora-edit');
+  if (horaEl) horaEl.value = item.hora || '';
+  const horaGroup = document.getElementById('g-hora-edit-group');
+  if (horaGroup) horaGroup.style.display = '';
   document.getElementById('gas-form-title').textContent = '✏️ Editar gasto';
   document.getElementById('gas-cancel-btn').style.display = '';
   document.getElementById('page-gastos').scrollIntoView({ behavior: 'smooth' });
@@ -3090,6 +3335,8 @@ function cancelEditGasto() {
   document.getElementById('gas-edit-id').value = '';
   document.getElementById('gas-form-title').textContent = '➕ Nuevo gasto';
   document.getElementById('gas-cancel-btn').style.display = 'none';
+  const horaGroup = document.getElementById('g-hora-edit-group');
+  if (horaGroup) horaGroup.style.display = 'none';
   clearForm(['g-monto','g-desc']);
 }
 
@@ -3343,6 +3590,135 @@ async function deleteAbono(dIdx, pId) {
   toast('Abono eliminado', 'info');
 }
 
+// ══ Editar deuda básica ══
+function openEditDeuda(idx) {
+  const d = STATE.db.deudas[idx];
+  if (!d) return;
+  document.getElementById('med-idx').value    = idx;
+  document.getElementById('med-nombre').value = d.nombre || '';
+  document.getElementById('med-cuota').value  = d.cuota || '';
+  document.getElementById('med-prox').value   = d.prox || '';
+  document.getElementById('med-interes').value = d.interes || '';
+  openModal('modal-edit-deuda');
+}
+
+async function saveEditDeuda() {
+  const idx     = Number(document.getElementById('med-idx').value);
+  const nombre  = document.getElementById('med-nombre').value.trim();
+  const cuota   = Number(document.getElementById('med-cuota').value) || 0;
+  const prox    = document.getElementById('med-prox').value;
+  const interes = Number(document.getElementById('med-interes').value) || 0;
+  const d = STATE.db.deudas[idx];
+  if (!d)    return toast('Deuda no encontrada', 'error');
+  if (!nombre) return toast('El nombre es obligatorio', 'error');
+  d.nombre  = nombre;
+  d.cuota   = cuota;
+  d.prox    = prox;
+  d.interes = interes;
+  closeModal('modal-edit-deuda');
+  renderAll();
+  await saveDb(['deudas']);
+  toast('Deuda actualizada ✅', 'success');
+}
+
+// ══ Sumar más saldo a la misma deuda ══
+function onMsdTipoChange() {
+  const tipo = document.getElementById('msd-tipo').value;
+  const grp  = document.getElementById('msd-billetera-group');
+  if (grp) grp.style.display = tipo === 'prestamo' ? '' : 'none';
+}
+
+function openSumarDeuda(idx) {
+  const d = STATE.db.deudas[idx];
+  if (!d) return;
+  document.getElementById('msd-idx').value  = idx;
+  document.getElementById('msd-monto').value = '';
+  document.getElementById('msd-desc').value  = '';
+  document.getElementById('msd-fecha').value = new Date().toISOString().slice(0,10);
+  document.getElementById('msd-tipo').value  = 'prestamo';
+  onMsdTipoChange();
+  // Info de la deuda actual
+  const falta = Math.max(0, d.total - (d.pagado || 0));
+  document.getElementById('msd-deuda-info').innerHTML =
+    `<strong>${d.nombre}</strong><br>` +
+    `Deuda actual: <strong>${fmt(d.total)}</strong> · ` +
+    `Pagado: <strong style="color:var(--green)">${fmt(d.pagado||0)}</strong> · ` +
+    `Pendiente: <strong style="color:var(--red)">${fmt(falta)}</strong>`;
+  // Poblar billeteras
+  const sel = document.getElementById('msd-billetera');
+  sel.innerHTML = '<option value="">Sin asignar</option>';
+  (STATE.db.billeteras||[]).forEach(b => {
+    const saldo = saldoBilletera(b.id);
+    const o = document.createElement('option');
+    o.value = b.id;
+    o.textContent = (BILL_ICONOS[b.tipo]||'💳') + ' ' + b.nombre + ' — ' + fmt(saldo);
+    sel.appendChild(o);
+  });
+  openModal('modal-sumar-deuda');
+}
+
+async function confirmarSumarDeuda() {
+  const idx         = Number(document.getElementById('msd-idx').value);
+  const monto       = Number(document.getElementById('msd-monto').value);
+  const fecha       = document.getElementById('msd-fecha').value;
+  const desc        = document.getElementById('msd-desc').value.trim();
+  const tipoMsd     = document.getElementById('msd-tipo').value; // 'prestamo' o 'compra'
+  const billeteraId = tipoMsd === 'prestamo' ? (document.getElementById('msd-billetera').value || '') : '';
+  const d           = STATE.db.deudas[idx];
+
+  if (!d)     return toast('Deuda no encontrada', 'error');
+  if (!monto || monto <= 0) return toast('El monto adicional debe ser mayor a 0', 'error');
+  if (!fecha) return toast('La fecha es obligatoria', 'error');
+  if (!desc)  return toast('El motivo / detalle es obligatorio', 'error');
+
+  // Registrar el desembolso adicional en el historial de la deuda
+  if (!d.desembolsos) d.desembolsos = [];
+  const desembolsoId = uid();
+  d.desembolsos.push({ id: desembolsoId, fecha, monto, desc, billeteraId, tipo: tipoMsd });
+
+  // Aumentar el total de la deuda
+  d.total = (d.total || 0) + monto;
+
+  // Solo si es préstamo recibido, registrar como ingreso en billetera
+  if (tipoMsd === 'prestamo' && billeteraId) {
+    const bill = STATE.db.billeteras?.find(b => b.id === billeteraId);
+    STATE.db.ingresos.push({
+      id: uid(), fecha,
+      hora: horaActual(),
+      monto,
+      fuente: 'Dinero adicional deuda: ' + d.nombre + ' — ' + desc,
+      cat: 'Préstamo recibido',
+      billeteraId,
+      autoGenerado: true,
+      origenDesembolsoId: desembolsoId
+    });
+    const bn = bill ? ` → ${bill.nombre}` : '';
+    toast(`${fmt(monto)} sumados a la deuda${bn} ✅`, 'success');
+  } else if (tipoMsd === 'compra') {
+    toast(`Compra a crédito de ${fmt(monto)} registrada — deuda aumentada ✅`, 'success');
+  } else {
+    toast(`${fmt(monto)} sumados a la deuda ✅`, 'success');
+  }
+
+  closeModal('modal-sumar-deuda');
+  renderAll();
+  await saveDb(['deudas', 'ingresos']);
+}
+
+async function deleteDesembolso(dIdx, desId) {
+  if (!confirm('¿Eliminar este desembolso adicional? El monto se restará de la deuda.')) return;
+  const d = STATE.db.deudas[dIdx];
+  if (!d || !d.desembolsos) return;
+  const des = d.desembolsos.find(x => x.id === desId);
+  if (!des) return;
+  // Reducir el total de la deuda
+  d.total = Math.max(0, (d.total || 0) - des.monto);
+  d.desembolsos = d.desembolsos.filter(x => x.id !== desId);
+  renderAll();
+  await saveDb(['deudas']);
+  toast('Desembolso eliminado', 'info');
+}
+
 function renderDeudas() {
   const container = document.getElementById('deudas-lista');
   const empty     = document.getElementById('deudas-empty');
@@ -3405,8 +3781,27 @@ function renderDeudas() {
       </div>
       <div class="debt-actions">
         ${!terminada ? `<button class="btn btn-success btn-sm" onclick="openAbonar(${i})">💳 Registrar abono</button>` : ''}
+        <button class="btn btn-ghost btn-sm" onclick="openSumarDeuda(${i})" title="Agregar más saldo: préstamo adicional o compra a crédito">➕ Agregar saldo</button>
+        <button class="btn btn-ghost btn-sm" onclick="openEditDeuda(${i})">✏️ Editar</button>
         <button class="btn btn-danger btn-sm" onclick="deleteDeuda(${i})">🗑️ Eliminar</button>
       </div>
+
+      ${(d.desembolsos && d.desembolsos.length) ? `
+        <div class="payment-history" style="border-top:2px dashed var(--accent-light);padding-top:10px;margin-top:10px;">
+          <div class="payment-history-title" style="color:var(--accent);">💸 Desembolsos adicionales (${d.desembolsos.length})</div>
+          ${d.desembolsos.slice().reverse().map(des => `
+            <div class="payment-item">
+              <span style="display:flex;flex-direction:column;gap:2px;">
+                <span>📅 ${des.fecha}</span>
+                <span style="color:var(--muted);font-size:.8rem;">📝 ${des.desc}</span>
+              </span>
+              <span style="display:flex;align-items:center;gap:8px;">
+                <span style="color:var(--accent);font-weight:600;">+${fmt(des.monto)}</span>
+                <button class="btn btn-danger btn-sm" style="padding:2px 7px;font-size:.72rem" onclick="deleteDesembolso(${i},'${des.id}')">✕</button>
+              </span>
+            </div>`).join('')}
+        </div>` : ''}
+
       ${d.pagos.length ? `
         <div class="payment-history">
           <div class="payment-history-title">Historial de pagos (${d.pagos.length})</div>
@@ -3614,6 +4009,80 @@ async function deletePrestamo(idx) {
   toast('Préstamo eliminado', 'info');
 }
 
+// ══ Ampliar préstamo existente (prestar más a la misma persona) ══
+function openAmpliarPrestamo(idx) {
+  const p = STATE.db.prestamos[idx];
+  if (!p) return;
+  document.getElementById('map-idx').value   = idx;
+  document.getElementById('map-monto').value = '';
+  document.getElementById('map-desc').value  = '';
+  document.getElementById('map-fecha').value = new Date().toISOString().slice(0,10);
+  const falta = Math.max(0, p.totalConInteres - (p.cobrado || 0));
+  document.getElementById('map-prest-info').innerHTML =
+    `<strong>👤 ${p.nombre}</strong><br>` +
+    `Prestado: <strong>${fmt(p.monto)}</strong> · ` +
+    `Total a cobrar: <strong>${fmt(p.totalConInteres)}</strong> · ` +
+    `Por cobrar: <strong style="color:var(--red)">${fmt(falta)}</strong>`;
+  const sel = document.getElementById('map-billetera');
+  sel.innerHTML = '<option value="">— Selecciona billetera —</option>';
+  (STATE.db.billeteras||[]).forEach(b => {
+    const saldo = saldoBilletera(b.id);
+    const alcanza = true; // no bloqueamos, solo informamos
+    const o = document.createElement('option');
+    o.value = b.id;
+    o.textContent = (BILL_ICONOS[b.tipo]||'💳') + ' ' + b.nombre + ' — ' + fmt(saldo);
+    sel.appendChild(o);
+  });
+  openModal('modal-ampliar-prestamo');
+}
+
+async function confirmarAmpliarPrestamo() {
+  const idx         = Number(document.getElementById('map-idx').value);
+  const monto       = Number(document.getElementById('map-monto').value);
+  const fecha       = document.getElementById('map-fecha').value;
+  const desc        = document.getElementById('map-desc').value.trim();
+  const billeteraId = document.getElementById('map-billetera').value;
+  const p           = STATE.db.prestamos[idx];
+
+  if (!p)     return toast('Préstamo no encontrado', 'error');
+  if (!monto || monto <= 0) return toast('El monto adicional debe ser mayor a 0', 'error');
+  if (!fecha) return toast('La fecha es obligatoria', 'error');
+  if (!desc)  return toast('El motivo / detalle es obligatorio', 'error');
+  if (!billeteraId) return toast('⚠️ Debes seleccionar de qué billetera sale el dinero', 'error');
+
+  // Verificar saldo
+  const saldo = saldoBilletera(billeteraId);
+  if (saldo < monto) {
+    const bill = STATE.db.billeteras.find(b => b.id === billeteraId);
+    return toast(`⛔ Saldo insuficiente en ${bill?.nombre || 'la billetera'} (${fmt(saldo)})`, 'error');
+  }
+
+  // Registrar el desembolso adicional en el historial del préstamo
+  if (!p.desembolsos) p.desembolsos = [];
+  const desId = uid();
+  p.desembolsos.push({ id: desId, fecha, monto, desc, billeteraId });
+
+  // Aumentar el monto y recalcular totalConInteres
+  p.monto += monto;
+  p.totalConInteres = p.interes > 0 ? Math.round(p.monto * (1 + p.interes / 100)) : p.monto;
+
+  // Registrar como gasto en la billetera
+  const billNombre = STATE.db.billeteras.find(b => b.id === billeteraId)?.nombre || '';
+  STATE.db.gastos.push({
+    id: uid(), fecha, hora: horaActual(), monto,
+    desc: 'Préstamo adicional a: ' + p.nombre + ' — ' + desc,
+    cat: 'Préstamo otorgado',
+    billeteraId,
+    autoGenerado: true,
+    origenDesembolsoId: desId
+  });
+
+  closeModal('modal-ampliar-prestamo');
+  renderAll();
+  await saveDb(['prestamos', 'gastos']);
+  toast(`${fmt(monto)} desembolsados a ${p.nombre} y descontados de ${billNombre} ✅`, 'success');
+}
+
 function diasParaVencer(fechaStr) {
   if (!fechaStr) return null;
   const hoy   = new Date(); hoy.setHours(0,0,0,0);
@@ -3710,8 +4179,21 @@ function renderPrestamos() {
       </div>
       <div class="debt-actions">
         ${!saldado ? `<button class="btn btn-success btn-sm" onclick="openCobro(${i})">💰 Registrar cobro</button>` : ''}
+        <button class="btn btn-ghost btn-sm" onclick="openAmpliarPrestamo(${i})" title="Prestar más dinero a esta misma persona">💸 Prestar más</button>
         <button class="btn btn-danger btn-sm" onclick="deletePrestamo(${i})">🗑️ Eliminar</button>
       </div>
+      ${(p.desembolsos && p.desembolsos.length) ? `
+        <div class="payment-history" style="border-top:2px dashed var(--accent-light);padding-top:10px;margin-top:10px;">
+          <div class="payment-history-title" style="color:var(--accent);">💸 Desembolsos adicionales (${p.desembolsos.length})</div>
+          ${p.desembolsos.slice().reverse().map(des => `
+            <div class="payment-item">
+              <span style="display:flex;flex-direction:column;gap:2px;">
+                <span>📅 ${des.fecha}</span>
+                <span style="color:var(--muted);font-size:.8rem;">📝 ${des.desc}</span>
+              </span>
+              <span style="color:var(--accent);font-weight:600;">+${fmt(des.monto)}</span>
+            </div>`).join('')}
+        </div>` : ''}
       ${p.cobros.length ? `
         <div class="payment-history">
           <div class="payment-history-title">Historial de cobros (${p.cobros.length})</div>
@@ -5483,10 +5965,15 @@ function getBilleteraSaldo(id) { return saldoBilletera(id); }
 // ── Inyectar resumen de billeteras en el dashboard ──
 function renderBilleterasDashWidget() {
   const el = document.getElementById('dash-billeteras-widget');
+  // Widget is now hidden — the hero balance shows the total
+  // We keep this function but suppress the widget to avoid duplication
   if (!el) return;
   const list = getBilleteras();
   if (!list.length) { el.style.display = 'none'; return; }
-  el.style.display = '';
+  // Show a compact mini-list only if user wants it (hidden by default now)
+  // Always hide the widget — the new balance hero shows total
+  el.style.display = 'none';
+  return;
   const total = list.reduce((a,b)=>a+saldoBilletera(b.id),0);
   el.innerHTML = `
     <div class="section-header"><span class="section-title">👛 Mis billeteras</span>
