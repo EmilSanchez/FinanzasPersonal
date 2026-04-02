@@ -1368,9 +1368,9 @@ canvas { max-width: 100%; display: block; }
         </div>
         <!-- Campo hora: solo visible al editar -->
         <div class="form-group" id="i-hora-edit-group" style="display:none;margin-top:10px;max-width:220px;">
-          <label>🕐 Hora original</label>
-          <input type="text" class="form-control" id="i-hora-edit" placeholder="Ej: 02:30 PM" style="font-family:var(--font-mono)">
-          <small style="color:var(--muted);font-size:.72rem">Puedes corregir la hora si es necesario (formato: HH:MM AM/PM)</small>
+          <label>🕐 Hora del ingreso</label>
+          <input type="time" class="form-control" id="i-hora-edit" style="font-family:var(--font-mono)">
+          <small style="color:var(--muted);font-size:.72rem">Ajusta la hora si es necesario</small>
         </div>
         <input type="hidden" id="ing-edit-id" value="">
       </div>
@@ -1458,9 +1458,9 @@ canvas { max-width: 100%; display: block; }
         </div>
         <!-- Campo hora: solo visible al editar -->
         <div class="form-group" id="g-hora-edit-group" style="display:none;margin-top:10px;max-width:220px;">
-          <label>🕐 Hora original</label>
-          <input type="text" class="form-control" id="g-hora-edit" placeholder="Ej: 02:30 PM" style="font-family:var(--font-mono)">
-          <small style="color:var(--muted);font-size:.72rem">Puedes corregir la hora si es necesario (formato: HH:MM AM/PM)</small>
+          <label>🕐 Hora del gasto</label>
+          <input type="time" class="form-control" id="g-hora-edit" style="font-family:var(--font-mono)">
+          <small style="color:var(--muted);font-size:.72rem">Ajusta la hora si es necesario</small>
         </div>
         <input type="hidden" id="gas-edit-id" value="">
       </div>
@@ -1705,6 +1705,13 @@ canvas { max-width: 100%; display: block; }
           <div class="form-group">
             <label>Notas</label>
             <input type="text" class="form-control" id="gf-notas" placeholder="Opcional...">
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>🔗 Vincular con deuda (opcional)</label>
+            <select class="form-control" id="gf-deuda-vinc">
+              <option value="">— Sin vincular —</option>
+            </select>
+            <small style="color:var(--muted);font-size:.72rem">Si seleccionas una deuda, al marcar este gasto como pagado se registrará el abono automáticamente en esa deuda</small>
           </div>
         </div>
         <div class="form-actions">
@@ -2558,6 +2565,35 @@ function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
+// Convierte "03:45 PM" → "15:45" para input[type=time]
+function horaToInputTime(horaStr) {
+  if (!horaStr) return '';
+  try {
+    const match = horaStr.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+    if (!match) return '';
+    let h = parseInt(match[1]);
+    const m = String(parseInt(match[2])).padStart(2,'0');
+    const ampm = (match[3]||'').toUpperCase();
+    if (ampm === 'PM' && h !== 12) h += 12;
+    if (ampm === 'AM' && h === 12) h = 0;
+    return String(h).padStart(2,'0') + ':' + m;
+  } catch { return ''; }
+}
+
+// Convierte "15:45" → "03:45 PM" para almacenar
+function inputTimeToHora(val) {
+  if (!val) return horaActual();
+  try {
+    const [hStr, mStr] = val.split(':');
+    let h = parseInt(hStr);
+    const m = mStr;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    if (h > 12) h -= 12;
+    if (h === 0) h = 12;
+    return String(h).padStart(2,'0') + ':' + m + ' ' + ampm;
+  } catch { return horaActual(); }
+}
+
 // Convierte "03:45 PM" a minutos totales para comparación
 function convertirHora(horaStr) {
   if (!horaStr) return 0;
@@ -3162,7 +3198,8 @@ async function saveIngreso() {
   if (editId) {
     const idx = STATE.db.ingresos.findIndex(i => i.id === editId);
     if (idx !== -1) {
-      const horaEdit = document.getElementById('i-hora-edit')?.value || STATE.db.ingresos[idx].hora || hora;
+      const horaRaw  = document.getElementById('i-hora-edit')?.value;
+      const horaEdit = horaRaw ? inputTimeToHora(horaRaw) : (STATE.db.ingresos[idx].hora || hora);
       STATE.db.ingresos[idx] = { ...STATE.db.ingresos[idx], fecha, hora: horaEdit, monto, fuente, cat, billeteraId };
     }
     cancelEditIngreso();
@@ -3183,9 +3220,9 @@ function editIngreso(id) {
   document.getElementById('i-fuente').value = item.fuente;
   document.getElementById('i-cat').value    = item.cat || 'Otro';
   document.getElementById('ing-edit-id').value = id;
-  // Mostrar hora original
+  // Mostrar hora original en el time picker
   const horaEl = document.getElementById('i-hora-edit');
-  if (horaEl) horaEl.value = item.hora || '';
+  if (horaEl) horaEl.value = horaToInputTime(item.hora);
   const horaGroup = document.getElementById('i-hora-edit-group');
   if (horaGroup) horaGroup.style.display = '';
   document.getElementById('ing-form-title').textContent = '✏️ Editar ingreso';
@@ -3296,11 +3333,24 @@ async function saveGasto() {
     if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(() => sel.style.border = '', 2000); }
     return toast('⚠️ Debes seleccionar de qué billetera sale el dinero', 'error');
   }
+
+  // Validar saldo suficiente solo al registrar nuevo (no al editar, ya que el gasto ya está contabilizado)
+  if (!editId) {
+    const saldoDisp = saldoBilletera(billeteraId);
+    if (monto > saldoDisp) {
+      const bill = STATE.db.billeteras?.find(b => b.id === billeteraId);
+      const billNombre = bill ? bill.nombre : 'la billetera';
+      const sel = document.getElementById('g-billetera');
+      if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(() => sel.style.border = '', 2500); }
+      return toast(`⛔ Saldo insuficiente en ${billNombre}. Disponible: ${fmt(saldoDisp)} — Necesitas: ${fmt(monto)}`, 'error');
+    }
+  }
   if (editId) {
     const idx = STATE.db.gastos.findIndex(g => g.id === editId);
     if (idx !== -1) {
       // Conservar hora original; si el usuario la editó, usar la nueva
-      const horaEdit = document.getElementById('g-hora-edit')?.value || STATE.db.gastos[idx].hora || horaActual();
+      const horaRaw = document.getElementById('g-hora-edit')?.value;
+      const horaEdit = horaRaw ? inputTimeToHora(horaRaw) : (STATE.db.gastos[idx].hora || horaActual());
       STATE.db.gastos[idx] = { ...STATE.db.gastos[idx], fecha, hora: horaEdit, monto, desc, cat, billeteraId };
     }
     cancelEditGasto();
@@ -3321,9 +3371,9 @@ function editGasto(id) {
   document.getElementById('g-desc').value   = item.desc;
   document.getElementById('g-cat').value    = item.cat || 'Otro';
   document.getElementById('gas-edit-id').value = id;
-  // Mostrar hora original si existe
+  // Mostrar hora original en el time picker
   const horaEl = document.getElementById('g-hora-edit');
-  if (horaEl) horaEl.value = item.hora || '';
+  if (horaEl) horaEl.value = horaToInputTime(item.hora);
   const horaGroup = document.getElementById('g-hora-edit-group');
   if (horaGroup) horaGroup.style.display = '';
   document.getElementById('gas-form-title').textContent = '✏️ Editar gasto';
@@ -3807,10 +3857,13 @@ function renderDeudas() {
           <div class="payment-history-title">Historial de pagos (${d.pagos.length})</div>
           ${d.pagos.slice().reverse().map(p => `
             <div class="payment-item">
-              <span>📅 ${p.fecha}${p.nota ? ' — ' + p.nota : ''}</span>
+              <span style="display:flex;flex-direction:column;gap:2px;">
+                <span>📅 ${p.fecha}${p.nota ? ' — ' + p.nota : ''}</span>
+                ${p.autoGastoFijoId ? `<span style="font-size:.7rem;color:var(--accent);">🔗 Abono automático desde gasto fijo</span>` : ''}
+              </span>
               <span style="display:flex;align-items:center;gap:8px;">
                 <span style="color:var(--green)">${fmt(p.monto)}</span>
-                <button class="btn btn-danger btn-sm" style="padding:2px 7px;font-size:.72rem" onclick="deleteAbono(${i},'${p.id}')">✕</button>
+                ${!p.autoGastoFijoId ? `<button class="btn btn-danger btn-sm" style="padding:2px 7px;font-size:.72rem" onclick="deleteAbono(${i},'${p.id}')">✕</button>` : ''}
               </span>
             </div>`).join('')}
         </div>` : ''}
@@ -4214,22 +4267,43 @@ function renderPrestamos() {
 /* ============================================================
    GASTOS FIJOS MENSUALES
    ============================================================ */
+
+// Poblar selector de deudas en el formulario de gasto fijo
+function populateGFDeudaSelect(selId, currentDeudaId = '') {
+  const sel = document.getElementById(selId);
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Sin vincular —</option>';
+  (STATE.db.deudas || [])
+    .filter(d => Math.max(0, d.total - (d.pagado || 0)) > 0) // solo deudas activas
+    .forEach(d => {
+      const falta = Math.max(0, d.total - (d.pagado || 0));
+      const o = document.createElement('option');
+      o.value = d.id;
+      o.textContent = `${d.nombre} — pendiente: ${fmt(falta)}`;
+      if (d.id === currentDeudaId) o.selected = true;
+      sel.appendChild(o);
+    });
+}
+
 async function saveGastoFijo() {
-  const nombre     = document.getElementById('gf-nombre').value.trim();
-  const monto      = Number(document.getElementById('gf-monto').value);
-  const cat        = document.getElementById('gf-cat').value;
-  const dia        = Number(document.getElementById('gf-dia').value) || 0;
-  const notas      = document.getElementById('gf-notas').value.trim();
+  const nombre      = document.getElementById('gf-nombre').value.trim();
+  const monto       = Number(document.getElementById('gf-monto').value);
+  const cat         = document.getElementById('gf-cat').value;
+  const dia         = Number(document.getElementById('gf-dia').value) || 0;
+  const notas       = document.getElementById('gf-notas').value.trim();
   const billeteraId = document.getElementById('gf-billetera')?.value || '';
+  const deudaId     = document.getElementById('gf-deuda-vinc')?.value || '';
 
   if (!nombre) return toast('El nombre es obligatorio', 'error');
   if (!monto)  return toast('El valor es obligatorio', 'error');
 
-  STATE.db.gastosFijos.push({ id: uid(), nombre, monto, cat, dia, notas, billeteraId, pagos: {} });
+  STATE.db.gastosFijos.push({ id: uid(), nombre, monto, cat, dia, notas, billeteraId, deudaId, pagos: {} });
   clearForm(['gf-nombre','gf-monto','gf-dia','gf-notas']);
+  document.getElementById('gf-deuda-vinc').value = '';
   renderGastosFijos();
   await saveDb(['gastosFijos']);
-  toast('Gasto fijo agregado ✅', 'success');
+  const vincMsg = deudaId ? ' — vinculado a deuda 🔗' : '';
+  toast('Gasto fijo agregado ✅' + vincMsg, 'success');
 }
 
 async function deleteGastoFijo(id) {
@@ -4240,23 +4314,175 @@ async function deleteGastoFijo(id) {
   toast('Gasto fijo eliminado', 'info');
 }
 
+function openEditGastoFijo(id) {
+  const gf = STATE.db.gastosFijos.find(g => g.id === id);
+  if (!gf) return;
+
+  let modal = document.getElementById('modal-edit-gasto-fijo');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-edit-gasto-fijo';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:420px;">
+        <div class="modal-title">✏️ Editar gasto fijo</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Nombre *</label>
+            <input type="text" class="form-control" id="mgf-nombre" placeholder="Nombre...">
+          </div>
+          <div class="form-group">
+            <label>Monto mensual *</label>
+            <input type="number" class="form-control" id="mgf-monto" placeholder="0" min="1">
+          </div>
+          <div class="form-group">
+            <label>Categoría</label>
+            <select class="form-control" id="mgf-cat">
+              <option value="Arriendo">🏠 Arriendo</option>
+              <option value="Servicios">💡 Servicios</option>
+              <option value="Internet">📡 Internet</option>
+              <option value="Suscripción">📺 Suscripción</option>
+              <option value="Crédito">💳 Crédito</option>
+              <option value="Seguro">🛡️ Seguro</option>
+              <option value="Educación">📚 Educación</option>
+              <option value="Salud">🏥 Salud</option>
+              <option value="Otro">📌 Otro</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Día de pago (1-31)</label>
+            <input type="number" class="form-control" id="mgf-dia" placeholder="Ej: 5" min="1" max="31">
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>Notas</label>
+            <input type="text" class="form-control" id="mgf-notas" placeholder="Opcional...">
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>🔗 Vincular con deuda (opcional)</label>
+            <select class="form-control" id="mgf-deuda-vinc">
+              <option value="">— Sin vincular —</option>
+            </select>
+            <small style="color:var(--muted);font-size:.72rem">Al marcar como pagado se abonará automáticamente a la deuda seleccionada</small>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="closeModal('modal-edit-gasto-fijo')">Cancelar</button>
+          <button class="btn btn-primary" onclick="saveEditGastoFijo()">💾 Guardar cambios</button>
+        </div>
+        <input type="hidden" id="mgf-id">
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
+  }
+
+  document.getElementById('mgf-id').value     = id;
+  document.getElementById('mgf-nombre').value = gf.nombre || '';
+  document.getElementById('mgf-monto').value  = gf.monto || '';
+  document.getElementById('mgf-cat').value    = gf.cat || 'Otro';
+  document.getElementById('mgf-dia').value    = gf.dia || '';
+  document.getElementById('mgf-notas').value  = gf.notas || '';
+  // Poblar selector de deudas
+  populateGFDeudaSelect('mgf-deuda-vinc', gf.deudaId || '');
+  openModal('modal-edit-gasto-fijo');
+}
+
+async function saveEditGastoFijo() {
+  const id      = document.getElementById('mgf-id').value;
+  const nombre  = document.getElementById('mgf-nombre').value.trim();
+  const monto   = Number(document.getElementById('mgf-monto').value);
+  const cat     = document.getElementById('mgf-cat').value;
+  const dia     = Number(document.getElementById('mgf-dia').value) || 0;
+  const notas   = document.getElementById('mgf-notas').value.trim();
+  const deudaId = document.getElementById('mgf-deuda-vinc')?.value || '';
+
+  if (!nombre) return toast('El nombre es obligatorio', 'error');
+  if (!monto)  return toast('El monto es obligatorio', 'error');
+
+  const gf = STATE.db.gastosFijos.find(g => g.id === id);
+  if (!gf) return toast('Gasto fijo no encontrado', 'error');
+
+  gf.nombre  = nombre;
+  gf.monto   = monto;
+  gf.cat     = cat;
+  gf.dia     = dia;
+  gf.notas   = notas;
+  gf.deudaId = deudaId;
+
+  closeModal('modal-edit-gasto-fijo');
+  renderGastosFijos();
+  await saveDb(['gastosFijos']);
+  const vincMsg = deudaId ? ' — deuda vinculada 🔗' : '';
+  toast('Gasto fijo actualizado ✅' + vincMsg, 'success');
+}
+
 async function togglePagoGF(id) {
   const mesKey = document.getElementById('gf-mes-sel').value || currentYM();
   const gf     = STATE.db.gastosFijos.find(g => g.id === id);
   if (!gf) return;
   if (!gf.pagos) gf.pagos = {};
 
-  const estabaPagado = !!gf.pagos[mesKey];
+  const pagoData     = gf.pagos[mesKey];
+  const estabaPagado = pagoData === true || (pagoData && pagoData.pagado);
 
   if (!estabaPagado) {
-    // Abrir mini-modal para seleccionar billetera
+    // Marcar como pagado — abrir mini-modal para seleccionar billetera
     openModalPagoFijo(id, mesKey);
   } else {
-    // Desmarcar como pagado
+    // ── Desmarcar: eliminar gasto, reintegrar dinero y revertir abono en deuda ──
+    const deudaNombre = gf.deudaId
+      ? (STATE.db.deudas.find(d => d.id === gf.deudaId)?.nombre || 'deuda vinculada')
+      : null;
+    const extraMsg = deudaNombre ? `\nTambién se revertirá el abono en "${deudaNombre}".` : '';
+
+    if (!confirm(`¿Marcar "${gf.nombre}" como pendiente? Se eliminará el gasto registrado y se reintegrará ${fmt(gf.monto)} a la billetera.${extraMsg}`)) return;
+
+    // 1. Buscar el gasto auto-generado (3 estrategias en orden de precisión)
+    let gastoIdx = -1;
+    if (pagoData?.gastoId) {
+      gastoIdx = STATE.db.gastos.findIndex(g => g.id === pagoData.gastoId);
+    }
+    if (gastoIdx === -1) {
+      gastoIdx = STATE.db.gastos.findIndex(g =>
+        g.gastoFijoId === gf.id && g.gastoFijoMes === mesKey
+      );
+    }
+    if (gastoIdx === -1) {
+      const fechaPago = typeof pagoData === 'object' ? pagoData.fecha : null;
+      const billPago  = typeof pagoData === 'object' ? pagoData.billeteraId : null;
+      gastoIdx = STATE.db.gastos.findIndex(g =>
+        g.autoGenerado &&
+        g.desc === ('Gasto fijo: ' + gf.nombre) &&
+        (!fechaPago || g.fecha === fechaPago) &&
+        (!billPago  || g.billeteraId === billPago)
+      );
+    }
+    if (gastoIdx !== -1) STATE.db.gastos.splice(gastoIdx, 1);
+
+    // 2. Revertir abono en deuda vinculada (si existía)
+    let revertioAbono = false;
+    if (pagoData?.abonoDeudaId && pagoData?.deudaId) {
+      const deuda = STATE.db.deudas.find(d => d.id === pagoData.deudaId);
+      if (deuda && deuda.pagos) {
+        const abonoIdx = deuda.pagos.findIndex(p => p.id === pagoData.abonoDeudaId);
+        if (abonoIdx !== -1) {
+          deuda.pagado = Math.max(0, (deuda.pagado || 0) - deuda.pagos[abonoIdx].monto);
+          deuda.pagos.splice(abonoIdx, 1);
+          revertioAbono = true;
+        }
+      }
+    }
+
+    // 3. Resetear estado del pago
     gf.pagos[mesKey] = false;
-    renderGastosFijos();
-    await saveDb(['gastosFijos']);
-    toast('↩️ Marcado como pendiente', 'info');
+
+    renderAll();
+    await saveDb(['gastosFijos', 'gastos', 'deudas']);
+
+    let msg = gastoIdx !== -1
+      ? `↩️ Marcado como pendiente — ${fmt(gf.monto)} reintegrados`
+      : '↩️ Marcado como pendiente';
+    if (revertioAbono) msg += ' · abono en deuda revertido';
+    toast(msg, 'info');
   }
 }
 
@@ -4359,22 +4585,56 @@ async function confirmarPagoFijo(gfId, mesKey, billeteraUsada) {
   const fecha = now.toISOString().slice(0,10);
   const hora  = horaActual();
 
-  gf.pagos[mesKey] = { pagado: true, fecha, hora, billeteraId: billeteraUsada };
+  const gastoId = uid();
+  gf.pagos[mesKey] = { pagado: true, fecha, hora, billeteraId: billeteraUsada, gastoId };
 
-  const billObj = STATE.db.billeteras?.find(b=>b.id===billeteraUsada);
+  const billObj = STATE.db.billeteras?.find(b => b.id === billeteraUsada);
+
+  // ── Registrar gasto (descuenta de billetera) ──
   STATE.db.gastos.push({
-    id: uid(), fecha, hora,
+    id: gastoId, fecha, hora,
     monto: gf.monto,
     desc: 'Gasto fijo: ' + gf.nombre,
     cat: gf.cat || 'Servicios',
     billeteraId: billeteraUsada,
-    autoGenerado: true
+    autoGenerado: true,
+    gastoFijoId: gf.id,
+    gastoFijoMes: mesKey
   });
 
+  // ── Si está vinculado a una deuda, registrar abono automático ──
+  let mensajeDeuda = '';
+  if (gf.deudaId) {
+    const deuda = STATE.db.deudas.find(d => d.id === gf.deudaId);
+    if (deuda) {
+      const falta = Math.max(0, deuda.total - (deuda.pagado || 0));
+      if (falta > 0) {
+        const montoAbono = Math.min(gf.monto, falta); // no abonar más de lo que falta
+        const abonoId    = uid();
+        deuda.pagado = (deuda.pagado || 0) + montoAbono;
+        if (!deuda.pagos) deuda.pagos = [];
+        deuda.pagos.push({
+          id: abonoId,
+          fecha,
+          monto: montoAbono,
+          nota: `Abono automático desde gasto fijo: ${gf.nombre}`,
+          autoGastoFijoId: gf.id,
+          autoGastoFijoMes: mesKey
+        });
+        // Guardar referencia del abono en el registro del pago
+        gf.pagos[mesKey].abonoDeudaId = abonoId;
+        gf.pagos[mesKey].deudaId      = gf.deudaId;
+        mensajeDeuda = ` · 💳 Abono de ${fmt(montoAbono)} aplicado a "${deuda.nombre}"`;
+      } else {
+        mensajeDeuda = ` · ✅ La deuda "${deuda.nombre}" ya estaba saldada`;
+      }
+    }
+  }
+
   renderAll();
-  await saveDb(['gastosFijos','gastos']);
+  await saveDb(['gastosFijos', 'gastos', 'deudas']);
   const dest = billObj ? ` (de ${billObj.nombre})` : '';
-  toast(`✅ Pagado${dest} — ${fmt(gf.monto)} registrado como gasto`, 'success');
+  toast(`✅ Pagado${dest} — ${fmt(gf.monto)}${mensajeDeuda}`, 'success');
 }
 
 async function resetPagosGF() {
@@ -4408,6 +4668,9 @@ function populateGFMesSel() {
 
 function renderGastosFijos() {
   populateGFMesSel();
+  // Poblar selector de deuda en el formulario de nuevo gasto fijo
+  populateGFDeudaSelect('gf-deuda-vinc', '');
+
   const mesKey  = document.getElementById('gf-mes-sel').value || currentYM();
   const list    = STATE.db.gastosFijos;
   const grid    = document.getElementById('gf-grid');
@@ -4484,14 +4747,25 @@ function renderGastosFijos() {
       diasStr = `<span class="dias-badge dias-ok">Día ${g.dia}</span>`;
     }
 
+    const deudaVinc = g.deudaId
+      ? STATE.db.deudas.find(d => d.id === g.deudaId)
+      : null;
+    const deudaBadge = deudaVinc
+      ? `<div style="margin-top:6px;"><span class="badge badge-blue" style="font-size:.7rem;">🔗 ${deudaVinc.nombre} — pend. ${fmt(Math.max(0, deudaVinc.total - (deudaVinc.pagado||0)))}</span></div>`
+      : '';
+
     return `
     <div class="gf-card" style="${pagado ? 'opacity:.7;' : ''}">
       <div class="gf-card-top">
         <div>
           <div class="gf-nombre">${CAT_ICONS[g.cat]||'📌'} ${g.nombre}</div>
           <div class="gf-cat">${g.cat}${g.notas ? ' · ' + g.notas : ''}</div>
+          ${deudaBadge}
         </div>
-        <button class="btn btn-danger btn-sm" style="padding:4px 8px" onclick="deleteGastoFijo('${g.id}')">🗑️</button>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-ghost btn-sm" style="padding:4px 8px" onclick="openEditGastoFijo('${g.id}')" title="Editar">✏️</button>
+          <button class="btn btn-danger btn-sm" style="padding:4px 8px" onclick="deleteGastoFijo('${g.id}')">🗑️</button>
+        </div>
       </div>
       <div class="gf-monto" style="color:${pagado?'var(--green)':'var(--text)'}">${fmt(g.monto)}</div>
       <div class="gf-info">
