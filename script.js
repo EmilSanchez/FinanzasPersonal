@@ -108,27 +108,24 @@ const _dirtyCollections = new Set();
 function markDirty(col) { _dirtyCollections.add(col); }
 
 async function saveDb(coleccionesEspecificas = null) {
-  // 1. Guardar en localStorage siempre (instantáneo)
+  if (!estaConectado()) { mostrarAvisoSinConexion(); return false; }
+
   localStorage.setItem('finanzas_pro_v2', JSON.stringify(STATE.db));
   showSavingDot();
 
-  // 2. Sincronizar con Firebase
-  if (window.__FB && window.__FB.ready) {
-    try {
-      // Si se especifican colecciones, solo guardar esas (más rápido)
-      // Si no, guardar todas
-      const toSave = coleccionesEspecificas ||
-        ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras','transferencias'];
+  try {
+    const toSave = coleccionesEspecificas ||
+      ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras','transferencias'];
 
-      await Promise.all(
-        toSave.map(col => window.__FB.saveCollection(col, STATE.db[col] || []))
-      );
-    } catch (err) {
-      console.error('Error guardando en Firebase:', err);
-      // No mostrar toast en cada operación para no molestar
-      // Solo mostrar si el usuario lo nota
-      console.warn('Datos guardados localmente como respaldo');
-    }
+    await Promise.all(
+      toSave.map(col => window.__FB.saveCollection(col, STATE.db[col] || []))
+    );
+    showSaveSuccess();
+    return true;
+  } catch (err) {
+    console.error('Error guardando en Firebase:', err);
+    showSaveError(err);
+    return false;
   }
 }
 
@@ -151,8 +148,120 @@ function showSavingDot() {
   }, 800);
 }
 
+// ── Feedback visual de guardado exitoso ──
+function showSaveSuccess() {
+  const dot   = document.getElementById('fb-badge-dot');
+  const txt   = document.getElementById('fb-badge-txt');
+  const badge = document.getElementById('fb-badge-topbar');
+  if (!badge) return;
+  clearTimeout(_saveTimer);
+  badge.style.display = 'flex';
+  if (dot) dot.style.background = '#059669';
+  if (txt) txt.textContent = '✓ Guardado';
+  _saveTimer = setTimeout(() => { badge.style.display = 'none'; }, 2500);
+}
+
+// ── Alerta de error al guardar en Firebase ──
+let _saveErrorTimer = null;
+function showSaveError(err) {
+  const dot   = document.getElementById('fb-badge-dot');
+  const txt   = document.getElementById('fb-badge-txt');
+  const badge = document.getElementById('fb-badge-topbar');
+  if (badge) {
+    clearTimeout(_saveTimer);
+    badge.style.display = 'flex';
+    if (dot) dot.style.background = '#ef4444';
+    if (txt) txt.textContent = '✕ Error al guardar';
+  }
+
+  // Toast con mensaje claro
+  const esRed = err && (err.message?.includes('network') || err.code === 'unavailable' || err.message?.includes('Failed to fetch'));
+  const msg = esRed
+    ? '⚠️ Sin conexión — el dato se guardó localmente y se sincronizará cuando vuelva internet.'
+    : '❌ No se pudo guardar en la nube. Revisa tu conexión e intenta de nuevo.';
+  toast(msg, 'error');
+
+  // Resetear badge después de 4 segundos
+  clearTimeout(_saveErrorTimer);
+  _saveErrorTimer = setTimeout(() => {
+    if (badge) badge.style.display = 'none';
+  }, 4000);
+}
+
+// ── Verificar conexión antes de cualquier escritura ──
+function estaConectado() {
+  return window.__FB && window.__FB.ready && window.__fbAuthReady === true;
+}
+
+function mostrarAvisoSinConexion() {
+  // Quitar aviso anterior si existe
+  const existing = document.getElementById('offline-block-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'offline-block-modal';
+  modal.style.cssText = `
+    position:fixed;inset:0;z-index:99999;
+    background:rgba(0,0,0,0.6);
+    display:flex;align-items:center;justify-content:center;
+    padding:20px;
+  `;
+  modal.innerHTML = \`
+    <div style="
+      background:#1e293b;border-radius:16px;padding:32px 28px;
+      max-width:380px;width:100%;text-align:center;
+      box-shadow:0 20px 60px rgba(0,0,0,0.5);
+      border:1px solid #334155;
+    ">
+      <div style="font-size:2.8rem;margin-bottom:12px;">📡</div>
+      <h2 style="color:#f8fafc;font-size:1.2rem;margin-bottom:10px;">Sin conexión</h2>
+      <p style="color:#94a3b8;font-size:.9rem;line-height:1.6;margin-bottom:24px;">
+        No hay conexión con la nube en este momento.<br>
+        <strong style="color:#f8fafc;">No puedes hacer cambios</strong> hasta que se restablezca la conexión para evitar pérdida de datos.
+      </p>
+      <div style="display:flex;gap:10px;justify-content:center;">
+        <button onclick="intentarReconectar()" style="
+          background:#3b82f6;color:white;border:none;
+          padding:10px 20px;border-radius:8px;
+          font-size:.9rem;font-weight:600;cursor:pointer;
+        ">🔄 Reintentar</button>
+        <button onclick="document.getElementById('offline-block-modal').remove()" style="
+          background:#334155;color:#94a3b8;border:none;
+          padding:10px 20px;border-radius:8px;
+          font-size:.9rem;cursor:pointer;
+        ">Cerrar</button>
+      </div>
+    </div>
+  \`;
+  document.body.appendChild(modal);
+}
+
+async function intentarReconectar() {
+  const modal = document.getElementById('offline-block-modal');
+  if (modal) {
+    modal.querySelector('h2').textContent = 'Reconectando...';
+    modal.querySelector('p').textContent = 'Verificando conexión con Firebase...';
+    modal.querySelector('button').disabled = true;
+  }
+  // Esperar un momento y verificar
+  await new Promise(r => setTimeout(r, 1500));
+  if (estaConectado()) {
+    if (modal) modal.remove();
+    toast('✅ Conexión restablecida', 'success');
+    updateFbStatus(true);
+  } else {
+    if (modal) {
+      modal.querySelector('h2').textContent = 'Sin conexión';
+      modal.querySelector('p').innerHTML = 'Sigue sin conexión con la nube.<br><strong style="color:#f8fafc;">No puedes hacer cambios</strong> hasta que se restablezca.';
+      modal.querySelector('button').disabled = false;
+    }
+  }
+}
+
 // ── Guardar un solo item de una colección (más rápido que batch) ──
 async function saveItem(colName, item) {
+  if (!estaConectado()) { mostrarAvisoSinConexion(); return false; }
+
   // Actualizar STATE primero (UI inmediata)
   const arr = STATE.db[colName] || [];
   const idx = arr.findIndex(i => i.id === item.id);
@@ -161,23 +270,45 @@ async function saveItem(colName, item) {
 
   // Guardar localStorage
   localStorage.setItem('finanzas_pro_v2', JSON.stringify(STATE.db));
+  showSavingDot();
 
-  // Guardar en Firebase (en background)
-  if (window.__FB && window.__FB.ready) {
-    window.__FB.save(colName, item).catch(err =>
-      console.error('Firebase saveItem error:', err)
-    );
+  // Guardar en Firebase
+  try {
+    await window.__FB.save(colName, item);
+    showSaveSuccess();
+    return true;
+  } catch(err) {
+    // Revertir el cambio en STATE si Firebase falló
+    if (arr.findIndex(i => i.id === item.id) !== -1) {
+      STATE.db[colName] = arr.filter(i => i.id !== item.id);
+      localStorage.setItem('finanzas_pro_v2', JSON.stringify(STATE.db));
+    }
+    console.error('Firebase saveItem error:', err);
+    showSaveError(err);
+    return false;
   }
 }
 
 // ── Eliminar un item de una colección ──
 async function deleteItem(colName, id) {
-  STATE.db[colName] = (STATE.db[colName] || []).filter(i => i.id !== id);
+  if (!estaConectado()) { mostrarAvisoSinConexion(); return false; }
+
+  const backup = [...(STATE.db[colName] || [])];
+  STATE.db[colName] = backup.filter(i => i.id !== id);
   localStorage.setItem('finanzas_pro_v2', JSON.stringify(STATE.db));
-  if (window.__FB && window.__FB.ready) {
-    window.__FB.remove(colName, id).catch(err =>
-      console.error('Firebase deleteItem error:', err)
-    );
+  showSavingDot();
+
+  try {
+    await window.__FB.remove(colName, id);
+    showSaveSuccess();
+    return true;
+  } catch(err) {
+    // Revertir si Firebase falló
+    STATE.db[colName] = backup;
+    localStorage.setItem('finanzas_pro_v2', JSON.stringify(STATE.db));
+    console.error('Firebase deleteItem error:', err);
+    showSaveError(err);
+    return false;
   }
 }
 
@@ -218,7 +349,9 @@ function inputTimeToHora(val) {
 function convertirHora(horaStr) {
   if (!horaStr) return 0;
   try {
-    const match = horaStr.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+    // Normalizar formato colombiano: "05:34 a. m." -> "05:34 AM"
+    const normalizado = horaStr.replace(/a\.\s*m\./i, 'AM').replace(/p\.\s*m\./i, 'PM');
+    const match = normalizado.match(/(\d+):(\d+)\s*(AM|PM)?/i);
     if (!match) return 0;
     let h = parseInt(match[1]);
     const m = parseInt(match[2]);
