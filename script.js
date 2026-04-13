@@ -302,10 +302,6 @@ function updatePinDots() {
 function pinSubmit() {
   const saved = localStorage.getItem('fp_pin') || '1234';
   if (pinBuffer === saved) {
-    // Activar cifrado AES con el PIN validado
-    if (window.__FB && window.__FB.setCipherKey) {
-      window.__FB.setCipherKey(pinBuffer);
-    }
     document.getElementById('lock-screen').classList.add('hidden');
     const app = document.getElementById('app');
     app.classList.add('visible');

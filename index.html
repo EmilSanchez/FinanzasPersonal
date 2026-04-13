@@ -13,8 +13,6 @@
   @example Correct syntax: <link rel="stylesheet" href="style.css">
 -->
 <link rel="stylesheet" href="style.css">
-<!-- CryptoJS para cifrado AES de datos en Firestore -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 
 <!-- ═══════════ FIREBASE SDK ═══════════ -->
 <script type="module">
@@ -74,42 +72,12 @@
     } catch { return null; }
   };
 
-  // ── Clave de cifrado AES (derivada del PIN en runtime) ──
-  // Se establece desde script.js al validar el PIN con window.__FB.setCipherKey(pin)
-  let _cipherKey = null;
-  window.__FB.setCipherKey = function(pin) { _cipherKey = 'FP_' + pin + '_SEC'; };
-
-  function _encrypt(obj) {
-    if (!_cipherKey || typeof CryptoJS === 'undefined') return obj;
-    try {
-      const json = JSON.stringify(obj);
-      const enc  = CryptoJS.AES.encrypt(json, _cipherKey).toString();
-      return { _enc: enc };
-    } catch(e) { return obj; }
-  }
-
-  function _decrypt(data) {
-    if (!data || !data._enc || typeof CryptoJS === 'undefined') return data;
-    try {
-      const bytes = CryptoJS.AES.decrypt(data._enc, _cipherKey);
-      return JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
-    } catch(e) { return data; }
-  }
-
   // ── Cargar todos los datos al inicio ──
   window.__FB.loadAll = async function() {
     const result = {};
     for (const col of COLLECTIONS) {
       const snap = await getDocs(collection(db_firebase, col));
-      result[col] = snap.docs.map(d => {
-        const raw = { id: d.id, ...d.data() };
-        // Si está cifrado, descifrar; si no (datos legacy), usar tal cual
-        if (raw._enc) {
-          const dec = _decrypt(raw);
-          return dec ? { id: d.id, ...dec } : raw;
-        }
-        return raw;
-      });
+      result[col] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     }
     return result;
   };
@@ -117,9 +85,7 @@
   // ── Guardar un documento (upsert) ──
   window.__FB.save = async function(colName, item) {
     if (!item.id) item.id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-    const { id, ...rest } = item;
-    const payload = _cipherKey ? { ..._encrypt(rest), id } : item;
-    await setDoc(doc(db_firebase, colName, id), payload);
+    await setDoc(doc(db_firebase, colName, item.id), item);
     return item;
   };
 
@@ -131,17 +97,13 @@
   // ── Guardar array completo de una colección (batch) ──
   window.__FB.saveCollection = async function(colName, items) {
     const batch = writeBatch(db_firebase);
-    // Primero borramos los que ya no están
     const snap = await getDocs(collection(db_firebase, colName));
     snap.docs.forEach(d => {
       if (!items.find(i => i.id === d.id)) batch.delete(d.ref);
     });
-    // Luego upsert de todos (cifrados si hay clave)
     items.forEach(item => {
       if (!item.id) item.id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-      const { id, ...rest } = item;
-      const payload = _cipherKey ? { ..._encrypt(rest), id } : item;
-      batch.set(doc(db_firebase, colName, id), payload);
+      batch.set(doc(db_firebase, colName, item.id), item);
     });
     await batch.commit();
   };
