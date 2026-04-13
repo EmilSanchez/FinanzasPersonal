@@ -642,7 +642,7 @@ canvas { max-width: 100%; display: block; }
 @media (max-width: 960px) { .det-grid { grid-template-columns: 1fr; } }
 
 /* ── Billeteras ── */
-.bill-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 14px; margin-bottom: 20px; }
+.bill-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap: 14px; margin-bottom: 20px; }
 .bill-card {
   background: var(--card); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 18px 20px;
@@ -651,12 +651,15 @@ canvas { max-width: 100%; display: block; }
   position: relative; overflow: hidden;
   transition: transform var(--transition), box-shadow var(--transition);
   border-top: 3px solid currentColor;
+  min-width: 0;
 }
 .bill-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
 .bill-icon { font-size: 1.8rem; line-height: 1; margin-bottom: 2px; }
 .bill-nombre { font-weight: 700; font-size: .95rem; color: var(--text); }
 .bill-saldo { font-size: 1.3rem; font-weight: 700; font-family: var(--font-head); }
-.bill-actions { display: flex; gap: 6px; margin-top: 4px; }
+.bill-actions { display: flex; gap: 4px; margin-top: 4px; flex-wrap: nowrap; align-items: center; }
+.bill-actions .btn { flex-shrink: 0; padding: 5px 8px; min-width: 0; }
+.bill-actions .btn:first-child { flex: 1; justify-content: center; min-width: 60px; }
 .bill-total-bar { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; box-shadow: var(--shadow); }
 
 /* ============================================================

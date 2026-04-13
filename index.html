@@ -13,6 +13,8 @@
   @example Correct syntax: <link rel="stylesheet" href="style.css">
 -->
 <link rel="stylesheet" href="style.css">
+<!-- CryptoJS para cifrado AES de datos en Firestore -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 
 <!-- ═══════════ FIREBASE SDK ═══════════ -->
 <script type="module">
@@ -47,7 +49,7 @@
   });
 
   // ── Colecciones en Firestore ──
-  const COLLECTIONS = ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras'];
+  const COLLECTIONS = ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras','transferencias'];
 
   // ── Exponer al scope global para que el resto del JS lo use ──
   window.__FB = {
@@ -72,12 +74,42 @@
     } catch { return null; }
   };
 
+  // ── Clave de cifrado AES (derivada del PIN en runtime) ──
+  // Se establece desde script.js al validar el PIN con window.__FB.setCipherKey(pin)
+  let _cipherKey = null;
+  window.__FB.setCipherKey = function(pin) { _cipherKey = 'FP_' + pin + '_SEC'; };
+
+  function _encrypt(obj) {
+    if (!_cipherKey || typeof CryptoJS === 'undefined') return obj;
+    try {
+      const json = JSON.stringify(obj);
+      const enc  = CryptoJS.AES.encrypt(json, _cipherKey).toString();
+      return { _enc: enc };
+    } catch(e) { return obj; }
+  }
+
+  function _decrypt(data) {
+    if (!data || !data._enc || typeof CryptoJS === 'undefined') return data;
+    try {
+      const bytes = CryptoJS.AES.decrypt(data._enc, _cipherKey);
+      return JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
+    } catch(e) { return data; }
+  }
+
   // ── Cargar todos los datos al inicio ──
   window.__FB.loadAll = async function() {
     const result = {};
     for (const col of COLLECTIONS) {
       const snap = await getDocs(collection(db_firebase, col));
-      result[col] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      result[col] = snap.docs.map(d => {
+        const raw = { id: d.id, ...d.data() };
+        // Si está cifrado, descifrar; si no (datos legacy), usar tal cual
+        if (raw._enc) {
+          const dec = _decrypt(raw);
+          return dec ? { id: d.id, ...dec } : raw;
+        }
+        return raw;
+      });
     }
     return result;
   };
@@ -85,7 +117,9 @@
   // ── Guardar un documento (upsert) ──
   window.__FB.save = async function(colName, item) {
     if (!item.id) item.id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-    await setDoc(doc(db_firebase, colName, item.id), item);
+    const { id, ...rest } = item;
+    const payload = _cipherKey ? { ..._encrypt(rest), id } : item;
+    await setDoc(doc(db_firebase, colName, id), payload);
     return item;
   };
 
@@ -102,10 +136,12 @@
     snap.docs.forEach(d => {
       if (!items.find(i => i.id === d.id)) batch.delete(d.ref);
     });
-    // Luego upsert de todos
+    // Luego upsert de todos (cifrados si hay clave)
     items.forEach(item => {
       if (!item.id) item.id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-      batch.set(doc(db_firebase, colName, item.id), item);
+      const { id, ...rest } = item;
+      const payload = _cipherKey ? { ..._encrypt(rest), id } : item;
+      batch.set(doc(db_firebase, colName, id), payload);
     });
     await batch.commit();
   };
@@ -146,7 +182,7 @@
      ============================================================ -->
 <div id="lock-screen">
   <div class="lock-card">
-    <span class="lock-icon">💳</span>
+    <span class="lock-icon svg-icon" style="font-size:2.5rem;display:block;text-align:center"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span>
     <h1>Finanzas PRO</h1>
     <p>Ingresa tu PIN para continuar</p>
     <div class="pin-dots">
@@ -183,66 +219,66 @@
 
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
-      <h2>💰 Finanzas PRO</h2>
+      <h2><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M9 9h6a1 1 0 0 1 0 3H9a1 1 0 0 0 0 3h6"/></svg>Finanzas PRO</h2>
       <span id="sidebar-date"></span>
     </div>
     <ul class="nav-list">
       <li class="nav-item">
         <button class="nav-btn active" onclick="navigate('dashboard')" data-page="dashboard">
-          <span class="nav-icon">📊</span> Dashboard
+          <span class="nav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></svg></span> Dashboard
         </button>
       </li>
       <li class="nav-item">
         <button class="nav-btn" onclick="navigate('ingresos')" data-page="ingresos">
-          <span class="nav-icon">💵</span> Ingresos
+          <span class="nav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="22" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M17 12h.01M7 12h.01"/></svg></span> Ingresos
         </button>
       </li>
       <li class="nav-item">
         <button class="nav-btn" onclick="navigate('gastos')" data-page="gastos">
-          <span class="nav-icon">💸</span> Gastos
+          <span class="nav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span> Gastos
         </button>
       </li>
       <li class="nav-item">
         <button class="nav-btn" onclick="navigate('deudas')" data-page="deudas">
-          <span class="nav-icon">📉</span> Deudas
+          <span class="nav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg></span> Deudas
         </button>
       </li>
       <li class="nav-item">
         <button class="nav-btn" onclick="navigate('prestamos')" data-page="prestamos">
-          <span class="nav-icon">🤝</span> Préstamos
+          <span class="nav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></span> Préstamos
         </button>
       </li>
       <li class="nav-item">
         <button class="nav-btn" onclick="navigate('fijos')" data-page="fijos">
-          <span class="nav-icon">🗓️</span> Gastos Fijos
+          <span class="nav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span> Gastos Fijos
         </button>
       </li>
       <li class="nav-item">
         <button class="nav-btn" onclick="navigate('inversiones')" data-page="inversiones">
-          <span class="nav-icon">📈</span> Inversiones
+          <span class="nav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span> Inversiones
         </button>
       </li>
       <li class="nav-item">
         <button class="nav-btn" onclick="navigate('billeteras')" data-page="billeteras">
-          <span class="nav-icon">👛</span> Billeteras
+          <span class="nav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><circle cx="16" cy="13" r="1"/></svg></span> Billeteras
         </button>
       </li>
       <li class="nav-item">
         <button class="nav-btn" onclick="navigate('reportes')" data-page="reportes">
-          <span class="nav-icon">📊</span> Reportes
+          <span class="nav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></svg></span> Reportes
         </button>
       </li>
       <li class="nav-item">
         <button class="nav-btn" onclick="navigate('claves')" data-page="claves">
-          <span class="nav-icon">🔐</span> Contraseñas
+          <span class="nav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span> Contraseñas
         </button>
       </li>
     </ul>
     <div class="sidebar-bottom">
-      <button onclick="showChangePinModal()">⚙️ Cambiar PIN</button>
-      <button onclick="exportData()">📤 Exportar backup</button>
-      <button onclick="importBackup()">📥 Importar backup</button>
-      <button class="danger" onclick="confirmDeleteAll()">🗑️ Borrar todo</button>
+      <button onclick="showChangePinModal()"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:5px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Cambiar PIN</button>
+      <button onclick="exportData()"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:5px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Exportar backup</button>
+      <button onclick="importBackup()"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:5px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Importar backup</button>
+      <button class="danger" onclick="confirmDeleteAll()"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:5px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg> Borrar todo</button>
     </div>
   </aside>
 
@@ -251,7 +287,7 @@
     <div class="topbar">
       <div style="display:flex;align-items:center;gap:10px;">
         <div class="sidebar-brand-mobile">
-          <span style="font-size:1rem;font-weight:700;color:var(--accent)">💰</span>
+          <span style="font-size:1rem;font-weight:700;color:var(--accent)"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M9 9h6a1 1 0 0 1 0 3H9a1 1 0 0 0 0 3h6"/></svg></span>
         </div>
         <h3 id="topbar-title">Dashboard</h3>
       </div>
@@ -262,7 +298,7 @@
           <span id="fb-badge-dot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;"></span>
           <span id="fb-badge-txt">Firebase</span>
         </div>
-        <button class="btn btn-ghost btn-sm" onclick="lockApp()">🔒 <span class="topbar-lock-text">Bloquear</span></button>
+        <button class="btn btn-ghost btn-sm" onclick="lockApp()"><span class="topbar-lock-text">Bloquear</span></button>
       </div>
     </div>
 
@@ -274,12 +310,12 @@
       <!-- ═══ BALANCE PRINCIPAL — Siempre visible ═══ -->
       <div class="dash-balance-hero">
         <div class="dash-balance-left">
-          <div class="dash-balance-label">💰 Total en billeteras</div>
+          <div class="dash-balance-label">Total en billeteras</div>
           <div class="dash-balance-amount" id="d-balance">$0</div>
           <div class="dash-balance-sub" id="d-balance-sub"></div>
         </div>
         <button class="dash-eye-btn" id="dash-eye-btn" onclick="toggleDashDetails()" title="Mostrar / ocultar detalles">
-          <span id="dash-eye-icon">👁️</span>
+          <span id="dash-eye-icon">&#128065;</span>
           <span id="dash-eye-label">Ver detalle</span>
         </button>
       </div>
@@ -288,7 +324,7 @@
       <div id="dash-detail-cards" style="display:none;">
         <div class="stats-grid" style="margin-bottom:16px;">
           <div class="stat-card green">
-            <div class="stat-icon-box"><span>📈</span></div>
+            <div class="stat-icon-box"><span style="font-size:.9rem">↑</span></div>
             <div class="stat-body">
               <div class="stat-label">Ingresos del mes</div>
               <div class="stat-value" id="d-ing">$0</div>
@@ -296,7 +332,7 @@
             </div>
           </div>
           <div class="stat-card red">
-            <div class="stat-icon-box"><span>📉</span></div>
+            <div class="stat-icon-box"><span style="font-size:.9rem">↓</span></div>
             <div class="stat-body">
               <div class="stat-label">Gastos del mes</div>
               <div class="stat-value" id="d-gas">$0</div>
@@ -304,7 +340,7 @@
             </div>
           </div>
           <div class="stat-card yellow">
-            <div class="stat-icon-box"><span>⚠️</span></div>
+            <div class="stat-icon-box"><span style="font-size:.9rem">!</span></div>
             <div class="stat-body">
               <div class="stat-label">Deudas pendientes</div>
               <div class="stat-value" id="d-deu">$0</div>
@@ -320,7 +356,7 @@
       <!-- Últimas transacciones -->
       <div class="section">
         <div class="section-header">
-          <span class="section-title">📋 Últimas transacciones</span>
+          <span class="section-title">Últimas transacciones</span>
           <button class="btn btn-ghost btn-sm" onclick="navigate('reportes')">Ver reportes →</button>
         </div>
         <div id="dash-recent"></div>
@@ -333,7 +369,7 @@
       <p class="page-sub">Registra y controla tus fuentes de ingreso</p>
 
       <div class="section">
-        <div class="section-title" style="margin-bottom:16px;" id="ing-form-title">➕ Nuevo ingreso</div>
+        <div class="section-title" style="margin-bottom:16px;" id="ing-form-title">Nuevo ingreso</div>
         <div class="form-grid">
           <div class="form-group">
             <label>Fecha *</label>
@@ -359,19 +395,19 @@
             </select>
           </div>
           <div class="form-group">
-            <label>💳 Entra a</label>
+            <label>Entra a</label>
             <select class="form-control" id="i-billetera">
               <option value="">Sin asignar</option>
             </select>
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-success" onclick="saveIngreso()">💾 Guardar ingreso</button>
-          <button class="btn btn-ghost" id="ing-cancel-btn" style="display:none" onclick="cancelEditIngreso()">✕ Cancelar</button>
+          <button class="btn btn-success" onclick="saveIngreso()">Guardar ingreso</button>
+          <button class="btn btn-ghost" id="ing-cancel-btn" style="display:none" onclick="cancelEditIngreso()">Cancelar</button>
         </div>
         <!-- Campo hora: solo visible al editar -->
         <div class="form-group" id="i-hora-edit-group" style="display:none;margin-top:10px;max-width:220px;">
-          <label>🕐 Hora del ingreso</label>
+          <label>Hora del ingreso</label>
           <input type="time" class="form-control" id="i-hora-edit" style="font-family:var(--font-mono)">
           <small style="color:var(--muted);font-size:.72rem">Ajusta la hora si es necesario</small>
         </div>
@@ -381,7 +417,7 @@
       <!-- Filtros -->
       <div class="section">
         <div class="section-header">
-          <span class="section-title">📋 Mis ingresos</span>
+          <span class="section-title">Mis ingresos</span>
           <div class="filter-bar">
             <select class="form-control" id="i-filter-month" style="width:auto" onchange="onIngFilterChange()">
               <option value="">Todos los meses</option>
@@ -390,7 +426,7 @@
               <option value="">Todos los días</option>
             </select>
             <input type="text" class="form-control" id="i-filter-search"
-              style="width:auto;min-width:130px" placeholder="🔍 Buscar..."
+              style="width:auto;min-width:130px" placeholder="Buscar..."
               oninput="renderIngresos()">
             <button class="btn btn-ghost btn-sm" onclick="clearIngFilters()" title="Limpiar filtros">✕</button>
           </div>
@@ -407,7 +443,7 @@
           </table>
         </div>
         <div id="ing-empty" class="empty-state" style="display:none">
-          <div class="empty-icon">💵</div>
+          <div class="empty-icon" style="font-size:2rem;font-weight:300;color:var(--border)">$</div>
           <p>No hay ingresos registrados aún.<br>¡Agrega tu primer ingreso!</p>
         </div>
       </div>
@@ -419,7 +455,7 @@
       <p class="page-sub">Controla tus egresos y analiza en qué gastas más</p>
 
       <div class="section">
-        <div class="section-title" style="margin-bottom:16px;" id="gas-form-title">➕ Nuevo gasto</div>
+        <div class="section-title" style="margin-bottom:16px;" id="gas-form-title">Nuevo gasto</div>
         <div class="form-grid">
           <div class="form-group">
             <label>Fecha *</label>
@@ -449,19 +485,19 @@
             </select>
           </div>
           <div class="form-group">
-            <label>💳 Sale de *</label>
+            <label>Sale de *</label>
             <select class="form-control" id="g-billetera">
               <option value="">— Selecciona billetera (obligatorio) —</option>
             </select>
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-primary" onclick="saveGasto()">💾 Guardar gasto</button>
-          <button class="btn btn-ghost" id="gas-cancel-btn" style="display:none" onclick="cancelEditGasto()">✕ Cancelar</button>
+          <button class="btn btn-primary" onclick="saveGasto()">Guardar gasto</button>
+          <button class="btn btn-ghost" id="gas-cancel-btn" style="display:none" onclick="cancelEditGasto()">Cancelar</button>
         </div>
         <!-- Campo hora: solo visible al editar -->
         <div class="form-group" id="g-hora-edit-group" style="display:none;margin-top:10px;max-width:220px;">
-          <label>🕐 Hora del gasto</label>
+          <label>Hora del gasto</label>
           <input type="time" class="form-control" id="g-hora-edit" style="font-family:var(--font-mono)">
           <small style="color:var(--muted);font-size:.72rem">Ajusta la hora si es necesario</small>
         </div>
@@ -472,7 +508,7 @@
       <!-- Análisis por categoría (ocultable) -->
       <div class="section" id="gas-analysis-wrapper" style="margin-bottom:20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:4px 0;" onclick="toggleAnalisisCat()">
-          <span class="section-title">📊 Análisis por categoría</span>
+          <span class="section-title">Análisis por categoría</span>
           <button class="btn btn-ghost btn-sm" id="btn-toggle-cat">▼ Ver análisis</button>
         </div>
         <div id="gas-analysis" style="display:none;margin-top:14px;"></div>
@@ -481,7 +517,7 @@
       <!-- Lista -->
       <div class="section">
         <div class="section-header">
-          <span class="section-title">📋 Mis gastos</span>
+          <span class="section-title">Mis gastos</span>
           <div class="filter-bar">
             <select class="form-control" id="g-filter-month" style="width:auto" onchange="onGasFilterChange()">
               <option value="">Todos los meses</option>
@@ -493,7 +529,7 @@
               <option value="">Todas las categorías</option>
             </select>
             <input type="text" class="form-control" id="g-filter-search"
-              style="width:auto;min-width:130px" placeholder="🔍 Buscar..."
+              style="width:auto;min-width:130px" placeholder="Buscar..."
               oninput="renderGastos()">
             <button class="btn btn-ghost btn-sm" onclick="clearGasFilters()" title="Limpiar filtros">✕</button>
           </div>
@@ -510,7 +546,7 @@
           </table>
         </div>
         <div id="gas-empty" class="empty-state" style="display:none">
-          <div class="empty-icon">💸</div>
+          <div class="empty-icon" style="font-size:2rem;font-weight:300;color:var(--border)">&#8595;$</div>
           <p>No hay gastos registrados aún.</p>
         </div>
       </div>
@@ -522,13 +558,13 @@
       <p class="page-sub">Crea cronogramas de pago y rastrea el progreso de cada deuda</p>
 
       <div class="section">
-        <div class="section-title" style="margin-bottom:16px;">➕ Nueva deuda</div>
+        <div class="section-title" style="margin-bottom:16px;">Nueva deuda</div>
         <div class="form-grid">
           <div class="form-group">
             <label>Tipo de deuda *</label>
             <select class="form-control" id="d-tipo" onchange="onDeudaTipoChange()">
-              <option value="compra">🛒 Compra a crédito</option>
-              <option value="prestamo">💵 Préstamo de dinero recibido</option>
+              <option value="compra">Compra a crédito</option>
+              <option value="prestamo">Préstamo de dinero recibido</option>
             </select>
           </div>
           <div class="form-group">
@@ -556,7 +592,7 @@
             <input type="number" class="form-control" id="d-interes" placeholder="0" step="0.01">
           </div>
           <div class="form-group" id="d-billetera-group" style="display:none">
-            <label>💳 Dinero recibido en (billetera)</label>
+            <label>Dinero recibido en (billetera)</label>
             <select class="form-control" id="d-billetera">
               <option value="">Sin asignar</option>
             </select>
@@ -564,14 +600,14 @@
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-primary" onclick="saveDeuda()">💾 Crear deuda</button>
+          <button class="btn btn-primary" onclick="saveDeuda()">Crear deuda</button>
         </div>
       </div>
 
       <!-- Lista deudas -->
       <div id="deudas-lista"></div>
       <div id="deudas-empty" class="empty-state" style="display:none">
-        <div class="empty-icon">📉</div>
+        <div class="empty-icon" style="font-size:2rem;font-weight:300;color:var(--border)">&#8595;</div>
         <p>Sin deudas registradas. ¡Excelente!</p>
       </div>
     </div>
@@ -584,7 +620,7 @@
       <!-- Resumen rápido -->
       <div class="stats-grid" id="prest-stats-grid">
         <div class="stat-card blue">
-          <div class="stat-icon-box"><span>🤝</span></div>
+          <div class="stat-icon-box"><span style="font-size:.9rem">&#x2194;</span></div>
           <div class="stat-body">
             <div class="stat-label">Total prestado</div>
             <div class="stat-value" id="prest-total-val">$0</div>
@@ -592,7 +628,7 @@
           </div>
         </div>
         <div class="stat-card green">
-          <div class="stat-icon-box"><span>✅</span></div>
+          <div class="stat-icon-box"><span style="font-size:.9rem">✓</span></div>
           <div class="stat-body">
             <div class="stat-label">Total recuperado</div>
             <div class="stat-value" id="prest-cobrado-val">$0</div>
@@ -600,7 +636,7 @@
           </div>
         </div>
         <div class="stat-card red">
-          <div class="stat-icon-box"><span>⏳</span></div>
+          <div class="stat-icon-box"><span style="font-size:.9rem">…</span></div>
           <div class="stat-body">
             <div class="stat-label">Por cobrar</div>
             <div class="stat-value" id="prest-pendiente-val">$0</div>
@@ -610,8 +646,10 @@
       </div>
 
       <div class="section">
-        <div class="section-title" style="margin-bottom:16px;">➕ Nuevo préstamo</div>
-        <div class="form-grid">
+        <div class="section-title" style="margin-bottom:16px;">Nuevo préstamo</div>
+
+        <!-- Fila 1: Deudor + Contacto + Billetera -->
+        <div class="form-grid" style="grid-template-columns:2fr 1fr 1fr;margin-bottom:0;">
           <div class="form-group">
             <label>Nombre del deudor *</label>
             <input type="text" class="form-control" id="pr-nombre" placeholder="Nombre completo">
@@ -620,6 +658,16 @@
             <label>Teléfono / Contacto</label>
             <input type="text" class="form-control" id="pr-contacto" placeholder="Ej: 300 123 4567">
           </div>
+          <div class="form-group">
+            <label>Sale de billetera *</label>
+            <select class="form-control" id="pr-billetera">
+              <option value="">— Selecciona billetera —</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Fila 2: Monto + Fecha préstamo + Fecha cobro + Interés -->
+        <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr 1fr;margin-bottom:0;">
           <div class="form-group">
             <label>Monto prestado *</label>
             <input type="number" class="form-control" id="pr-monto" placeholder="0">
@@ -636,27 +684,23 @@
             <label>Interés % (si aplica)</label>
             <input type="number" class="form-control" id="pr-interes" placeholder="0" step="0.1">
           </div>
-          <div class="form-group">
-          <label>💳 Sale de billetera *</label>
-          <select class="form-control" id="pr-billetera">
-            <option value="">— Selecciona billetera —</option>
-          </select>
-          <small style="color:var(--muted);font-size:.72rem">El monto se descontará de esta billetera</small>
-          </div>
-          <div class="form-group" style="grid-column:1/-1">
-            <label>Descripción / Motivo</label>
-            <input type="text" class="form-control" id="pr-desc" placeholder="Ej: Préstamo personal, mercancía...">
-          </div>
         </div>
+
+        <!-- Fila 3: Descripción -->
+        <div class="form-group" style="margin-bottom:16px;">
+          <label>Descripción / Motivo</label>
+          <input type="text" class="form-control" id="pr-desc" placeholder="Ej: Préstamo personal, mercancía...">
+        </div>
+
         <div class="form-actions">
-          <button class="btn btn-primary" onclick="savePrestamo()">💾 Registrar préstamo</button>
+          <button class="btn btn-primary" onclick="savePrestamo()">Registrar préstamo</button>
         </div>
       </div>
 
       <!-- Lista -->
       <div id="prestamos-lista"></div>
       <div id="prestamos-empty" class="empty-state" style="display:none">
-        <div class="empty-icon">🤝</div>
+        <div class="empty-icon" style="font-size:2rem;font-weight:300;color:var(--border)">&#8596;</div>
         <p>Sin préstamos registrados aún.</p>
       </div>
     </div>
@@ -670,7 +714,7 @@
       <div class="gf-resumen" id="gf-resumen"></div>
 
       <div class="section">
-        <div class="section-title" style="margin-bottom:16px;">➕ Nuevo gasto fijo</div>
+        <div class="section-title" style="margin-bottom:16px;">Nuevo gasto fijo</div>
         <div class="form-grid">
           <div class="form-group">
             <label>Nombre *</label>
@@ -699,7 +743,7 @@
             <input type="number" class="form-control" id="gf-dia" placeholder="Ej: 5" min="1" max="31">
           </div>
           <div class="form-group">
-            <label>💳 Billetera por defecto</label>
+            <label>Billetera por defecto</label>
             <select class="form-control" id="gf-billetera">
               <option value="">Sin asignar</option>
             </select>
@@ -710,7 +754,7 @@
             <input type="text" class="form-control" id="gf-notas" placeholder="Opcional...">
           </div>
           <div class="form-group" style="grid-column:1/-1">
-            <label>🔗 Vincular con deuda (opcional)</label>
+            <label>Vincular con deuda (opcional)</label>
             <select class="form-control" id="gf-deuda-vinc">
               <option value="">— Sin vincular —</option>
             </select>
@@ -718,7 +762,7 @@
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-primary" onclick="saveGastoFijo()">💾 Agregar gasto fijo</button>
+          <button class="btn btn-primary" onclick="saveGastoFijo()">Agregar gasto fijo</button>
         </div>
       </div>
 
@@ -726,12 +770,12 @@
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
         <span style="color:var(--muted);font-size:.85rem;">Ver mes:</span>
         <select class="form-control" style="width:auto" id="gf-mes-sel" onchange="renderGastosFijos()"></select>
-        <button class="btn btn-ghost btn-sm" onclick="resetPagosGF()">🔄 Reiniciar pagos del mes</button>
+        <button class="btn btn-ghost btn-sm" onclick="resetPagosGF()">Reiniciar pagos del mes</button>
       </div>
 
       <div class="gf-grid" id="gf-grid"></div>
       <div id="gf-empty" class="empty-state" style="display:none">
-        <div class="empty-icon">🗓️</div>
+        <div class="empty-icon" style="font-size:2rem;font-weight:300;color:var(--border)">&#9635;</div>
         <p>No tienes gastos fijos registrados aún.<br>Agrega tus compromisos mensuales.</p>
       </div>
     </div>
@@ -749,7 +793,7 @@
       <!-- KPIs -->
       <div class="stats-grid">
         <div class="stat-card blue">
-          <div class="stat-icon-box"><span>💵</span></div>
+          <div class="stat-icon-box"><span style="font-size:.9rem">$</span></div>
           <div class="stat-body">
             <div class="stat-label">Capital invertido</div>
             <div class="stat-value" id="inv-capital">$0</div>
@@ -757,7 +801,7 @@
           </div>
         </div>
         <div class="stat-card green">
-          <div class="stat-icon-box"><span>💸</span></div>
+          <div class="stat-icon-box"><span style="font-size:.9rem">&#x2193;$</span></div>
           <div class="stat-body">
             <div class="stat-label">Total recuperado</div>
             <div class="stat-value" id="inv-valor">$0</div>
@@ -765,7 +809,7 @@
           </div>
         </div>
         <div class="stat-card teal">
-          <div class="stat-icon-box"><span>📊</span></div>
+          <div class="stat-icon-box"><span style="font-size:.8rem;font-weight:700">KPI</span></div>
           <div class="stat-body">
             <div class="stat-label">Ganancia acumulada</div>
             <div class="stat-value" id="inv-ganancia">$0</div>
@@ -773,7 +817,7 @@
           </div>
         </div>
         <div class="stat-card purple">
-          <div class="stat-icon-box"><span>📦</span></div>
+          <div class="stat-icon-box"><span style="font-size:.9rem">&#x25A1;</span></div>
           <div class="stat-body">
             <div class="stat-label">Productos activos</div>
             <div class="stat-value" id="inv-activas">0</div>
@@ -781,7 +825,7 @@
           </div>
         </div>
         <div class="stat-card orange">
-          <div class="stat-icon-box"><span>🏪</span></div>
+          <div class="stat-icon-box"><span style="font-size:.9rem">&#x25A1;</span></div>
           <div class="stat-body">
             <div class="stat-label">Unidades en stock</div>
             <div class="stat-value" id="inv-stock-total">0</div>
@@ -789,7 +833,7 @@
           </div>
         </div>
         <div class="stat-card blue">
-          <div class="stat-icon-box"><span>🛒</span></div>
+          <div class="stat-icon-box"><span style="font-size:.9rem">&#x25A1;</span></div>
           <div class="stat-body">
             <div class="stat-label">Unidades vendidas</div>
             <div class="stat-value" id="inv-vendidas-total">0</div>
@@ -801,9 +845,9 @@
       <!-- Filtros + Tabla -->
       <div class="section">
         <div class="section-header">
-          <span class="section-title">📦 Listado de inversiones</span>
+          <span class="section-title">Listado de inversiones</span>
           <div class="inv-filter-bar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-            <input type="text" class="form-control" style="min-width:160px;height:34px" placeholder="🔍 Buscar SKU..." id="inv-search" oninput="renderInversiones()">
+            <input type="text" class="form-control" style="min-width:160px;height:34px" placeholder="Buscar SKU..." id="inv-search" oninput="renderInversiones()">
             <select class="form-control" style="width:auto;height:34px" id="inv-filter-estado" onchange="renderInversiones()">
               <option value="">Todos los estados</option>
               <option value="activa">Activas</option>
@@ -835,7 +879,7 @@
           </table>
         </div>
         <div id="inversiones-empty" class="empty-state" style="display:none;padding:40px 20px;text-align:center;color:var(--muted);">
-          <div style="font-size:2.5rem;margin-bottom:12px;">📦</div>
+          <div style="font-size:2.5rem;margin-bottom:12px;">&#9633;</div>
           <p>Sin inversiones registradas aún. Haz clic en <strong>+ Nueva inversión</strong> para comenzar.</p>
         </div>
       </div>
@@ -866,18 +910,18 @@
 
       <!-- Gráfico ingresos vs gastos -->
       <div class="chart-card section" style="margin-bottom:16px;">
-        <div class="chart-title">💹 Ingresos vs Gastos por mes</div>
+        <div class="chart-title">Ingresos vs Gastos por mes</div>
         <canvas id="chart-balance" height="200"></canvas>
       </div>
 
       <!-- Gráfico donut categorías -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;" class="rep-charts-grid">
         <div class="chart-card section">
-          <div class="chart-title">🍩 Gastos por categoría</div>
+          <div class="chart-title">Gastos por categoría</div>
           <canvas id="chart-cats" height="200"></canvas>
         </div>
         <div class="chart-card section">
-          <div class="chart-title">🟢 Ingresos por categoría</div>
+          <div class="chart-title">Ingresos por categoría</div>
           <canvas id="chart-ing-cats" height="200"></canvas>
         </div>
       </div>
@@ -885,7 +929,7 @@
       <!-- Tabla resumen mensual -->
       <div class="section">
         <div class="section-header">
-          <span class="section-title">📅 Resumen mes a mes</span>
+          <span class="section-title">Resumen mes a mes</span>
         </div>
         <div class="table-wrap">
           <table class="data-table" id="rep-tabla-meses">
@@ -904,11 +948,11 @@
       <div id="rep-detalle-mes" style="display:none">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;" class="rep-charts-grid">
           <div class="section">
-            <div class="section-header"><span class="section-title">🔴 Mayores gastos del mes</span></div>
+            <div class="section-header"><span class="section-title">Mayores gastos del mes</span></div>
             <div id="rep-top-gastos"></div>
           </div>
           <div class="section">
-            <div class="section-header"><span class="section-title">🟢 Mayores ingresos del mes</span></div>
+            <div class="section-header"><span class="section-title">Mayores ingresos del mes</span></div>
             <div id="rep-top-ingresos"></div>
           </div>
         </div>
@@ -923,7 +967,7 @@
           <p class="page-sub" style="margin-bottom:0">Controla dónde tienes tu dinero y lleva el saldo real de cada cuenta</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-ghost" onclick="openModalTransferencia()">🔄 Transferir</button>
+          <button class="btn btn-ghost" onclick="openModalTransferencia()">Transferir</button>
           <button class="btn btn-primary" onclick="openModalBilletera()">+ Nueva billetera</button>
         </div>
       </div>
@@ -934,15 +978,15 @@
       <!-- Tarjetas -->
       <div class="bill-grid" id="bill-grid"></div>
       <div id="bill-empty" class="empty-state" style="display:none">
-        <div class="empty-icon">👛</div>
+        <div class="empty-icon" style="font-size:2rem;font-weight:300;color:var(--border)">&#9673;</div>
         <p>No tienes billeteras registradas.<br>Agrega Nequi, efectivo, banco o lo que uses.</p>
       </div>
 
       <!-- Historial de movimientos por billetera -->
       <div class="section" id="bill-movimientos" style="display:none">
         <div class="section-header">
-          <span class="section-title" id="bill-mov-title">📋 Movimientos</span>
-          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('bill-movimientos').style.display='none'">✕ Cerrar</button>
+          <span class="section-title" id="bill-mov-title">Movimientos</span>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('bill-movimientos').style.display='none'">&#x2715; Cerrar</button>
         </div>
         <div class="table-wrap">
           <table class="data-table">
@@ -951,6 +995,10 @@
           </table>
         </div>
       </div>
+
+      <!-- Tabla de transferencias entre billeteras -->
+      <div id="bill-transferencias-sec"></div>
+
     </div>
 
     <!-- ====== CLAVES ====== -->
@@ -959,7 +1007,7 @@
       <p class="page-sub">Tus contraseñas guardadas de forma privada (sólo en este dispositivo)</p>
 
       <div class="section">
-        <div class="section-title" style="margin-bottom:16px;">➕ Nueva contraseña</div>
+        <div class="section-title" style="margin-bottom:16px;">Nueva contraseña</div>
         <div class="form-grid">
           <div class="form-group">
             <label>Cuenta / Servicio *</label>
@@ -979,18 +1027,18 @@
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-primary" onclick="savePass()">💾 Guardar</button>
+          <button class="btn btn-primary" onclick="savePass()">Guardar</button>
         </div>
       </div>
 
       <div class="section">
         <div class="section-header">
-          <span class="section-title">🔐 Contraseñas guardadas</span>
-          <input type="text" class="form-control" style="width:auto;max-width:200px;" placeholder="🔍 Buscar..." oninput="renderPass(this.value)">
+          <span class="section-title">Contraseñas guardadas</span>
+          <input type="text" class="form-control" style="width:auto;max-width:200px;" placeholder="Buscar..." oninput="renderPass(this.value)">
         </div>
         <div id="pass-lista"></div>
         <div id="pass-empty" class="empty-state" style="display:none">
-          <div class="empty-icon">🔐</div>
+          <div class="empty-icon" style="font-size:2rem;font-weight:300;color:var(--border)">&#128274;</div>
           <p>No hay contraseñas guardadas aún.</p>
         </div>
       </div>
@@ -1008,23 +1056,23 @@
 <div class="bottom-nav" id="bottom-nav">
   <div class="bottom-nav-inner">
     <button class="bnav-btn active" data-page="dashboard" onclick="mobileNav('dashboard')">
-      <span class="bnav-icon">📊</span>
+      <span class="bnav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></svg></span>
       <span>Inicio</span>
     </button>
     <button class="bnav-btn" data-page="ingresos" onclick="mobileNav('ingresos')">
-      <span class="bnav-icon">💵</span>
+      <span class="bnav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="22" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M17 12h.01M7 12h.01"/></svg></span>
       <span>Ingresos</span>
     </button>
     <button class="bnav-btn" data-page="gastos" onclick="mobileNav('gastos')">
-      <span class="bnav-icon">💸</span>
+      <span class="bnav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
       <span>Gastos</span>
     </button>
     <button class="bnav-btn" data-page="deudas" onclick="mobileNav('deudas')">
-      <span class="bnav-icon">📉</span>
+      <span class="bnav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg></span>
       <span>Deudas</span>
     </button>
     <button class="bnav-btn" data-page="__more" onclick="openDrawer()">
-      <span class="bnav-icon">☰</span>
+      <span class="bnav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></span>
       <span>Más</span>
     </button>
   </div>
@@ -1038,41 +1086,41 @@
   <div class="drawer-handle"></div>
   <div class="drawer-section-label">Módulos</div>
   <button class="drawer-item" data-page="prestamos" onclick="mobileNav('prestamos');closeDrawer()">
-    <span class="di-icon">🤝</span> Préstamos a terceros
+    <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></span> Préstamos a terceros
   </button>
   <button class="drawer-item" data-page="inversiones" onclick="mobileNav('inversiones');closeDrawer()">
-    <span class="di-icon">📈</span> Inversiones
+    <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span> Inversiones
   </button>
   <button class="drawer-item" data-page="fijos" onclick="mobileNav('fijos');closeDrawer()">
-    <span class="di-icon">🗓️</span> Gastos Fijos
+    <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span> Gastos Fijos
   </button>
   <button class="drawer-item" data-page="billeteras" onclick="mobileNav('billeteras');closeDrawer()">
-    <span class="di-icon">👛</span> Billeteras
+    <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><circle cx="16" cy="13" r="1"/></svg></span> Billeteras
   </button>
   <button class="drawer-item" data-page="reportes" onclick="mobileNav('reportes');closeDrawer()">
-    <span class="di-icon">📊</span> Reportes
+    <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></svg></span> Reportes
   </button>
   <button class="drawer-item" data-page="claves" onclick="mobileNav('claves');closeDrawer()">
-    <span class="di-icon">🔐</span> Contraseñas
+    <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span> Contraseñas
   </button>
   <div class="drawer-section-label" style="margin-top:8px;">Configuración</div>
   <button class="drawer-item" onclick="showChangePinModal();closeDrawer()">
-    <span class="di-icon">⚙️</span> Cambiar PIN
+    <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> Cambiar PIN
   </button>
   <button class="drawer-item" onclick="exportData();closeDrawer()">
-    <span class="di-icon">📤</span> Exportar backup
+    <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Exportar backup
   </button>
   <button class="drawer-item" onclick="importBackup();closeDrawer()">
-    <span class="di-icon">📥</span> Importar backup
+    <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span> Importar backup
   </button>
   <button class="drawer-item" style="color:var(--red)" onclick="confirmDeleteAll();closeDrawer()">
-    <span class="di-icon">🗑️</span> Borrar todo
+    <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span> Borrar todo
   </button>
   <button class="drawer-item" onclick="forceSyncFirebase();closeDrawer()">
     <span class="di-icon">☁️</span> Sync Firebase
   </button>
   <button class="drawer-item" onclick="lockApp();closeDrawer()">
-    <span class="di-icon">🔒</span> Bloquear app
+    <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span> Bloquear app
   </button>
 </div>
 
@@ -1087,7 +1135,7 @@
 <!-- Change PIN Modal -->
 <div class="modal-overlay" id="modal-pin">
   <div class="modal">
-    <div class="modal-title">⚙️ Cambiar PIN</div>
+    <div class="modal-title"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:5px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Cambiar PIN</div>
     <div class="form-group" style="margin-bottom:12px;">
       <label>PIN actual</label>
       <input type="password" class="form-control" id="m-pin-old" placeholder="PIN actual" maxlength="4">
@@ -1110,10 +1158,10 @@
 <!-- Modal Transferencia entre billeteras -->
 <div class="modal-overlay" id="modal-transferencia">
   <div class="modal" style="max-width:420px;">
-    <div class="modal-title">🔄 Transferir entre billeteras</div>
+    <div class="modal-title">Transferir entre billeteras</div>
     <p style="color:var(--muted);font-size:.88rem;margin-bottom:20px;">Mueve dinero de una cuenta a otra. Se registrará como salida en el origen y entrada en el destino.</p>
     <div class="form-group" style="margin-bottom:14px;">
-      <label>📤 Billetera origen *</label>
+      <label>Billetera origen *</label>
       <select class="form-control" id="tr-origen">
         <option value="">— Selecciona origen —</option>
       </select>
@@ -1121,27 +1169,27 @@
     </div>
     <div style="text-align:center;font-size:1.4rem;margin:-4px 0 10px;color:var(--muted);">↓</div>
     <div class="form-group" style="margin-bottom:14px;">
-      <label>📥 Billetera destino *</label>
+      <label>Billetera destino *</label>
       <select class="form-control" id="tr-destino">
         <option value="">— Selecciona destino —</option>
       </select>
     </div>
     <div class="form-group" style="margin-bottom:14px;">
-      <label>💵 Monto a transferir *</label>
+      <label>Monto a transferir *</label>
       <input type="number" class="form-control" id="tr-monto" placeholder="0" min="1" oninput="onTrMontoChange()">
       <div id="tr-saldo-post" style="font-size:.78rem;margin-top:4px;display:none;"></div>
     </div>
     <div class="form-group" style="margin-bottom:14px;">
-      <label>📅 Fecha</label>
+      <label>Fecha</label>
       <input type="date" class="form-control" id="tr-fecha">
     </div>
     <div class="form-group" style="margin-bottom:4px;">
-      <label>📝 Descripción (opcional)</label>
+      <label>Descripción (opcional)</label>
       <input type="text" class="form-control" id="tr-desc" placeholder="Ej: Consignación a Nequi...">
     </div>
     <div class="modal-actions" style="margin-top:20px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-transferencia')">Cancelar</button>
-      <button class="btn btn-primary" onclick="ejecutarTransferencia()">🔄 Transferir</button>
+      <button class="btn btn-primary" onclick="ejecutarTransferencia()">Transferir</button>
     </div>
   </div>
 </div>
@@ -1149,7 +1197,7 @@
 <!-- Confirm Delete All -->
 <div class="modal-overlay" id="modal-delete-all">
   <div class="modal">
-    <div class="modal-title">⚠️ Borrar todos los datos</div>
+    <div class="modal-title">Borrar todos los datos</div>
     <p style="color:var(--muted);font-size:.9rem;margin-bottom:12px;">Esta acción eliminará permanentemente todos tus ingresos, gastos, deudas y contraseñas. Esta acción no se puede deshacer.</p>
     <div class="form-group">
       <label>Escribe BORRAR para confirmar</label>
@@ -1157,7 +1205,7 @@
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modal-delete-all')">Cancelar</button>
-      <button class="btn btn-danger" onclick="deleteAll()">🗑️ Borrar todo</button>
+      <button class="btn btn-danger" onclick="deleteAll()"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:5px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg> Borrar todo</button>
     </div>
   </div>
 </div>
@@ -1165,7 +1213,7 @@
 <!-- Abonar Deuda Modal -->
 <div class="modal-overlay" id="modal-abonar">
   <div class="modal">
-    <div class="modal-title">💳 Registrar abono</div>
+    <div class="modal-title">Registrar abono</div>
     <div class="modal-body-wrap">
       <div class="form-group" style="margin-bottom:12px;">
         <label>Deuda</label>
@@ -1180,7 +1228,7 @@
         <input type="date" class="form-control" id="m-abonar-fecha">
       </div>
       <div class="form-group" style="margin-bottom:12px;">
-        <label>💳 Sale de</label>
+        <label>Sale de</label>
         <select class="form-control" id="m-abonar-billetera">
           <option value="">Sin asignar</option>
         </select>
@@ -1193,7 +1241,7 @@
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modal-abonar')">Cancelar</button>
-      <button class="btn btn-success" onclick="registrarAbono()">✅ Registrar abono</button>
+      <button class="btn btn-success" onclick="registrarAbono()">Registrar abono</button>
     </div>
   </div>
 </div>
@@ -1201,7 +1249,7 @@
 <!-- Registrar Cobro Modal -->
 <div class="modal-overlay" id="modal-cobro">
   <div class="modal">
-    <div class="modal-title">💰 Registrar cobro</div>
+    <div class="modal-title">Registrar cobro</div>
     <div class="form-group" style="margin-bottom:12px;">
       <label>Deudor</label>
       <input type="text" class="form-control" id="m-cobro-nombre" readonly>
@@ -1215,7 +1263,7 @@
       <input type="date" class="form-control" id="m-cobro-fecha">
     </div>
     <div class="form-group" style="margin-bottom:12px;">
-      <label>💳 Llega a</label>
+      <label>Llega a</label>
       <select class="form-control" id="m-cobro-billetera">
         <option value="">Sin asignar</option>
       </select>
@@ -1227,7 +1275,7 @@
     <input type="hidden" id="m-cobro-idx">
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modal-cobro')">Cancelar</button>
-      <button class="btn btn-success" onclick="registrarCobro()">✅ Registrar cobro</button>
+      <button class="btn btn-success" onclick="registrarCobro()">Registrar cobro</button>
     </div>
   </div>
 </div>
@@ -1235,7 +1283,7 @@
 <!-- Actualizar Valor Inversión Modal -->
 <div class="modal-overlay" id="modal-inv-actualizar">
   <div class="modal">
-    <div class="modal-title">📊 Actualizar inversión</div>
+    <div class="modal-title">Actualizar inversión</div>
     <div class="form-group" style="margin-bottom:12px;">
       <label>Inversión</label>
       <input type="text" class="form-control" id="m-inv-nombre" readonly>
@@ -1267,7 +1315,7 @@
 <!-- Modal EDITAR DEUDA -->
 <div class="modal-overlay" id="modal-edit-deuda">
   <div class="modal" style="max-width:520px;">
-    <div class="modal-title">✏️ Editar deuda</div>
+    <div class="modal-title">Editar deuda</div>
     <div class="modal-body-wrap">
       <div class="form-grid">
         <div class="form-group">
@@ -1290,7 +1338,7 @@
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modal-edit-deuda')">Cancelar</button>
-      <button class="btn btn-primary" onclick="saveEditDeuda()">💾 Guardar cambios</button>
+      <button class="btn btn-primary" onclick="saveEditDeuda()">Guardar cambios</button>
     </div>
     <input type="hidden" id="med-idx">
   </div>
@@ -1299,15 +1347,15 @@
 <!-- Modal SUMAR MÁS SALDO A DEUDA (préstamo adicional o compra a crédito) -->
 <div class="modal-overlay" id="modal-sumar-deuda">
   <div class="modal" style="max-width:480px;">
-    <div class="modal-title">➕ Agregar saldo a la deuda</div>
+    <div class="modal-title">Agregar saldo a la deuda</div>
     <div class="modal-body-wrap">
       <div id="msd-deuda-info" style="background:var(--bg2);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;font-size:.85rem;color:var(--muted);"></div>
       <!-- Tipo de incremento -->
       <div class="form-group" style="margin-bottom:14px;">
         <label>¿Por qué aumenta la deuda? *</label>
         <select class="form-control" id="msd-tipo" onchange="onMsdTipoChange()">
-          <option value="prestamo">💵 Me prestaron más dinero</option>
-          <option value="compra">🛒 Compra a crédito (no entra dinero)</option>
+          <option value="prestamo">Me prestaron más dinero</option>
+          <option value="compra">Compra a crédito (no entra dinero)</option>
         </select>
       </div>
       <div class="form-grid">
@@ -1324,7 +1372,7 @@
           <input type="text" class="form-control" id="msd-desc" placeholder="Ej: Compra electrodoméstico, préstamo adicional...">
         </div>
         <div class="form-group" style="grid-column:1/-1" id="msd-billetera-group">
-          <label>💳 Entra a billetera (opcional)</label>
+          <label>Entra a billetera (opcional)</label>
           <select class="form-control" id="msd-billetera">
             <option value="">Sin asignar</option>
           </select>
@@ -1334,7 +1382,7 @@
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modal-sumar-deuda')">Cancelar</button>
-      <button class="btn btn-success" onclick="confirmarSumarDeuda()">✅ Agregar a la deuda</button>
+      <button class="btn btn-success" onclick="confirmarSumarDeuda()">Agregar a la deuda</button>
     </div>
     <input type="hidden" id="msd-idx">
   </div>
@@ -1343,7 +1391,7 @@
 <!-- Modal AMPLIAR PRÉSTAMO A TERCERO -->
 <div class="modal-overlay" id="modal-ampliar-prestamo">
   <div class="modal" style="max-width:480px;">
-    <div class="modal-title">💸 Prestar más dinero</div>
+    <div class="modal-title">Prestar más dinero</div>
     <div class="modal-body-wrap">
       <div id="map-prest-info" style="background:var(--bg2);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;font-size:.85rem;color:var(--muted);"></div>
       <div class="form-grid">
@@ -1360,7 +1408,7 @@
           <input type="text" class="form-control" id="map-desc" placeholder="Ej: Para arriendo, emergencia médica...">
         </div>
         <div class="form-group" style="grid-column:1/-1">
-          <label>💳 Sale de billetera *</label>
+          <label>Sale de billetera *</label>
           <select class="form-control" id="map-billetera">
             <option value="">— Selecciona billetera —</option>
           </select>
@@ -1370,7 +1418,7 @@
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modal-ampliar-prestamo')">Cancelar</button>
-      <button class="btn btn-success" onclick="confirmarAmpliarPrestamo()">✅ Registrar desembolso</button>
+      <button class="btn btn-success" onclick="confirmarAmpliarPrestamo()">Registrar desembolso</button>
     </div>
     <input type="hidden" id="map-idx">
   </div>

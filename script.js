@@ -3,7 +3,7 @@
    ============================================================
    1. Ve a console.firebase.google.com
    2. Crea un proyecto → Firestore Database → Modo producción
-   3. Ve a Configuración ⚙️ → Tus apps → Agrega app web (</>)
+   3. Ve a Configuración → Tus apps → Agrega app web (</>)
    4. Copia el objeto firebaseConfig que te da Firebase
    5. Reemplaza los valores REEMPLAZA_* en el bloque <script type="module">
       que está al inicio de este archivo (justo después del <title>)
@@ -41,13 +41,14 @@ function loadDbLocal() {
   const raw = localStorage.getItem('finanzas_pro_v2');
   STATE.db = raw ? JSON.parse(raw) : {
     ingresos: [], gastos: [], deudas: [], pass: [],
-    prestamos: [], gastosFijos: [], inversiones: [], ventasInv: [], billeteras: []
+    prestamos: [], gastosFijos: [], inversiones: [], ventasInv: [], billeteras: [], transferencias: []
   };
-  if (!STATE.db.prestamos)   STATE.db.prestamos   = [];
-  if (!STATE.db.gastosFijos) STATE.db.gastosFijos = [];
-  if (!STATE.db.inversiones) STATE.db.inversiones = [];
-  if (!STATE.db.ventasInv)   STATE.db.ventasInv   = [];
-  if (!STATE.db.billeteras)  STATE.db.billeteras  = [];
+  if (!STATE.db.prestamos)      STATE.db.prestamos      = [];
+  if (!STATE.db.gastosFijos)    STATE.db.gastosFijos    = [];
+  if (!STATE.db.inversiones)    STATE.db.inversiones    = [];
+  if (!STATE.db.ventasInv)      STATE.db.ventasInv      = [];
+  if (!STATE.db.billeteras)     STATE.db.billeteras     = [];
+  if (!STATE.db.transferencias) STATE.db.transferencias = [];
 }
 
 // ── Cargar datos (usa Firebase si disponible, localStorage si no) ──
@@ -57,22 +58,23 @@ async function loadDb() {
       showLoadingOverlay('Cargando datos...');
       const data = await window.__FB.loadAll();
       STATE.db = {
-        ingresos:    data.ingresos    || [],
-        gastos:      data.gastos      || [],
-        deudas:      data.deudas      || [],
-        pass:        data.pass        || [],
-        prestamos:   data.prestamos   || [],
-        gastosFijos: data.gastosFijos || [],
-        inversiones: data.inversiones || [],
-        ventasInv:   data.ventasInv   || [],
-        billeteras:  data.billeteras  || [],
+        ingresos:       data.ingresos       || [],
+        gastos:         data.gastos         || [],
+        deudas:         data.deudas         || [],
+        pass:           data.pass           || [],
+        prestamos:      data.prestamos      || [],
+        gastosFijos:    data.gastosFijos    || [],
+        inversiones:    data.inversiones    || [],
+        ventasInv:      data.ventasInv      || [],
+        billeteras:     data.billeteras     || [],
+        transferencias: data.transferencias || [],
       };
       // Guardar en localStorage como respaldo offline
       localStorage.setItem('finanzas_pro_v2', JSON.stringify(STATE.db));
       hideLoadingOverlay();
-      console.log('✅ Datos cargados desde Firestore');
+      console.log('Datos cargados desde Firestore');
     } catch (err) {
-      console.error('⚠️ Error cargando Firebase, usando localStorage:', err);
+      console.error('Error cargando Firebase, usando localStorage:', err);
       loadDbLocal();
       hideLoadingOverlay();
       toast('Modo offline: usando datos locales', 'info');
@@ -116,13 +118,13 @@ async function saveDb(coleccionesEspecificas = null) {
       // Si se especifican colecciones, solo guardar esas (más rápido)
       // Si no, guardar todas
       const toSave = coleccionesEspecificas ||
-        ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras'];
+        ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras','transferencias'];
 
       await Promise.all(
         toSave.map(col => window.__FB.saveCollection(col, STATE.db[col] || []))
       );
     } catch (err) {
-      console.error('⚠️ Error guardando en Firebase:', err);
+      console.error('Error guardando en Firebase:', err);
       // No mostrar toast en cada operación para no molestar
       // Solo mostrar si el usuario lo nota
       console.warn('Datos guardados localmente como respaldo');
@@ -140,11 +142,11 @@ function showSavingDot() {
   if (!badge || !window.__FB?.ready) return;
   badge.style.display = 'flex';
   if (dot) dot.style.background = '#d97706';
-  if (txt) txt.textContent = '💾 Guardando...';
+  if (txt) txt.textContent = 'Guardando...';
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(() => {
     if (dot) dot.style.background = '#059669';
-    if (txt) txt.textContent = '☁️ Guardado';
+    if (txt) txt.textContent = 'Guardado';
     setTimeout(() => { badge.style.display = 'none'; }, 2000);
   }, 800);
 }
@@ -258,7 +260,7 @@ function updateFbStatus(connected) {
   const tTxt   = document.getElementById('fb-badge-txt');
 
   const color  = connected ? '#059669' : '#d97706';
-  const label  = connected ? '☁️ Firebase' : '📴 Offline';
+  const label  = connected ? '☁️ Firebase' : ' Offline';
 
   if (badge) {
     badge.style.display = 'flex';
@@ -300,6 +302,10 @@ function updatePinDots() {
 function pinSubmit() {
   const saved = localStorage.getItem('fp_pin') || '1234';
   if (pinBuffer === saved) {
+    // Activar cifrado AES con el PIN validado
+    if (window.__FB && window.__FB.setCipherKey) {
+      window.__FB.setCipherKey(pinBuffer);
+    }
     document.getElementById('lock-screen').classList.add('hidden');
     const app = document.getElementById('app');
     app.classList.add('visible');
@@ -313,7 +319,6 @@ function pinSubmit() {
           const pinRemoto = await window.__FB.loadPin();
           if (pinRemoto && pinRemoto !== localStorage.getItem('fp_pin')) {
             localStorage.setItem('fp_pin', pinRemoto);
-            console.log('🔑 PIN sincronizado desde Firebase');
           }
         } catch (e) { console.warn('No se pudo sincronizar PIN:', e); }
       }
@@ -352,7 +357,7 @@ async function changePin() {
   if (window.__FB && window.__FB.ready && window.__FB.savePin) {
     try {
       await window.__FB.savePin(nw);
-      toast('PIN actualizado y sincronizado en la nube ✅', 'success');
+      toast('PIN actualizado y sincronizado en la nube', 'success');
     } catch (e) {
       console.warn('No se pudo guardar PIN en Firebase:', e);
       toast('PIN actualizado localmente (Firebase no disponible)', 'info');
@@ -370,6 +375,18 @@ async function changePin() {
    ============================================================ */
 async function initApp() {
   await loadDb();          // espera Firestore (o localStorage)
+
+  // Limpiar transferencias corruptas (sin monto válido o sin billeteras)
+  if (STATE.db.transferencias && STATE.db.transferencias.length) {
+    const antes = STATE.db.transferencias.length;
+    STATE.db.transferencias = STATE.db.transferencias.filter(t =>
+      t && Number(t.monto) > 0 && (t.origenId || t.origenNombre) && (t.destinoId || t.destinoNombre)
+    );
+    if (STATE.db.transferencias.length < antes) {
+      await saveDb(['transferencias']);
+    }
+  }
+
   setDateLabels();
   populateMonthFilters();
   populateCatFilters();
@@ -501,8 +518,7 @@ function deleteAll() {
   if (document.getElementById('m-delete-confirm').value !== 'BORRAR') {
     return toast('Escribe BORRAR para confirmar', 'error');
   }
-  STATE.db = { ingresos:[], gastos:[], deudas:[], pass:[], prestamos:[], gastosFijos:[], inversiones:[], ventasInv:[], billeteras:[] };
-  // Guardar (borrará todo en Firestore también via saveDb)
+  STATE.db = { ingresos:[], gastos:[], deudas:[], pass:[], prestamos:[], gastosFijos:[], inversiones:[], ventasInv:[], billeteras:[], transferencias:[] };
   saveDb().then(() => {
     closeModal('modal-delete-all');
     renderAll();
@@ -516,7 +532,7 @@ function deleteAll() {
 function toast(msg, type = 'info') {
   const c   = document.getElementById('toast-container');
   const el  = document.createElement('div');
-  const ico = { success:'✅', error:'❌', info:'ℹ️' }[type] || 'ℹ️';
+  const ico = { success:'&#10003;', error:'&#10007;', info:'i' }[type] || 'i';
   el.className = `toast ${type}`;
   el.innerHTML = `<span>${ico}</span><span>${msg}</span>`;
   c.appendChild(el);
@@ -652,7 +668,7 @@ function populateGFBilletera() {
     const saldo = saldoBilletera(b.id);
     const o = document.createElement('option');
     o.value = b.id;
-    o.textContent = (BILL_ICONOS[b.tipo]||'💳') + ' ' + b.nombre + ' — ' + fmt(saldo);
+    o.textContent = (BILL_ICONOS[b.tipo]||'') + ' ' + b.nombre + ' — ' + fmt(saldo);
     if (b.id === cur) o.selected = true;
     sel.appendChild(o);
   });
@@ -664,8 +680,8 @@ function populateGFBilletera() {
 function renderDashboard() {
   const ym0 = currentYM();
 
-  const ingMes  = STATE.db.ingresos.filter(i => ym(i.fecha) === ym0 && !i.esRecuperacionInversion);
-  const gasMes  = STATE.db.gastos.filter(g => ym(g.fecha) === ym0);
+  const ingMes  = STATE.db.ingresos.filter(i => ym(i.fecha) === ym0 && !i.esRecuperacionInversion && i.cat !== 'Transferencia');
+  const gasMes  = STATE.db.gastos.filter(g => ym(g.fecha) === ym0 && g.cat !== 'Transferencia');
   const totalIng = ingMes.reduce((a, b) => a + Number(b.monto), 0);
   const totalGas = gasMes.reduce((a, b) => a + Number(b.monto), 0);
   const totalDeu = STATE.db.deudas.reduce((a, d) => a + Math.max(0, Number(d.total) - Number(d.pagado || 0)), 0);
@@ -740,7 +756,7 @@ function renderDashboard() {
 
   const tbl = document.getElementById('dash-recent');
   if (!all.length) {
-    tbl.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><p>Sin transacciones aún.</p></div>';
+    tbl.innerHTML = '<div class="empty-state"><div class="empty-icon"></div><p>Sin transacciones aún.</p></div>';
     return;
   }
   // Tabla con scroll: max-height para ver todos deslizando
@@ -781,11 +797,11 @@ function toggleDashDetails() {
   if (_dashDetailsVisible) {
     panel.style.display = '';
     panel.style.animation = 'fadeSlide .25s ease';
-    if (eyeIcon)  eyeIcon.textContent  = '🙈';
+    if (eyeIcon)  eyeIcon.textContent  = '';
     if (eyeLabel) eyeLabel.textContent = 'Ocultar';
   } else {
     panel.style.display = 'none';
-    if (eyeIcon)  eyeIcon.textContent  = '👁️';
+    if (eyeIcon)  eyeIcon.textContent  = '️';
     if (eyeLabel) eyeLabel.textContent = 'Ver detalle';
   }
 }
@@ -827,7 +843,7 @@ async function saveIngreso() {
   clearForm(['i-monto','i-fuente']);
   renderAll();
   await saveDb(['ingresos']);
-  toast(editId ? 'Ingreso actualizado ✅' : 'Ingreso registrado ✅', 'success');
+  toast(editId ? 'Ingreso actualizado ✅' : 'Ingreso registrado', 'success');
 }
 
 function editIngreso(id) {
@@ -843,14 +859,14 @@ function editIngreso(id) {
   if (horaEl) horaEl.value = horaToInputTime(item.hora);
   const horaGroup = document.getElementById('i-hora-edit-group');
   if (horaGroup) horaGroup.style.display = '';
-  document.getElementById('ing-form-title').textContent = '✏️ Editar ingreso';
+  document.getElementById('ing-form-title').textContent = 'Editar ingreso';
   document.getElementById('ing-cancel-btn').style.display = '';
   document.getElementById('page-ingresos').scrollIntoView({ behavior: 'smooth' });
 }
 
 function cancelEditIngreso() {
   document.getElementById('ing-edit-id').value = '';
-  document.getElementById('ing-form-title').textContent = '➕ Nuevo ingreso';
+  document.getElementById('ing-form-title').textContent = 'Nuevo ingreso';
   document.getElementById('ing-cancel-btn').style.display = 'none';
   const horaGroup = document.getElementById('i-hora-edit-group');
   if (horaGroup) horaGroup.style.display = 'none';
@@ -884,7 +900,7 @@ function renderIngresos() {
   const filterD  = document.getElementById('i-filter-day').value;
   const filterQ  = (document.getElementById('i-filter-search')?.value || '').toLowerCase().trim();
 
-  let list = STATE.db.ingresos.slice();
+  let list = STATE.db.ingresos.filter(i => i.cat !== 'Transferencia').slice();
   if (filterM) list = list.filter(i => ym(i.fecha) === filterM);
   if (filterD) list = list.filter(i => i.fecha === filterD);
   if (filterQ) list = list.filter(i =>
@@ -925,7 +941,7 @@ function renderIngresos() {
       <td>
         <div class="actions">
           <button class="btn btn-ghost btn-sm" onclick="editIngreso('${i.id}')">✏️</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteIngreso('${i.id}')">🗑️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteIngreso('${i.id}')">️</button>
         </div>
       </td>
     </tr>`).join('');
@@ -949,7 +965,7 @@ async function saveGasto() {
   if (!billeteraId) {
     const sel = document.getElementById('g-billetera');
     if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(() => sel.style.border = '', 2000); }
-    return toast('⚠️ Debes seleccionar de qué billetera sale el dinero', 'error');
+    return toast('Debes seleccionar de qué billetera sale el dinero', 'error');
   }
 
   // Validar saldo suficiente solo al registrar nuevo (no al editar, ya que el gasto ya está contabilizado)
@@ -960,7 +976,7 @@ async function saveGasto() {
       const billNombre = bill ? bill.nombre : 'la billetera';
       const sel = document.getElementById('g-billetera');
       if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(() => sel.style.border = '', 2500); }
-      return toast(`⛔ Saldo insuficiente en ${billNombre}. Disponible: ${fmt(saldoDisp)} — Necesitas: ${fmt(monto)}`, 'error');
+      return toast(`Saldo insuficiente en ${billNombre}. Disponible: ${fmt(saldoDisp)} — Necesitas: ${fmt(monto)}`, 'error');
     }
   }
   if (editId) {
@@ -978,7 +994,7 @@ async function saveGasto() {
   clearForm(['g-monto','g-desc']);
   renderAll();           // actualiza UI inmediatamente
   await saveDb();        // guarda en Firebase en background
-  toast(editId ? 'Gasto actualizado ✅' : 'Gasto registrado ✅', 'success');
+  toast(editId ? 'Gasto actualizado ✅' : 'Gasto registrado', 'success');
 }
 
 function editGasto(id) {
@@ -994,14 +1010,14 @@ function editGasto(id) {
   if (horaEl) horaEl.value = horaToInputTime(item.hora);
   const horaGroup = document.getElementById('g-hora-edit-group');
   if (horaGroup) horaGroup.style.display = '';
-  document.getElementById('gas-form-title').textContent = '✏️ Editar gasto';
+  document.getElementById('gas-form-title').textContent = 'Editar gasto';
   document.getElementById('gas-cancel-btn').style.display = '';
   document.getElementById('page-gastos').scrollIntoView({ behavior: 'smooth' });
 }
 
 function cancelEditGasto() {
   document.getElementById('gas-edit-id').value = '';
-  document.getElementById('gas-form-title').textContent = '➕ Nuevo gasto';
+  document.getElementById('gas-form-title').textContent = 'Nuevo gasto';
   document.getElementById('gas-cancel-btn').style.display = 'none';
   const horaGroup = document.getElementById('g-hora-edit-group');
   if (horaGroup) horaGroup.style.display = 'none';
@@ -1045,7 +1061,7 @@ function renderGastos() {
   const filterC  = document.getElementById('g-filter-cat').value;
   const filterQ  = (document.getElementById('g-filter-search')?.value || '').toLowerCase().trim();
 
-  let list = STATE.db.gastos.slice();
+  let list = STATE.db.gastos.filter(g => g.cat !== 'Transferencia').slice();
   if (filterM) list = list.filter(g => ym(g.fecha) === filterM);
   if (filterD) list = list.filter(g => g.fecha === filterD);
   if (filterC) list = list.filter(g => g.cat === filterC);
@@ -1116,7 +1132,7 @@ function renderGastos() {
       <td>
         <div class="actions">
           <button class="btn btn-ghost btn-sm" onclick="editGasto('${g.id}')">✏️</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteGasto('${g.id}')">🗑️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteGasto('${g.id}')">️</button>
         </div>
       </td>
     </tr>`).join('');
@@ -1137,7 +1153,7 @@ function onDeudaTipoChange() {
     (STATE.db.billeteras||[]).forEach(b => {
       const o = document.createElement('option');
       o.value = b.id;
-      o.textContent = (BILL_ICONOS[b.tipo]||'💳') + ' ' + b.nombre;
+      o.textContent = (BILL_ICONOS[b.tipo]||'') + ' ' + b.nombre;
       sel.appendChild(o);
     });
   }
@@ -1177,7 +1193,7 @@ async function saveDeuda() {
     const billNombre = bill ? ` → ${bill.nombre}` : '';
     toast(`Deuda creada${billNombre}. Dinero sumado como ingreso ✅`, 'success');
   } else {
-    toast('Deuda de compra creada ✅', 'success');
+    toast('Deuda de compra creada', 'success');
   }
 
   clearForm(['d-nombre','d-total','d-cuota','d-interes']);
@@ -1218,7 +1234,7 @@ async function registrarAbono() {
   d.pagado = (d.pagado || 0) + monto;
   d.pagos.push({ id: abonoId, fecha, monto, nota });
 
-  // ✅ AUTO-REGISTRAR como gasto (categoría Crédito / Deuda)
+  // AUTO-REGISTRAR como gasto (categoría Crédito / Deuda)
   const billeteraIdAbono = document.getElementById('m-abonar-billetera')?.value || '';
   STATE.db.gastos.push({
     id: uid(),
@@ -1235,7 +1251,7 @@ async function registrarAbono() {
   renderAll();
   closeModal('modal-abonar');
   await saveDb(['deudas','gastos']);
-  toast('Abono registrado y añadido automáticamente a gastos ✅', 'success');
+  toast('Abono registrado y añadido automáticamente a gastos', 'success');
 }
 
 async function deleteDeuda(idx) {
@@ -1286,7 +1302,7 @@ async function saveEditDeuda() {
   closeModal('modal-edit-deuda');
   renderAll();
   await saveDb(['deudas']);
-  toast('Deuda actualizada ✅', 'success');
+  toast('Deuda actualizada', 'success');
 }
 
 // ══ Sumar más saldo a la misma deuda ══
@@ -1319,7 +1335,7 @@ function openSumarDeuda(idx) {
     const saldo = saldoBilletera(b.id);
     const o = document.createElement('option');
     o.value = b.id;
-    o.textContent = (BILL_ICONOS[b.tipo]||'💳') + ' ' + b.nombre + ' — ' + fmt(saldo);
+    o.textContent = (BILL_ICONOS[b.tipo]||'') + ' ' + b.nombre + ' — ' + fmt(saldo);
     sel.appendChild(o);
   });
   openModal('modal-sumar-deuda');
@@ -1391,14 +1407,44 @@ function renderDeudas() {
   const container = document.getElementById('deudas-lista');
   const empty     = document.getElementById('deudas-empty');
 
-  if (!STATE.db.deudas.length) {
+  // Inject filter tabs if not present
+  let tabsEl = document.getElementById('deudas-filter-tabs');
+  if (!tabsEl) {
+    tabsEl = document.createElement('div');
+    tabsEl.id = 'deudas-filter-tabs';
+    tabsEl.style.cssText = 'display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;';
+    tabsEl.innerHTML = `
+      <button id="deudas-tab-pend" class="btn btn-primary btn-sm" onclick="setDeudasTab('pendientes')">Pendientes</button>
+      <button id="deudas-tab-pag"  class="btn btn-ghost btn-sm"   onclick="setDeudasTab('pagadas')">Pagadas / Canceladas</button>
+      <span id="deudas-tab-label" style="font-size:.8rem;color:var(--muted);margin-left:4px;"></span>`;
+    container.parentNode.insertBefore(tabsEl, container);
+  }
+
+  const tab = window._deudasTab || 'pendientes';
+  const todosDeudas = STATE.db.deudas;
+  const pendientes = todosDeudas.filter(d => Math.max(0, d.total - (d.pagado||0)) > 0);
+  const pagadas    = todosDeudas.filter(d => Math.max(0, d.total - (d.pagado||0)) === 0);
+  const lista = tab === 'pagadas' ? pagadas : pendientes;
+
+  // Update tab buttons
+  const tPend = document.getElementById('deudas-tab-pend');
+  const tPag  = document.getElementById('deudas-tab-pag');
+  const tLbl  = document.getElementById('deudas-tab-label');
+  if (tPend) { tPend.className = tab==='pendientes'?'btn btn-primary btn-sm':'btn btn-ghost btn-sm'; }
+  if (tPag)  { tPag.className  = tab==='pagadas'   ?'btn btn-primary btn-sm':'btn btn-ghost btn-sm'; }
+  if (tLbl)  { tLbl.textContent = `${pendientes.length} pendiente${pendientes.length!==1?'s':''} · ${pagadas.length} cancelada${pagadas.length!==1?'s':''}`; }
+
+  if (!lista.length) {
     container.innerHTML = '';
     empty.style.display = '';
+    empty.querySelector?.('.empty-icon') && (empty.querySelector('.empty-icon').textContent = tab==='pagadas'?'':'');
+    empty.querySelector?.('p') && (empty.querySelector('p').textContent = tab==='pagadas'?'No hay deudas canceladas aún.':'Sin deudas pendientes. ¡Excelente!');
     return;
   }
   empty.style.display = 'none';
 
-  container.innerHTML = STATE.db.deudas.map((d, i) => {
+  container.innerHTML = lista.map((d, i) => {
+    const realIdx = STATE.db.deudas.indexOf(d);
     const falta    = Math.max(0, d.total - (d.pagado || 0));
     const pct      = Math.min(100, Math.round((d.pagado || 0) / d.total * 100));
     const terminada = falta === 0;
@@ -1411,7 +1457,7 @@ function renderDeudas() {
           <div class="debt-name">${d.nombre}</div>
           <div style="font-size:.8rem;color:var(--muted);margin-top:2px;">Desde ${d.fecha}</div>
         </div>
-        <span class="badge ${terminada ? 'badge-green' : 'badge-red'}">${terminada ? '✅ Cancelada' : '⏳ Pendiente'}</span>
+        <span class="badge ${terminada ? 'badge-green' : 'badge-red'}">${terminada ? 'Cancelada' : 'Pendiente'}</span>
       </div>
       <div class="debt-meta">
         <div class="debt-meta-item">
@@ -1448,24 +1494,24 @@ function renderDeudas() {
         </div>
       </div>
       <div class="debt-actions">
-        ${!terminada ? `<button class="btn btn-success btn-sm" onclick="openAbonar(${i})">💳 Registrar abono</button>` : ''}
-        <button class="btn btn-ghost btn-sm" onclick="openSumarDeuda(${i})" title="Agregar más saldo: préstamo adicional o compra a crédito">➕ Agregar saldo</button>
-        <button class="btn btn-ghost btn-sm" onclick="openEditDeuda(${i})">✏️ Editar</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteDeuda(${i})">🗑️ Eliminar</button>
+        ${!terminada ? `<button class="btn btn-success btn-sm" onclick="openAbonar(${realIdx})">Registrar abono</button>` : ''}
+        <button class="btn btn-ghost btn-sm" onclick="openSumarDeuda(${realIdx})" title="Agregar más saldo">Agregar saldo</button>
+        <button class="btn btn-ghost btn-sm" onclick="openEditDeuda(${realIdx})">Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteDeuda(${realIdx})">Eliminar</button>
       </div>
 
       ${(d.desembolsos && d.desembolsos.length) ? `
         <div class="payment-history" style="border-top:2px dashed var(--accent-light);padding-top:10px;margin-top:10px;">
-          <div class="payment-history-title" style="color:var(--accent);">💸 Desembolsos adicionales (${d.desembolsos.length})</div>
+          <div class="payment-history-title" style="color:var(--accent);">Desembolsos adicionales (${d.desembolsos.length})</div>
           ${d.desembolsos.slice().reverse().map(des => `
             <div class="payment-item">
               <span style="display:flex;flex-direction:column;gap:2px;">
-                <span>📅 ${des.fecha}</span>
-                <span style="color:var(--muted);font-size:.8rem;">📝 ${des.desc}</span>
+                <span>${des.fecha}</span>
+                <span style="color:var(--muted);font-size:.8rem;">${des.desc}</span>
               </span>
               <span style="display:flex;align-items:center;gap:8px;">
                 <span style="color:var(--accent);font-weight:600;">+${fmt(des.monto)}</span>
-                <button class="btn btn-danger btn-sm" style="padding:2px 7px;font-size:.72rem" onclick="deleteDesembolso(${i},'${des.id}')">✕</button>
+                <button class="btn btn-danger btn-sm" style="padding:2px 7px;font-size:.72rem" onclick="deleteDesembolso(${realIdx},'${des.id}')">&#x2715;</button>
               </span>
             </div>`).join('')}
         </div>` : ''}
@@ -1476,17 +1522,22 @@ function renderDeudas() {
           ${d.pagos.slice().reverse().map(p => `
             <div class="payment-item">
               <span style="display:flex;flex-direction:column;gap:2px;">
-                <span>📅 ${p.fecha}${p.nota ? ' — ' + p.nota : ''}</span>
-                ${p.autoGastoFijoId ? `<span style="font-size:.7rem;color:var(--accent);">🔗 Abono automático desde gasto fijo</span>` : ''}
+                <span>${p.fecha}${p.nota ? ' — ' + p.nota : ''}</span>
+                ${p.autoGastoFijoId ? `<span style="font-size:.7rem;color:var(--accent);">Abono automático desde gasto fijo</span>` : ''}
               </span>
               <span style="display:flex;align-items:center;gap:8px;">
                 <span style="color:var(--green)">${fmt(p.monto)}</span>
-                ${!p.autoGastoFijoId ? `<button class="btn btn-danger btn-sm" style="padding:2px 7px;font-size:.72rem" onclick="deleteAbono(${i},'${p.id}')">✕</button>` : ''}
+                ${!p.autoGastoFijoId ? `<button class="btn btn-danger btn-sm" style="padding:2px 7px;font-size:.72rem" onclick="deleteAbono(${realIdx},'${p.id}')">&#x2715;</button>` : ''}
               </span>
             </div>`).join('')}
         </div>` : ''}
     </div>`;
   }).join('');
+}
+
+function setDeudasTab(tab) {
+  window._deudasTab = tab;
+  renderDeudas();
 }
 
 /* ============================================================
@@ -1506,7 +1557,7 @@ async function savePass() {
   clearForm(['p-nom','p-user','p-pass','p-notes']);
   renderPass();
   await saveDb(['pass']);
-  toast('Contraseña guardada ✅', 'success');
+  toast('Contraseña guardada', 'success');
 }
 
 async function deletePass(id) {
@@ -1519,8 +1570,8 @@ async function deletePass(id) {
 
 function togglePassVis(id, btn) {
   const input = document.getElementById('pval-' + id);
-  if (input.type === 'password') { input.type = 'text'; btn.textContent = '🙈'; }
-  else                           { input.type = 'password'; btn.textContent = '👁️'; }
+  if (input.type === 'password') { input.type = 'text'; btn.textContent = ''; }
+  else                           { input.type = 'password'; btn.textContent = '️'; }
 }
 
 function copyPass(id) {
@@ -1549,14 +1600,20 @@ function renderPass(search = '') {
   container.innerHTML = list.map(p => `
     <div class="pass-card">
       <div class="pass-info">
-        <div class="pass-name">🔑 ${p.nom}</div>
+        <div class="pass-name">${p.nom}</div>
         <div class="pass-user">${p.user}${p.notes ? ' · ' + p.notes : ''}</div>
       </div>
       <div class="pass-controls">
         <input type="password" class="pass-val" id="pval-${p.id}" value="${p.pass}" readonly>
-        <button class="btn btn-ghost btn-sm" onclick="togglePassVis('${p.id}',this)">👁️</button>
-        <button class="btn btn-ghost btn-sm" onclick="copyPass('${p.id}')">📋</button>
-        <button class="btn btn-danger btn-sm" onclick="deletePass('${p.id}')">🗑️</button>
+        <button class="btn btn-ghost btn-sm" onclick="togglePassVis('${p.id}',this)" title="Mostrar/ocultar">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="copyPass('${p.id}')" title="Copiar">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+        <button class="btn btn-danger btn-sm" onclick="deletePass('${p.id}')" title="Eliminar">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        </button>
       </div>
     </div>`).join('');
 }
@@ -1577,13 +1634,13 @@ async function savePrestamo() {
   if (!nombre)      return toast('El nombre del deudor es obligatorio', 'error');
   if (!monto)       return toast('El monto es obligatorio', 'error');
   if (!fecha)       return toast('La fecha es obligatoria', 'error');
-  if (!billeteraId) return toast('⚠️ Debes seleccionar de qué billetera sale el dinero', 'error');
+  if (!billeteraId) return toast('Debes seleccionar de qué billetera sale el dinero', 'error');
 
   // Verificar saldo suficiente
   const saldo = saldoBilletera(billeteraId);
   if (saldo < monto) {
     const bill = STATE.db.billeteras.find(b => b.id === billeteraId);
-    return toast(`⛔ Saldo insuficiente en ${bill?.nombre || 'la billetera'} (${fmt(saldo)})`, 'error');
+    return toast(`Saldo insuficiente en ${bill?.nombre || 'la billetera'} (${fmt(saldo)})`, 'error');
   }
 
   const totalConInteres = interes > 0 ? monto * (1 + interes / 100) : monto;
@@ -1606,7 +1663,7 @@ async function savePrestamo() {
   clearForm(['pr-nombre','pr-contacto','pr-monto','pr-vence','pr-interes','pr-desc']);
   renderAll();
   await saveDb(['prestamos', 'gastos']);
-  toast(`Préstamo registrado ✅ — descontado de ${billNombre}`, 'success');
+  toast(`Préstamo registrado — descontado de ${billNombre}`, 'success');
 }
 function openCobro(idx) {
   const p = STATE.db.prestamos[idx];
@@ -1639,7 +1696,7 @@ async function registrarCobro() {
   p.cobrado = (p.cobrado || 0) + monto;
   p.cobros.push({ id: cobroId, fecha, monto, nota, billeteraId });
 
-  // ✅ Auto-registrar como INGRESO con detalle del deudor
+  // Auto-registrar como INGRESO con detalle del deudor
   const billNombre = billeteraId
     ? (STATE.db.billeteras.find(b=>b.id===billeteraId)?.nombre || '') : '';
   STATE.db.ingresos.push({
@@ -1690,7 +1747,7 @@ function openAmpliarPrestamo(idx) {
   document.getElementById('map-fecha').value = new Date().toISOString().slice(0,10);
   const falta = Math.max(0, p.totalConInteres - (p.cobrado || 0));
   document.getElementById('map-prest-info').innerHTML =
-    `<strong>👤 ${p.nombre}</strong><br>` +
+    `<strong> ${p.nombre}</strong><br>` +
     `Prestado: <strong>${fmt(p.monto)}</strong> · ` +
     `Total a cobrar: <strong>${fmt(p.totalConInteres)}</strong> · ` +
     `Por cobrar: <strong style="color:var(--red)">${fmt(falta)}</strong>`;
@@ -1701,7 +1758,7 @@ function openAmpliarPrestamo(idx) {
     const alcanza = true; // no bloqueamos, solo informamos
     const o = document.createElement('option');
     o.value = b.id;
-    o.textContent = (BILL_ICONOS[b.tipo]||'💳') + ' ' + b.nombre + ' — ' + fmt(saldo);
+    o.textContent = (BILL_ICONOS[b.tipo]||'') + ' ' + b.nombre + ' — ' + fmt(saldo);
     sel.appendChild(o);
   });
   openModal('modal-ampliar-prestamo');
@@ -1719,13 +1776,13 @@ async function confirmarAmpliarPrestamo() {
   if (!monto || monto <= 0) return toast('El monto adicional debe ser mayor a 0', 'error');
   if (!fecha) return toast('La fecha es obligatoria', 'error');
   if (!desc)  return toast('El motivo / detalle es obligatorio', 'error');
-  if (!billeteraId) return toast('⚠️ Debes seleccionar de qué billetera sale el dinero', 'error');
+  if (!billeteraId) return toast('Debes seleccionar de qué billetera sale el dinero', 'error');
 
   // Verificar saldo
   const saldo = saldoBilletera(billeteraId);
   if (saldo < monto) {
     const bill = STATE.db.billeteras.find(b => b.id === billeteraId);
-    return toast(`⛔ Saldo insuficiente en ${bill?.nombre || 'la billetera'} (${fmt(saldo)})`, 'error');
+    return toast(`Saldo insuficiente en ${bill?.nombre || 'la billetera'} (${fmt(saldo)})`, 'error');
   }
 
   // Registrar el desembolso adicional en el historial del préstamo
@@ -1774,41 +1831,66 @@ function renderPrestamos() {
     return dias !== null && dias < 0 && p.cobrado < p.totalConInteres;
   }).length;
 
-  document.getElementById('prest-total-val').textContent    = fmt(totalPrestado);
-  document.getElementById('prest-cobrado-val').textContent  = fmt(totalCobrado);
+  document.getElementById('prest-total-val').textContent     = fmt(totalPrestado);
+  document.getElementById('prest-cobrado-val').textContent   = fmt(totalCobrado);
   document.getElementById('prest-pendiente-val').textContent = fmt(totalPendiente);
-  document.getElementById('prest-total-sub').textContent    = list.length + ' préstamos';
-  document.getElementById('prest-vencidos-sub').textContent = vencidos > 0 ? '⚠️ ' + vencidos + ' vencidos' : '';
+  document.getElementById('prest-total-sub').textContent     = list.length + ' préstamos';
+  document.getElementById('prest-vencidos-sub').textContent  = vencidos > 0 ? vencidos + ' vencidos' : '';
 
-  if (!list.length) {
+  // ── Tabs filtro pendientes / cobrados ──
+  if (!document.getElementById('prest-filter-tabs')) {
+    const tabs = document.createElement('div');
+    tabs.id = 'prest-filter-tabs';
+    tabs.style.cssText = 'display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;';
+    tabs.innerHTML = `
+      <button id="prest-tab-pend" class="btn btn-primary btn-sm" onclick="setPrestamosTab('pendientes')">Pendientes</button>
+      <button id="prest-tab-cob"  class="btn btn-ghost btn-sm"   onclick="setPrestamosTab('cobrados')">Saldados / Cobrados</button>
+      <span id="prest-tab-lbl" style="font-size:.8rem;color:var(--muted);margin-left:4px;"></span>`;
+    container.parentNode.insertBefore(tabs, container);
+  }
+
+  const tab        = window._prestamosTab || 'pendientes';
+  const pendientes = list.filter(p => Math.max(0, p.totalConInteres - (p.cobrado||0)) > 0);
+  const cobrados   = list.filter(p => Math.max(0, p.totalConInteres - (p.cobrado||0)) === 0);
+  const lista      = tab === 'cobrados' ? cobrados : pendientes;
+
+  const tPend = document.getElementById('prest-tab-pend');
+  const tCob  = document.getElementById('prest-tab-cob');
+  const tLbl  = document.getElementById('prest-tab-lbl');
+  if (tPend) tPend.className = tab === 'pendientes' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
+  if (tCob)  tCob.className  = tab === 'cobrados'   ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
+  if (tLbl)  tLbl.textContent = `${pendientes.length} pendiente${pendientes.length!==1?'s':''} · ${cobrados.length} saldado${cobrados.length!==1?'s':''}`;
+
+  if (!lista.length) {
     container.innerHTML = '';
     empty.style.display = '';
     return;
   }
   empty.style.display = 'none';
 
-  container.innerHTML = list.map((p, i) => {
-    const falta     = Math.max(0, p.totalConInteres - (p.cobrado || 0));
-    const pct       = Math.min(100, Math.round((p.cobrado || 0) / p.totalConInteres * 100));
-    const saldado   = falta === 0;
-    const dias      = diasParaVencer(p.vence);
-    let diasBadge   = '';
+  container.innerHTML = lista.map((p) => {
+    const i        = STATE.db.prestamos.indexOf(p);
+    const falta    = Math.max(0, p.totalConInteres - (p.cobrado || 0));
+    const pct      = Math.min(100, Math.round((p.cobrado || 0) / p.totalConInteres * 100));
+    const saldado  = falta === 0;
+    const dias     = diasParaVencer(p.vence);
+    let diasBadge  = '';
     if (p.vence && !saldado) {
-      if (dias < 0)       diasBadge = `<span class="dias-badge dias-venc vencido-badge">⚠️ Vencido hace ${Math.abs(dias)}d</span>`;
-      else if (dias <= 7) diasBadge = `<span class="dias-badge dias-soon">⏰ Vence en ${dias}d</span>`;
-      else                diasBadge = `<span class="dias-badge dias-ok">📅 Vence en ${dias}d</span>`;
+      if (dias < 0)       diasBadge = `<span class="dias-badge dias-venc vencido-badge">Vencido hace ${Math.abs(dias)}d</span>`;
+      else if (dias <= 7) diasBadge = `<span class="dias-badge dias-soon">Vence en ${dias}d</span>`;
+      else                diasBadge = `<span class="dias-badge dias-ok">Vence en ${dias}d</span>`;
     }
 
     return `
     <div class="prestamo-card">
       <div class="prestamo-header">
         <div>
-          <div class="prestamo-nombre">👤 ${p.nombre}</div>
-          ${p.contacto ? `<div class="prestamo-contact">📱 ${p.contacto}</div>` : ''}
-          ${p.desc ? `<div class="prestamo-contact">📝 ${p.desc}</div>` : ''}
+          <div class="prestamo-nombre">${p.nombre}</div>
+          ${p.contacto ? `<div class="prestamo-contact">${p.contacto}</div>` : ''}
+          ${p.desc     ? `<div class="prestamo-contact">${p.desc}</div>`     : ''}
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-          <span class="badge ${saldado ? 'badge-green' : 'badge-red'}">${saldado ? '✅ Saldado' : '⏳ Pendiente'}</span>
+          <span class="badge ${saldado ? 'badge-green' : 'badge-red'}">${saldado ? 'Saldado' : 'Pendiente'}</span>
           ${diasBadge}
         </div>
       </div>
@@ -1849,18 +1931,18 @@ function renderPrestamos() {
         </div>
       </div>
       <div class="debt-actions">
-        ${!saldado ? `<button class="btn btn-success btn-sm" onclick="openCobro(${i})">💰 Registrar cobro</button>` : ''}
-        <button class="btn btn-ghost btn-sm" onclick="openAmpliarPrestamo(${i})" title="Prestar más dinero a esta misma persona">💸 Prestar más</button>
-        <button class="btn btn-danger btn-sm" onclick="deletePrestamo(${i})">🗑️ Eliminar</button>
+        ${!saldado ? `<button class="btn btn-success btn-sm" onclick="openCobro(${i})">Registrar cobro</button>` : ''}
+        <button class="btn btn-ghost btn-sm" onclick="openAmpliarPrestamo(${i})" title="Prestar más dinero">Prestar más</button>
+        <button class="btn btn-danger btn-sm" onclick="deletePrestamo(${i})">Eliminar</button>
       </div>
       ${(p.desembolsos && p.desembolsos.length) ? `
         <div class="payment-history" style="border-top:2px dashed var(--accent-light);padding-top:10px;margin-top:10px;">
-          <div class="payment-history-title" style="color:var(--accent);">💸 Desembolsos adicionales (${p.desembolsos.length})</div>
+          <div class="payment-history-title" style="color:var(--accent);">Desembolsos adicionales (${p.desembolsos.length})</div>
           ${p.desembolsos.slice().reverse().map(des => `
             <div class="payment-item">
               <span style="display:flex;flex-direction:column;gap:2px;">
-                <span>📅 ${des.fecha}</span>
-                <span style="color:var(--muted);font-size:.8rem;">📝 ${des.desc}</span>
+                <span>${des.fecha}</span>
+                <span style="color:var(--muted);font-size:.8rem;">${des.desc}</span>
               </span>
               <span style="color:var(--accent);font-weight:600;">+${fmt(des.monto)}</span>
             </div>`).join('')}
@@ -1870,16 +1952,21 @@ function renderPrestamos() {
           <div class="payment-history-title">Historial de cobros (${p.cobros.length})</div>
           ${p.cobros.slice().reverse().map(c => `
             <div class="cobro-item">
-              <span>📅 ${c.fecha}${c.nota ? ' — ' + c.nota : ''}</span>
+              <span>${c.fecha}${c.nota ? ' — ' + c.nota : ''}</span>
               <span style="display:flex;align-items:center;gap:8px;">
                 <span style="color:var(--green)">${fmt(c.monto)}</span>
-                <button class="btn btn-danger btn-sm" style="padding:2px 7px;font-size:.72rem" onclick="deleteCobro(${i},'${c.id}')">✕</button>
+                <button class="btn btn-danger btn-sm" style="padding:2px 7px;font-size:.72rem" onclick="deleteCobro(${i},'${c.id}')">&#x2715;</button>
               </span>
             </div>`).join('')}
         </div>` : ''}
     </div>`;
   }).join('');
   populateBilleteraSelects();
+}
+
+function setPrestamosTab(tab) {
+  window._prestamosTab = tab;
+  renderPrestamos();
 }
 
 /* ============================================================
@@ -1920,8 +2007,8 @@ async function saveGastoFijo() {
   document.getElementById('gf-deuda-vinc').value = '';
   renderGastosFijos();
   await saveDb(['gastosFijos']);
-  const vincMsg = deudaId ? ' — vinculado a deuda 🔗' : '';
-  toast('Gasto fijo agregado ✅' + vincMsg, 'success');
+  const vincMsg = deudaId ? ' — vinculado a deuda' : '';
+  toast('Gasto fijo agregado' + vincMsg, 'success');
 }
 
 async function deleteGastoFijo(id) {
@@ -1943,7 +2030,7 @@ function openEditGastoFijo(id) {
     modal.className = 'modal-overlay';
     modal.innerHTML = `
       <div class="modal" style="max-width:420px;">
-        <div class="modal-title">✏️ Editar gasto fijo</div>
+        <div class="modal-title">Editar gasto fijo</div>
         <div class="form-grid">
           <div class="form-group">
             <label>Nombre *</label>
@@ -1956,15 +2043,15 @@ function openEditGastoFijo(id) {
           <div class="form-group">
             <label>Categoría</label>
             <select class="form-control" id="mgf-cat">
-              <option value="Arriendo">🏠 Arriendo</option>
-              <option value="Servicios">💡 Servicios</option>
-              <option value="Internet">📡 Internet</option>
-              <option value="Suscripción">📺 Suscripción</option>
-              <option value="Crédito">💳 Crédito</option>
-              <option value="Seguro">🛡️ Seguro</option>
-              <option value="Educación">📚 Educación</option>
-              <option value="Salud">🏥 Salud</option>
-              <option value="Otro">📌 Otro</option>
+              <option value="Arriendo"> Arriendo</option>
+              <option value="Servicios"> Servicios</option>
+              <option value="Internet"> Internet</option>
+              <option value="Suscripción"> Suscripción</option>
+              <option value="Crédito"> Crédito</option>
+              <option value="Seguro">️ Seguro</option>
+              <option value="Educación"> Educación</option>
+              <option value="Salud"> Salud</option>
+              <option value="Otro"> Otro</option>
             </select>
           </div>
           <div class="form-group">
@@ -1976,7 +2063,7 @@ function openEditGastoFijo(id) {
             <input type="text" class="form-control" id="mgf-notas" placeholder="Opcional...">
           </div>
           <div class="form-group" style="grid-column:1/-1">
-            <label>🔗 Vincular con deuda (opcional)</label>
+            <label>Vincular con deuda (opcional)</label>
             <select class="form-control" id="mgf-deuda-vinc">
               <option value="">— Sin vincular —</option>
             </select>
@@ -1985,7 +2072,7 @@ function openEditGastoFijo(id) {
         </div>
         <div class="modal-actions">
           <button class="btn btn-ghost" onclick="closeModal('modal-edit-gasto-fijo')">Cancelar</button>
-          <button class="btn btn-primary" onclick="saveEditGastoFijo()">💾 Guardar cambios</button>
+          <button class="btn btn-primary" onclick="saveEditGastoFijo()">Guardar cambios</button>
         </div>
         <input type="hidden" id="mgf-id">
       </div>`;
@@ -2029,7 +2116,7 @@ async function saveEditGastoFijo() {
   closeModal('modal-edit-gasto-fijo');
   renderGastosFijos();
   await saveDb(['gastosFijos']);
-  const vincMsg = deudaId ? ' — deuda vinculada 🔗' : '';
+  const vincMsg = deudaId ? ' — deuda vinculada →' : '';
   toast('Gasto fijo actualizado ✅' + vincMsg, 'success');
 }
 
@@ -2117,7 +2204,7 @@ function openModalPagoFijo(gfId, mesKey) {
     modal.className = 'modal-overlay';
     modal.innerHTML = `
       <div class="modal" style="max-width:380px;">
-        <div class="modal-title" id="mpf-titulo">💳 ¿De qué billetera pagas?</div>
+        <div class="modal-title" id="mpf-titulo"> ¿De qué billetera pagas?</div>
         <p style="color:var(--muted);font-size:.88rem;margin-bottom:16px;" id="mpf-desc"></p>
         <div class="form-group">
           <label>Billetera *</label>
@@ -2128,7 +2215,7 @@ function openModalPagoFijo(gfId, mesKey) {
         </div>
         <div class="modal-actions">
           <button class="btn btn-ghost" onclick="closeModal('modal-pago-fijo-billetera')">Cancelar</button>
-          <button class="btn btn-primary" id="mpf-confirmar">✅ Confirmar pago</button>
+          <button class="btn btn-primary" id="mpf-confirmar">Confirmar pago</button>
         </div>
       </div>`;
     document.body.appendChild(modal);
@@ -2148,8 +2235,8 @@ function openModalPagoFijo(gfId, mesKey) {
     const alcanza = saldo >= gf.monto;
     const o = document.createElement('option');
     o.value = b.id;
-    o.textContent = (BILL_ICONOS[b.tipo]||'💳') + ' ' + b.nombre +
-      ' — ' + fmt(saldo) + (alcanza ? '' : ' ⛔ saldo insuficiente');
+    o.textContent = (BILL_ICONOS[b.tipo]||'') + ' ' + b.nombre +
+      ' — ' + fmt(saldo) + (alcanza ? '' : ' saldo insuficiente');
     o.disabled = !alcanza;
     if (!alcanza) o.style.color = 'var(--red)';
     if (gf.billeteraId === b.id && alcanza) o.selected = true;
@@ -2162,7 +2249,7 @@ function openModalPagoFijo(gfId, mesKey) {
   if (avisoEl) {
     if (!hayAlguna) {
       avisoEl.style.display = '';
-      avisoEl.textContent = '⚠️ Ninguna billetera tiene saldo suficiente para cubrir ' + fmt(gf.monto);
+      avisoEl.textContent = 'Ninguna billetera tiene saldo suficiente para cubrir ' + fmt(gf.monto);
     } else {
       avisoEl.style.display = 'none';
     }
@@ -2179,7 +2266,7 @@ function openModalPagoFijo(gfId, mesKey) {
       const s = document.getElementById('mpf-billetera');
       s.style.border = '2px solid var(--red)';
       setTimeout(() => s.style.border = '', 2000);
-      return toast('⚠️ Debes seleccionar de qué billetera sale el dinero', 'error');
+      return toast('Debes seleccionar de qué billetera sale el dinero', 'error');
     }
     closeModal('modal-pago-fijo-billetera');
     await confirmarPagoFijo(gfId, mesKey, billeteraUsada);
@@ -2196,7 +2283,7 @@ async function confirmarPagoFijo(gfId, mesKey, billeteraUsada) {
   // Validar saldo suficiente
   const saldo = saldoBilletera(billeteraUsada);
   if (saldo < gf.monto) {
-    return toast(`⛔ Saldo insuficiente. Disponible: ${fmt(saldo)} — Necesario: ${fmt(gf.monto)}`, 'error');
+    return toast(`Saldo insuficiente. Disponible: ${fmt(saldo)} — Necesario: ${fmt(gf.monto)}`, 'error');
   }
 
   const now   = new Date();
@@ -2242,9 +2329,9 @@ async function confirmarPagoFijo(gfId, mesKey, billeteraUsada) {
         // Guardar referencia del abono en el registro del pago
         gf.pagos[mesKey].abonoDeudaId = abonoId;
         gf.pagos[mesKey].deudaId      = gf.deudaId;
-        mensajeDeuda = ` · 💳 Abono de ${fmt(montoAbono)} aplicado a "${deuda.nombre}"`;
+        mensajeDeuda = ` ·  Abono de ${fmt(montoAbono)} aplicado a "${deuda.nombre}"`;
       } else {
-        mensajeDeuda = ` · ✅ La deuda "${deuda.nombre}" ya estaba saldada`;
+        mensajeDeuda = ` · La deuda "${deuda.nombre}" ya estaba saldada`;
       }
     }
   }
@@ -2252,7 +2339,7 @@ async function confirmarPagoFijo(gfId, mesKey, billeteraUsada) {
   renderAll();
   await saveDb(['gastosFijos', 'gastos', 'deudas']);
   const dest = billObj ? ` (de ${billObj.nombre})` : '';
-  toast(`✅ Pagado${dest} — ${fmt(gf.monto)}${mensajeDeuda}`, 'success');
+  toast(`Pagado${dest} — ${fmt(gf.monto)}${mensajeDeuda}`, 'success');
 }
 
 async function resetPagosGF() {
@@ -2337,8 +2424,8 @@ function renderGastosFijos() {
   empty.style.display = 'none';
 
   const CAT_ICONS = {
-    'Arriendo':'🏠','Servicios':'💡','Internet':'📡','Suscripción':'📺',
-    'Crédito':'💳','Seguro':'🛡️','Educación':'📚','Salud':'🏥','Otro':'📌'
+    'Arriendo':'','Servicios':'','Internet':'','Suscripción':'',
+    'Crédito':'','Seguro':'️','Educación':'','Salud':'','Otro':''
   };
 
   // Sort: pending first, then by dia
@@ -2369,31 +2456,31 @@ function renderGastosFijos() {
       ? STATE.db.deudas.find(d => d.id === g.deudaId)
       : null;
     const deudaBadge = deudaVinc
-      ? `<div style="margin-top:6px;"><span class="badge badge-blue" style="font-size:.7rem;">🔗 ${deudaVinc.nombre} — pend. ${fmt(Math.max(0, deudaVinc.total - (deudaVinc.pagado||0)))}</span></div>`
+      ? `<div style="margin-top:6px;"><span class="badge badge-blue" style="font-size:.7rem;">→ ${deudaVinc.nombre} — pend. ${fmt(Math.max(0, deudaVinc.total - (deudaVinc.pagado||0)))}</span></div>`
       : '';
 
     return `
     <div class="gf-card" style="${pagado ? 'opacity:.7;' : ''}">
       <div class="gf-card-top">
         <div>
-          <div class="gf-nombre">${CAT_ICONS[g.cat]||'📌'} ${g.nombre}</div>
+          <div class="gf-nombre">${CAT_ICONS[g.cat]||''} ${g.nombre}</div>
           <div class="gf-cat">${g.cat}${g.notas ? ' · ' + g.notas : ''}</div>
           ${deudaBadge}
         </div>
         <div style="display:flex;gap:6px;">
           <button class="btn btn-ghost btn-sm" style="padding:4px 8px" onclick="openEditGastoFijo('${g.id}')" title="Editar">✏️</button>
-          <button class="btn btn-danger btn-sm" style="padding:4px 8px" onclick="deleteGastoFijo('${g.id}')">🗑️</button>
+          <button class="btn btn-danger btn-sm" style="padding:4px 8px" onclick="deleteGastoFijo('${g.id}')">️</button>
         </div>
       </div>
       <div class="gf-monto" style="color:${pagado?'var(--green)':'var(--text)'}">${fmt(g.monto)}</div>
       <div class="gf-info">
         ${diasStr}
-        <span class="badge ${pagado ? 'badge-green' : 'badge-red'}">${pagado ? '✅ Pagado' : '⏳ Pendiente'}</span>
+        <span class="badge ${pagado ? 'badge-green' : 'badge-red'}">${pagado ? 'Pagado' : '⏳ Pendiente'}</span>
         ${pagadoInfo ? `<span style="font-size:.68rem;color:var(--muted)">${pagadoInfo}</span>` : ''}
       </div>
       <div class="gf-actions">
         <button class="toggle-pago ${pagado ? 'pagado' : ''}" onclick="togglePagoGF('${g.id}')">
-          ${pagado ? '↩️ Marcar pendiente' : '✅ Marcar como pagado'}
+          ${pagado ? '↩️ Marcar pendiente' : 'Marcar como pagado'}
         </button>
       </div>
     </div>`;
@@ -2501,15 +2588,27 @@ function renderInversiones() {
   if(sub2) { const p=r.totalInvertido>0?((r.gananciaTotal/r.totalInvertido)*100).toFixed(1):0; sub2.textContent=(r.gananciaTotal>=0?'↑ +':'↓ ')+p+'% rentabilidad'; }
   const sub3=document.getElementById('inv-cerradas-sub'); if(sub3) sub3.textContent=r.cerradas+' cerradas';
 
+  // ── Tabs de navegación del módulo ──
+  renderInvTabs();
+
+  // Solo renderizar contenido de productos si ese tab está activo
+  if ((window._invTab || 'productos') !== 'productos') return;
+
+  // Asegurar que el contenedor del listado tenga ID correcto
+  const tbody = document.getElementById('inv-tbody');
+  const tabla = document.getElementById('inv-tabla');
+  const empty = document.getElementById('inversiones-empty');
+  // Marcar el section padre con ID para control de tabs
+  if (tabla) {
+    const secPadre = tabla.closest('.section');
+    if (secPadre && !secPadre.id) secPadre.id = 'inv-listado-sec';
+  }
+
   // Filtrar
   let lista = r.lista.slice();
   if(search) lista = lista.filter(p=>(p.nombre||'').toLowerCase().includes(search)||(p.sku||'').toLowerCase().includes(search));
   if(fEst)   lista = lista.filter(p=>p.estado===fEst);
   if(fTipo)  lista = lista.filter(p=>p.tipo===fTipo);
-
-  const tbody = document.getElementById('inv-tbody');
-  const empty = document.getElementById('inversiones-empty');
-  const tabla = document.getElementById('inv-tabla');
 
   if(!lista.length) {
     if(tabla) tabla.style.display='none';
@@ -2518,10 +2617,6 @@ function renderInversiones() {
   }
   if(tabla) tabla.style.display='';
   if(empty) empty.style.display='none';
-
-  const TIPO_ICONS = {'Producto importado':'📦','Acciones':'📉','Criptomonedas':'₿',
-    'Finca raíz':'🏠','CDT / Ahorro':'🏦','Negocio propio':'🏪',
-    'Préstamo con interés':'🤝','Otro':'📊'};
 
   tbody.innerHTML = lista.map(p => {
     const idx = STATE.db.inversiones.indexOf(STATE.db.inversiones.find(i=>i.id===p.id));
@@ -2545,7 +2640,7 @@ function renderInversiones() {
           </div>
         </div>
       </td>
-      <td style="color:var(--muted);font-size:.83rem">${TIPO_ICONS[p.tipo]||'📊'} ${p.tipo||'—'}</td>
+      <td style="color:var(--muted);font-size:.83rem">${p.tipo||'—'}</td>
       <td>${fmtNum(p.unidades||0)}</td>
       <td>${fmtNum(p.unidadesVendidas)}</td>
       <td style="${stockColor}">${fmtNum(p.stockActual)} ${invBadgeStock(p.estadoStock)}</td>
@@ -2555,15 +2650,253 @@ function renderInversiones() {
       <td>${invBadgeEstado(p.estado)}</td>
       <td>
         <div style="display:flex;gap:4px;">
-          <button class="btn btn-ghost btn-sm" title="Ver detalle" onclick="openDetalleInv('${p.id}')">👁</button>
-          <button class="btn btn-ghost btn-sm" title="Registrar venta" onclick="openModalVentaInv('${p.id}')">💰</button>
-          <button class="btn btn-success btn-sm" title="Renovar stock" onclick="openModalRenovarStock('${p.id}')">📦</button>
-          <button class="btn btn-ghost btn-sm" title="Editar" onclick="openModalNuevaInversion('${p.id}')">✏️</button>
-          <button class="btn btn-danger btn-sm" title="Eliminar" onclick="deleteInversion(${idx})">🗑️</button>
+          <button class="btn btn-ghost btn-sm" title="Ver detalle" onclick="openDetalleInv('${p.id}')">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+          <button class="btn btn-ghost btn-sm" title="Registrar venta" onclick="openModalVentaInv('${p.id}')">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </button>
+          <button class="btn btn-success btn-sm" title="Renovar stock" onclick="openModalRenovarStock('${p.id}')">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          </button>
+          <button class="btn btn-ghost btn-sm" title="Editar" onclick="openModalNuevaInversion('${p.id}')">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn btn-danger btn-sm" title="Eliminar" onclick="deleteInversion(${idx})">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          </button>
         </div>
       </td>
     </tr>`;
   }).join('');
+}
+
+// ── Dashboard de movimientos globales de inversiones ──
+function renderInvTabs() {
+  const page = document.getElementById('page-inversiones');
+  if (!page) return;
+
+  // Crear tabs si no existen
+  if (!document.getElementById('inv-tabs-bar')) {
+    const tabBar = document.createElement('div');
+    tabBar.id = 'inv-tabs-bar';
+    tabBar.style.cssText = 'display:flex;gap:4px;margin-bottom:20px;border-bottom:2px solid var(--border);padding-bottom:0;';
+    tabBar.innerHTML = `
+      <button id="inv-tab-btn-productos" onclick="setInvTab('productos')"
+        style="padding:8px 20px;font-size:.88rem;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;color:var(--muted);transition:all .2s">
+        Productos
+      </button>
+      <button id="inv-tab-btn-movimientos" onclick="setInvTab('movimientos')"
+        style="padding:8px 20px;font-size:.88rem;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;color:var(--muted);transition:all .2s">
+        Movimientos
+      </button>`;
+    const statsGrid = page.querySelector('.stats-grid');
+    if (statsGrid) statsGrid.after(tabBar);
+    else page.querySelector('.page-header-row').after(tabBar);
+  }
+
+  // Actualizar estilos de tabs
+  const tab = window._invTab || 'productos';
+  ['productos','movimientos'].forEach(t => {
+    const btn = document.getElementById(`inv-tab-btn-${t}`);
+    if (!btn) return;
+    btn.style.borderBottomColor = t === tab ? 'var(--accent)' : 'transparent';
+    btn.style.color = t === tab ? 'var(--accent)' : 'var(--muted)';
+  });
+
+  // Mostrar/ocultar secciones por ID (más robusto que querySelector)
+  const listadoSec = document.getElementById('inv-listado-sec');
+  const movSec     = document.getElementById('inv-movimientos-sec');
+
+  if (tab === 'movimientos') {
+    if (listadoSec) listadoSec.style.display = 'none';
+    renderInvMovimientos();
+    if (movSec) movSec.style.display = '';
+  } else {
+    if (movSec) movSec.style.display = 'none';
+    if (listadoSec) listadoSec.style.display = '';
+  }
+}
+
+function setInvTab(tab) {
+  window._invTab = tab;
+  // Animación de carga de 0.5s antes de renderizar
+  const page = document.getElementById('page-inversiones');
+  if (!page) return;
+
+  // Mostrar spinner en el área de contenido
+  let spinner = document.getElementById('inv-tab-spinner');
+  if (!spinner) {
+    spinner = document.createElement('div');
+    spinner.id = 'inv-tab-spinner';
+    spinner.style.cssText = 'display:flex;justify-content:center;align-items:center;padding:40px 0;';
+    spinner.innerHTML = `<div style="width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .5s linear infinite;"></div>`;
+    const tabBar = document.getElementById('inv-tabs-bar');
+    if (tabBar) tabBar.after(spinner);
+  }
+
+  // Ocultar todo el contenido durante la carga
+  const listadoSec = document.getElementById('inv-listado-sec');
+  const movSec     = document.getElementById('inv-movimientos-sec');
+  if (listadoSec) listadoSec.style.display = 'none';
+  if (movSec)     movSec.style.display = 'none';
+  spinner.style.display = 'flex';
+
+  // Actualizar tabs visualmente de inmediato
+  ['productos','movimientos'].forEach(t => {
+    const btn = document.getElementById(`inv-tab-btn-${t}`);
+    if (!btn) return;
+    btn.style.borderBottomColor = t === tab ? 'var(--accent)' : 'transparent';
+    btn.style.color = t === tab ? 'var(--accent)' : 'var(--muted)';
+  });
+
+  // Renderizar tras 0.5s
+  setTimeout(() => {
+    spinner.style.display = 'none';
+    renderInversiones();
+  }, 500);
+}
+
+function renderInvMovimientos() {
+  // Crear o reutilizar el contenedor — va después del tabs bar
+  let sec = document.getElementById('inv-movimientos-sec');
+  if (!sec) {
+    sec = document.createElement('div');
+    sec.id = 'inv-movimientos-sec';
+    sec.style.marginBottom = '20px';
+    const tabBar = document.getElementById('inv-tabs-bar');
+    if (tabBar) tabBar.after(sec);
+    else {
+      const page = document.getElementById('page-inversiones');
+      if (page) page.appendChild(sec);
+    }
+  }
+
+  // Recolectar todos los movimientos de todas las inversiones
+  const movs = [];
+
+  (STATE.db.inversiones || []).forEach(inv => {
+    const p = enriquecerInversion(inv);
+
+    // Capital inicial invertido
+    movs.push({
+      fecha: inv.fecha || '—',
+      tipo: 'capital',
+      concepto: `Capital: ${inv.nombre}`,
+      producto: inv.nombre,
+      monto: -p.inversionTotal,
+      label: 'Inversión inicial',
+      color: 'var(--red)',
+      signo: '-',
+    });
+
+    // Renovaciones de stock
+    (inv.renovaciones || []).forEach(r => {
+      movs.push({
+        fecha: r.fecha || inv.fecha || '—',
+        tipo: 'renovacion',
+        concepto: `Renovación stock: ${inv.nombre}`,
+        producto: inv.nombre,
+        monto: -(r.inversionNueva || 0),
+        label: 'Renovación stock',
+        color: 'var(--orange)',
+        signo: '-',
+      });
+    });
+
+    // Gastos adicionales
+    (inv.gastosAdicionales || []).forEach(g => {
+      movs.push({
+        fecha: g.fecha || '—',
+        tipo: 'gasto_adic',
+        concepto: `Gasto: ${g.desc} (${inv.nombre})`,
+        producto: inv.nombre,
+        monto: -Number(g.monto || 0),
+        label: g.desc || 'Gasto adicional',
+        color: 'var(--red)',
+        signo: '-',
+      });
+    });
+
+    // Ventas registradas
+    const ventas = (STATE.db.ventasInv || []).filter(v => v.invId === inv.id);
+    ventas.forEach(v => {
+      const total = (v.cantidad || 0) * (v.precioUnitario || 0);
+      movs.push({
+        fecha: v.fecha || '—',
+        tipo: 'venta',
+        concepto: `Venta: ${inv.nombre}${v.cliente ? ' → ' + v.cliente : ''}`,
+        producto: inv.nombre,
+        monto: total,
+        label: `${v.cantidad} uds × ${fmtCOP(v.precioUnitario)}`,
+        color: 'var(--green)',
+        signo: '+',
+      });
+    });
+  });
+
+  // Ordenar por fecha descendente
+  movs.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+
+  if (!movs.length) { sec.innerHTML = ''; return; }
+
+  const totalEntradas = movs.filter(m=>m.monto>0).reduce((a,m)=>a+m.monto,0);
+  const totalSalidas  = movs.filter(m=>m.monto<0).reduce((a,m)=>a+Math.abs(m.monto),0);
+
+  const TIPO_LABELS = { capital:'Capital invertido', renovacion:'Renovación stock', gasto_adic:'Gasto adicional', venta:'Venta' };
+  const TIPO_BADGE  = { capital:'badge-red', renovacion:'badge-yellow', gasto_adic:'badge-red', venta:'badge-green' };
+
+  // Filtro por tipo
+  const filtroActual = window._invMovFiltro || '';
+
+  sec.innerHTML = `
+    <div class="section" style="margin-bottom:16px;">
+      <div class="section-header" style="margin-bottom:12px;">
+        <span class="section-title">Movimientos de inversiones</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+          ${['','capital','renovacion','gasto_adic','venta'].map(t => `
+            <button class="btn btn-sm ${filtroActual===t?'btn-primary':'btn-ghost'}"
+              onclick="window._invMovFiltro='${t}';renderInvMovimientos()">
+              ${t===''?'Todos':TIPO_LABELS[t]}
+            </button>`).join('')}
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;border-left:4px solid var(--green);">
+          <div style="font-size:.75rem;color:var(--muted);font-weight:500">Total recuperado (ventas)</div>
+          <div style="font-size:1.1rem;font-weight:700;color:var(--green)">${fmtCOP(totalEntradas)}</div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;border-left:4px solid var(--red);">
+          <div style="font-size:.75rem;color:var(--muted);font-weight:500">Total invertido (costos)</div>
+          <div style="font-size:1.1rem;font-weight:700;color:var(--red)">${fmtCOP(totalSalidas)}</div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Producto</th>
+              <th>Concepto</th>
+              <th>Tipo</th>
+              <th>Monto</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(filtroActual ? movs.filter(m=>m.tipo===filtroActual) : movs).map(m=>`
+              <tr>
+                <td style="white-space:nowrap;color:var(--muted);font-size:.82rem">${m.fecha}</td>
+                <td style="font-weight:600;font-size:.85rem">${m.producto}</td>
+                <td style="font-size:.82rem;color:var(--muted)">${m.label}</td>
+                <td><span class="badge ${TIPO_BADGE[m.tipo]||'badge-blue'}" style="font-size:.72rem">${TIPO_LABELS[m.tipo]||m.tipo}</span></td>
+                <td style="font-weight:700;white-space:nowrap;color:${m.monto>=0?'var(--green)':'var(--red)'}">
+                  ${m.signo}${fmtCOP(Math.abs(m.monto))}
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
 }
 
 function populateInvTipoFilter() {
@@ -2660,7 +2993,7 @@ function openModalNuevaInversion(id=null) {
                 <option value="cerrada" ${inv?.estado==='cerrada'?'selected':''}>Cerrada</option>
               </select>
             </div>
-            <div class="form-group"><label>💳 Dinero sale de *</label>
+            <div class="form-group"><label> Dinero sale de *</label>
               <select class="form-control" id="fi-billetera" onchange="calcPreviewInv()">
                 <option value="">— Selecciona billetera (obligatorio) —</option>
                 ${(STATE.db.billeteras||[]).map(b=>{
@@ -2669,13 +3002,13 @@ function openModalNuevaInversion(id=null) {
                   return `<option value="${b.id}"
                     ${(inv?.billeteraId===b.id)?'selected':''}
                     style="color:${saldo>0?'inherit':'var(--red)'}"
-                  >${(BILL_ICONOS[b.tipo]||'💳')+' '+b.nombre+' — '+fmt(saldo)}</option>`;
+                  >${(BILL_ICONOS[b.tipo]||'')+' '+b.nombre+' — '+fmt(saldo)}</option>`;
                 }).join('')}
               </select>
               <small style="color:var(--muted);font-size:.72rem">El costo total se descontará de esta billetera</small>
               <div id="fi-bill-aviso" style="display:none;margin-top:5px;font-size:.78rem;color:var(--red);font-weight:600;"></div>
             </div>
-            <div class="form-group"><label>📦 Unidades en bodega (recibidas)</label>
+            <div class="form-group"><label> Unidades en bodega (recibidas)</label>
               <input type="number" class="form-control" id="fi-bodega" value="${inv?.unidadesEnBodega||''}" placeholder="0">
               <small style="color:var(--muted);font-size:.72rem">Cuántas ya tienes físicamente</small>
             </div>
@@ -2719,10 +3052,10 @@ function calcPreviewInv() {
     const saldo = saldoBilletera(billSel.value);
     if (saldo < inv) {
       aviso.style.display = '';
-      aviso.textContent = `⛔ Saldo insuficiente. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(inv)}`;
+      aviso.textContent = `Saldo insuficiente. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(inv)}`;
     } else {
       aviso.style.display = '';
-      aviso.textContent = `✅ Saldo suficiente. Quedarán ${fmt(saldo - inv)} tras la compra`;
+      aviso.textContent = `Saldo suficiente. Quedarán ${fmt(saldo - inv)} tras la compra`;
       aviso.style.color = 'var(--green)';
     }
   } else if (aviso) {
@@ -2752,8 +3085,8 @@ async function guardarInversion(id=null) {
       const sel = document.getElementById('fi-billetera');
       if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(()=>sel.style.border='',2000); }
       const aviso = document.getElementById('fi-bill-aviso');
-      if (aviso) { aviso.style.display=''; aviso.textContent='⚠️ Debes seleccionar de qué billetera sale el dinero'; }
-      return toast('⚠️ Debes seleccionar de qué billetera sale el dinero', 'error');
+      if (aviso) { aviso.style.display=''; aviso.textContent='Debes seleccionar de qué billetera sale el dinero'; }
+      return toast('Debes seleccionar de qué billetera sale el dinero', 'error');
     }
     if (invTotal > 0) {
       const saldo = saldoBilletera(billeteraId);
@@ -2762,8 +3095,8 @@ async function guardarInversion(id=null) {
         if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(()=>sel.style.border='',2000); }
         const aviso = document.getElementById('fi-bill-aviso');
         const bill = STATE.db.billeteras?.find(b=>b.id===billeteraId);
-        if (aviso) { aviso.style.display=''; aviso.textContent=`⛔ Saldo insuficiente en ${bill?.nombre||'billetera'}. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(invTotal)}`; }
-        return toast(`⛔ Saldo insuficiente. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(invTotal)}`, 'error');
+        if (aviso) { aviso.style.display=''; aviso.textContent=`Saldo insuficiente en ${bill?.nombre||'billetera'}. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(invTotal)}`; }
+        return toast(`Saldo insuficiente. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(invTotal)}`, 'error');
       }
     }
   }
@@ -2810,7 +3143,7 @@ async function guardarInversion(id=null) {
       const bn = bill ? ` (de ${bill.nombre})` : '';
       toast(`Inversión creada${bn} · ${fmtCOP(invTotal)} descontado ✅`, 'success');
     } else {
-      toast('Inversión creada ✅', 'success');
+      toast('Inversión creada', 'success');
     }
   }
   renderAll();
@@ -2828,7 +3161,7 @@ function openModalVentaInv(invId) {
   const overlay = document.getElementById('modal-inv-form-overlay');
   overlay.innerHTML = `
     <div class="modal" style="max-width:440px;width:100%;">
-      <div class="modal-title">💰 Registrar venta
+      <div class="modal-title">Registrar venta
         <button onclick="closeInvModal()" style="float:right;background:none;border:none;font-size:1rem;color:var(--muted);cursor:pointer;">✕</button>
       </div>
       <div class="modal-body-wrap">
@@ -2858,12 +3191,12 @@ function openModalVentaInv(invId) {
           <div class="form-group"><label>Observación</label>
             <input type="text" class="form-control" id="fv-obs" placeholder="Notas opcionales">
           </div>
-          <div class="form-group" style="grid-column:1/-1"><label>💳 Dinero ingresa a *</label>
+          <div class="form-group" style="grid-column:1/-1"><label> Dinero ingresa a *</label>
             <select class="form-control" id="fv-billetera" onchange="onFvBilleteraChange()">
               <option value="">— Selecciona billetera (obligatorio) —</option>
               ${(STATE.db.billeteras||[]).map(b=>{
                 const s=saldoBilletera(b.id);
-                return `<option value="${b.id}">${(BILL_ICONOS[b.tipo]||'💳')+' '+b.nombre+' — '+fmt(s)}</option>`;
+                return `<option value="${b.id}">${(BILL_ICONOS[b.tipo]||'')+' '+b.nombre+' — '+fmt(s)}</option>`;
               }).join('')}
             </select>
             <div id="fv-bill-preview" style="display:none;margin-top:6px;padding:8px 12px;border-radius:var(--radius-sm);font-size:.83rem;font-weight:600;"></div>
@@ -2893,7 +3226,7 @@ function onFvBilleteraChange() {
   if (totalVenta > 0) {
     preview.style.background = 'var(--green-light)';
     preview.style.color = 'var(--green)';
-    preview.innerHTML = `✅ Saldo actual: <strong>${fmt(saldo)}</strong> → tras venta: <strong>${fmt(saldoFuturo)}</strong> <span style="color:var(--muted);font-weight:400">(+${fmt(totalVenta)})</span>`;
+    preview.innerHTML = `Saldo actual: <strong>${fmt(saldo)}</strong> → tras venta: <strong>${fmt(saldoFuturo)}</strong> <span style="color:var(--muted);font-weight:400">(+${fmt(totalVenta)})</span>`;
   } else {
     preview.style.background = 'var(--bg2)';
     preview.style.color = 'var(--muted)';
@@ -2916,7 +3249,7 @@ async function guardarVentaInv(invId, stockDisp) {
   if(!billeteraId) {
     const sel = document.getElementById('fv-billetera');
     if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(() => sel.style.border = '', 2000); }
-    return toast('⚠️ Debes seleccionar en qué billetera ingresa el dinero de la venta','error');
+    return toast('Debes seleccionar en qué billetera ingresa el dinero de la venta','error');
   }
   const ventaId = uid();
   addVentaInv({ id: ventaId, invId, fecha, cantidad, precioUnitario:precio, cliente, obs, billeteraId });
@@ -2965,88 +3298,111 @@ function renderDetalleInv(invId) {
   const invIdx = STATE.db.inversiones.indexOf(rawInv);
 
   const pct = p.inversionTotal>0?((p.totalRecuperado/p.inversionTotal)*100).toFixed(1):0;
-  const ganColor = p.ganancia>=0?'var(--green)':'var(--red)';
+
+  // Calcular totales de movimientos del producto
+  const totalGastosAdic = (p.gastosAdicionales||[]).reduce((a,g)=>a+Number(g.monto),0);
+  const totalEnvios = Number(rawInv.envio||0) + (rawInv.renovaciones||[]).reduce((a,r)=>a+Number(r.envio||0),0);
+  const totalCapital = p.inversionTotal - totalGastosAdic - totalEnvios;
 
   document.getElementById('page-detalle-inv').innerHTML = `
     <div class="page-header-row">
       <div>
-        <button class="btn btn-ghost btn-sm" onclick="navigate('inversiones')" style="margin-bottom:8px;">← Volver</button>
+        <button class="btn btn-ghost btn-sm" onclick="navigate('inversiones')" style="margin-bottom:8px;">&#x2190; Volver</button>
         <p class="page-title">${p.nombre}</p>
         <p class="page-sub" style="margin-bottom:0">${p.tipo||''}${p.plataforma?' · '+p.plataforma:''}${p.sku?' · SKU: '+p.sku:''}</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-primary" onclick="openModalVentaInv('${p.id}')">+ Registrar venta</button>
-        <button class="btn btn-success" onclick="openModalRenovarStock('${p.id}')">📦 Renovar stock</button>
-        <button class="btn btn-danger btn-sm" onclick="openModalGastoAdicionalInv('${p.id}')">💸 Gasto adicional</button>
-        <button class="btn btn-ghost" onclick="openModalNuevaInversion('${p.id}')">✏️ Editar</button>
+        <button class="btn btn-success" onclick="openModalRenovarStock('${p.id}')">Renovar stock</button>
+        <button class="btn btn-danger btn-sm" onclick="openModalGastoAdicionalInv('${p.id}')">+ Gasto adicional</button>
+        <button class="btn btn-ghost" onclick="openModalNuevaInversion('${p.id}')">Editar</button>
       </div>
     </div>
 
+    <!-- KPIs del producto -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px;">
+      ${[
+        ['var(--red)',    'Capital invertido',    fmtCOP(totalCapital),          `${fmtNum(p.unidades||0)} unidades`],
+        ['var(--orange)', 'Envíos pagados',        fmtCOP(totalEnvios),           'costos de logística'],
+        ['var(--red)',    'Gastos adicionales',    fmtCOP(totalGastosAdic),       `${(p.gastosAdicionales||[]).length} registros`],
+        ['var(--green)',  'Total recuperado',      fmtCOP(p.totalRecuperado),     `${pct}% de lo invertido`],
+        [p.ganancia>=0?'var(--green)':'var(--red)', 'Ganancia neta', fmtCOP(p.ganancia), `${p.unidadesVendidas} uds vendidas`],
+        ['var(--orange)', 'Stock actual',          fmtNum(p.stockActual)+' uds', invBadgeStock(p.estadoStock)],
+      ].map(([color,lbl,val,sub])=>`
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+          padding:14px 16px;border-left:4px solid ${color};box-shadow:var(--shadow);">
+          <div style="font-size:.72rem;color:var(--muted);font-weight:500;margin-bottom:4px">${lbl}</div>
+          <div style="font-size:1.1rem;font-weight:700;margin-bottom:2px;color:${color}">${val}</div>
+          <div style="font-size:.72rem;color:var(--muted)">${sub}</div>
+        </div>`).join('')}
+    </div>
+
+    <!-- Barra de progreso de ventas -->
+    ${p.unidades>0?`
+    <div class="section" style="padding:14px 18px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--muted);margin-bottom:6px;">
+        <span>Progreso de ventas — ${p.unidadesVendidas} de ${p.unidades} unidades</span>
+        <span style="font-weight:700">${Math.round((p.unidadesVendidas/p.unidades)*100)}%</span>
+      </div>
+      <div class="progress-bar" style="height:10px;">
+        <div class="progress-fill" style="width:${Math.min(100,Math.round((p.unidadesVendidas/p.unidades)*100))}%;background:var(--accent)"></div>
+      </div>
+    </div>`:''}
+
+    <!-- Info del producto + precios -->
     <div class="det-grid" style="margin-bottom:20px;">
       <div class="section" style="padding:20px;">
         ${p.imagen
           ? `<img src="${p.imagen}" alt="${p.nombre}" style="width:100%;height:160px;object-fit:cover;border-radius:var(--radius-sm);margin-bottom:16px;"
-               onerror="this.outerHTML='<div style=\'width:100%;height:160px;border-radius:var(--radius-sm);background:linear-gradient(135deg,var(--accent-light),var(--purple-light));color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:3.5rem;margin-bottom:16px;\'>${(p.nombre||'?')[0].toUpperCase()}</div>'">`
+               onerror="this.outerHTML='<div style=\\'width:100%;height:160px;border-radius:var(--radius-sm);background:linear-gradient(135deg,var(--accent-light),var(--purple-light));color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:3.5rem;margin-bottom:16px;\\'>${(p.nombre||'?')[0].toUpperCase()}</div>'">`
           : `<div style="width:100%;height:160px;border-radius:var(--radius-sm);background:linear-gradient(135deg,var(--accent-light),var(--purple-light));
               color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:3.5rem;margin-bottom:16px;">
               ${(p.nombre||'?')[0].toUpperCase()}
              </div>`}
-        <div style="display:flex;flex-direction:column;gap:0;">
-          ${[
-            ['SKU', p.sku ? `<code style="font-family:var(--font-mono);font-size:.78rem;background:var(--bg2);border:1px solid var(--border);padding:2px 6px;border-radius:4px;color:var(--muted)">${p.sku}</code>` : '—'],
-            ['Categoría', p.categoria||'—'],
-            ['Proveedor', p.plataforma||'—'],
-            ['Link', p.link?`<a href="${p.link}" target="_blank" style="color:var(--accent);font-size:.85rem">Ver producto ↗</a>`:'—'],
-            ['Imagen URL', p.imagen?`<a href="${p.imagen}" target="_blank" style="color:var(--accent);font-size:.85rem">Ver imagen ↗</a>`:'—'],
-            ['Estado', invBadgeEstado(p.estado)],
-            ['Stock', invBadgeStock(p.estadoStock)],
-            ['Fecha compra', p.fecha||'—'],
-          ].map(([lbl,val])=>`
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-light);font-size:.875rem;">
-              <span style="color:var(--muted);font-size:.8rem">${lbl}</span>
-              <span>${val}</span>
-            </div>`).join('')}
-          ${p.notas?`<div style="margin-top:10px;font-size:.82rem;color:var(--muted);font-style:italic">📝 ${p.notas}</div>`:''}
-        </div>
+        ${[
+          ['SKU', p.sku ? `<code style="font-family:var(--font-mono);font-size:.78rem;background:var(--bg2);border:1px solid var(--border);padding:2px 6px;border-radius:4px;color:var(--muted)">${p.sku}</code>` : '—'],
+          ['Categoría', p.categoria||'—'],
+          ['Proveedor', p.plataforma||'—'],
+          ['Estado', invBadgeEstado(p.estado)],
+          ['Stock', invBadgeStock(p.estadoStock)],
+          ['Fecha compra', p.fecha||'—'],
+          ['Link', p.link?`<a href="${p.link}" target="_blank" style="color:var(--accent);font-size:.85rem">Ver producto ↗</a>`:'—'],
+        ].map(([lbl,val])=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-light);font-size:.875rem;">
+            <span style="color:var(--muted);font-size:.8rem">${lbl}</span>
+            <span>${val}</span>
+          </div>`).join('')}
+        ${p.notas?`<div style="margin-top:10px;font-size:.82rem;color:var(--muted);font-style:italic">${p.notas}</div>`:''}
         ${p.estado!=='cerrada'?`
         <div style="margin-top:16px;display:flex;gap:8px;">
-          ${p.estado==='activa'?`<button class="btn btn-ghost btn-sm" style="flex:1" onclick="cambiarEstadoInv(${invIdx},'cerrada')">✅ Cerrar</button>`:''}
-          ${p.estado==='activa'?`<button class="btn btn-ghost btn-sm" style="flex:1" onclick="cambiarEstadoInv(${invIdx},'pausada')">⏸️ Pausar</button>`:''}
-          ${p.estado==='pausada'?`<button class="btn btn-ghost btn-sm" style="flex:1" onclick="cambiarEstadoInv(${invIdx},'activa')">▶️ Activar</button>`:''}
+          ${p.estado==='activa'?`<button class="btn btn-ghost btn-sm" style="flex:1" onclick="cambiarEstadoInv(${invIdx},'cerrada')">Cerrar inversión</button>`:''}
+          ${p.estado==='activa'?`<button class="btn btn-ghost btn-sm" style="flex:1" onclick="cambiarEstadoInv(${invIdx},'pausada')">Pausar</button>`:''}
+          ${p.estado==='pausada'?`<button class="btn btn-ghost btn-sm" style="flex:1" onclick="cambiarEstadoInv(${invIdx},'activa')">Activar</button>`:''}
         </div>`:''}
       </div>
 
-      <div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:14px;">
-          ${[
-            ['blue','Inversión total', fmtCOP(p.inversionTotal), `$${p.precioUSD||0} USD × ${p.tasa||0} + envío y costos`],
-            ['teal','Costo unitario',  fmtCOP(p.costoUnitario),  `Precio sugerido: ${fmtCOP(p.precioSugerido||0)}`],
-            ['green','Total recuperado', fmtCOP(p.totalRecuperado), `${pct}% de la inversión`],
-            [p.ganancia>=0?'green':'red', 'Ganancia acumulada', fmtCOP(p.ganancia), `${p.unidadesVendidas} uds vendidas de ${p.unidades||0}`],
-            ['orange','Stock actual', fmtNum(p.stockActual)+' uds', invBadgeStock(p.estadoStock)],
-          ].map(([col,lbl,val,sub])=>`
-            <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;
-              border-left:4px solid var(--${col==='red'?'red':col==='green'?'green':col==='teal'?'teal':col==='orange'?'orange':'accent'});
-              box-shadow:var(--shadow);">
-              <div style="font-size:.75rem;color:var(--muted);font-weight:500;margin-bottom:4px">${lbl}</div>
-              <div style="font-size:1.2rem;font-weight:700;margin-bottom:4px">${val}</div>
-              <div style="font-size:.73rem;color:var(--muted)">${sub}</div>
-            </div>`).join('')}
-        </div>
-        ${p.unidades>0?`
-        <div class="section" style="padding:14px 18px;">
-          <div style="display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted);margin-bottom:5px;">
-            <span>Progreso de ventas</span><span>${Math.round((p.unidadesVendidas/p.unidades)*100)}%</span>
-          </div>
-          <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,Math.round((p.unidadesVendidas/p.unidades)*100))}%;background:var(--accent)"></div></div>
-        </div>`:''}
+      <div class="section" style="padding:20px;">
+        <div style="font-size:.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:14px;">Estructura de costos</div>
+        ${[
+          ['Precio USD c/u',    `$${p.precioUSD||0} USD`],
+          ['Tasa de cambio',    fmtCOP(p.tasa||0)],
+          ['Costo unitario COP', fmtCOP(p.costoUnitario)],
+          ['Envío base',        fmtCOP(rawInv.envio||0)],
+          ['Otros costos',      fmtCOP(rawInv.otrosCostos||0)],
+          ['Precio sugerido',   `<strong style="color:var(--accent)">${fmtCOP(p.precioSugerido||0)}</strong>`],
+        ].map(([lbl,val])=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-light);font-size:.875rem;">
+            <span style="color:var(--muted);font-size:.8rem">${lbl}</span>
+            <span>${val}</span>
+          </div>`).join('')}
       </div>
     </div>
 
+    <!-- Renovaciones -->
     ${p.renovaciones && p.renovaciones.length ? `
     <div class="section" style="margin-bottom:14px;">
       <div class="section-header">
-        <span class="section-title">📦 Historial de renovaciones de stock (${p.renovaciones.length})</span>
+        <span class="section-title">Renovaciones de stock (${p.renovaciones.length})</span>
       </div>
       <div class="table-wrap">
         <table class="data-table">
@@ -3058,7 +3414,7 @@ function renderDetalleInv(invId) {
                 <td>+${r.nuevasUnidades}</td>
                 <td>$${r.precioUSD}</td>
                 <td>${fmtCOP(r.tasa)}</td>
-                <td>${fmtCOP(r.envio||0)}</td>
+                <td style="color:var(--orange)">${fmtCOP(r.envio||0)}</td>
                 <td style="font-weight:600">${fmtCOP(r.inversionNueva)}</td>
                 <td style="color:var(--muted);font-size:.82rem">${r.notas||'—'}</td>
               </tr>`).join('')}
@@ -3067,11 +3423,12 @@ function renderDetalleInv(invId) {
       </div>
     </div>` : ''}
 
-    <div class="section">
+    <!-- Gastos adicionales -->
+    <div class="section" style="margin-bottom:14px;">
       <div class="section-header">
-        <span class="section-title">💸 Gastos adicionales de la inversión</span>
+        <span class="section-title">Gastos adicionales</span>
         <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-size:.82rem;color:var(--muted)">${(p.gastosAdicionales||[]).length} registros · Total: <strong style="color:var(--red)">${fmtCOP((p.gastosAdicionales||[]).reduce((a,g)=>a+Number(g.monto),0))}</strong></span>
+          <span style="font-size:.82rem;color:var(--muted)">${(p.gastosAdicionales||[]).length} registros · Total: <strong style="color:var(--red)">${fmtCOP(totalGastosAdic)}</strong></span>
           <button class="btn btn-danger btn-sm" onclick="openModalGastoAdicionalInv('${p.id}')">+ Agregar</button>
         </div>
       </div>
@@ -3087,9 +3444,11 @@ function renderDetalleInv(invId) {
                     <td style="white-space:nowrap">${g.fecha||'—'}</td>
                     <td style="font-weight:600">${g.desc}</td>
                     <td style="color:var(--red);font-weight:600">${fmtCOP(g.monto)}</td>
-                    <td style="color:var(--muted);font-size:.82rem">${bill?(BILL_ICONOS[bill.tipo]||'💳')+' '+bill.nombre:'—'}</td>
+                    <td style="color:var(--muted);font-size:.82rem">${bill?bill.nombre:'—'}</td>
                     <td style="color:var(--muted);font-size:.82rem">${g.notas||'—'}</td>
-                    <td><button class="btn btn-danger btn-sm" onclick="eliminarGastoAdicionalInv('${g.id}','${p.id}')">🗑️</button></td>
+                    <td><button class="btn btn-danger btn-sm" onclick="eliminarGastoAdicionalInv('${g.id}','${p.id}')">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                    </button></td>
                   </tr>`;
                 }).join('')}
           </tbody>
@@ -3097,10 +3456,11 @@ function renderDetalleInv(invId) {
       </div>
     </div>
 
+    <!-- Historial de ventas -->
     <div class="section">
       <div class="section-header">
-        <span class="section-title">📋 Historial de ventas</span>
-        <span style="font-size:.82rem;color:var(--muted)">${p.ventas.length} registros</span>
+        <span class="section-title">Historial de ventas</span>
+        <span style="font-size:.82rem;color:var(--muted)">${p.ventas.length} registros · <strong style="color:var(--green)">${fmtCOP(p.totalRecuperado)}</strong> recuperado</span>
       </div>
       <div class="table-wrap">
         <table class="data-table">
@@ -3111,12 +3471,14 @@ function renderDetalleInv(invId) {
               : [...p.ventas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).map(v=>`
                 <tr>
                   <td>${v.fecha||'—'}</td>
-                  <td>${v.cantidad}</td>
+                  <td style="font-weight:600">${v.cantidad}</td>
                   <td>${fmtCOP(v.precioUnitario)}</td>
-                  <td style="font-weight:600">${fmtCOP((v.cantidad||0)*(v.precioUnitario||0))}</td>
+                  <td style="font-weight:700;color:var(--green)">${fmtCOP((v.cantidad||0)*(v.precioUnitario||0))}</td>
                   <td style="color:var(--muted)">${v.cliente||'—'}</td>
                   <td style="color:var(--muted)">${v.obs||'—'}</td>
-                  <td><button class="btn btn-danger btn-sm" onclick="eliminarVentaInv('${v.id}','${p.id}')">🗑️</button></td>
+                  <td><button class="btn btn-danger btn-sm" onclick="eliminarVentaInv('${v.id}','${p.id}')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                  </button></td>
                 </tr>`).join('')}
           </tbody>
         </table>
@@ -3124,7 +3486,6 @@ function renderDetalleInv(invId) {
     </div>
   `;
 }
-
 async function eliminarVentaInv(ventaId, invId) {
   if(!confirm('¿Eliminar esta venta?')) return;
 
@@ -3169,7 +3530,7 @@ async function cambiarEstadoInv(idx, estado) {
       });
       toast(`Inversión cerrada — ganancia ${fmtCOP(Math.round(p.ganancia))} registrada ✅`, 'success');
     } else {
-      toast('Inversión cerrada ✅', 'success');
+      toast('Inversión cerrada', 'success');
     }
   }
   renderAll();
@@ -3186,14 +3547,14 @@ function openModalRenovarStock(invId) {
   const billeterasOpts = (STATE.db.billeteras||[]).map(b => {
     const s = saldoBilletera(b.id);
     return `<option value="${b.id}" style="color:${s>0?'inherit':'var(--red)'}">
-      ${BILL_ICONOS[b.tipo]||'💳'} ${b.nombre} — ${fmt(s)}
+      ${BILL_ICONOS[b.tipo]||''} ${b.nombre} — ${fmt(s)}
     </option>`;
   }).join('');
 
   const overlay = document.getElementById('modal-inv-form-overlay');
   overlay.innerHTML = `
     <div class="modal" style="max-width:480px;width:100%;">
-      <div class="modal-title">📦 Renovar stock — ${inv.nombre}
+      <div class="modal-title"> Renovar stock — ${inv.nombre}
         <button onclick="closeInvModal()" style="float:right;background:none;border:none;font-size:1rem;color:var(--muted);cursor:pointer;">✕</button>
       </div>
       <div class="modal-body-wrap">
@@ -3221,7 +3582,7 @@ function openModalRenovarStock(invId) {
             <input type="number" class="form-control" id="rs-precio-venta" value="${inv.precioSugerido||''}" placeholder="0">
           </div>
           <div class="form-group" style="grid-column:1/-1">
-            <label>💳 Dinero sale de *</label>
+            <label> Dinero sale de *</label>
             <select class="form-control" id="rs-billetera" onchange="calcRenovarPreview()">
               <option value="">— Selecciona billetera (obligatorio) —</option>
               ${billeterasOpts}
@@ -3243,7 +3604,7 @@ function openModalRenovarStock(invId) {
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeInvModal()">Cancelar</button>
-        <button class="btn btn-success" onclick="confirmarRenovarStock('${invId}',${p.stockActual})">📦 Confirmar renovación</button>
+        <button class="btn btn-success" onclick="confirmarRenovarStock('${invId}',${p.stockActual})"> Confirmar renovación</button>
       </div>
     </div>`;
   overlay.style.display = 'flex';
@@ -3270,11 +3631,11 @@ function calcRenovarPreview() {
     if (saldo < inv) {
       aviso.style.display = '';
       aviso.style.color = 'var(--red)';
-      aviso.textContent = `⛔ Saldo insuficiente. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(inv)}`;
+      aviso.textContent = `Saldo insuficiente. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(inv)}`;
     } else {
       aviso.style.display = '';
       aviso.style.color = 'var(--green)';
-      aviso.textContent = `✅ Saldo suficiente. Quedarán ${fmt(saldo - inv)} tras la compra`;
+      aviso.textContent = `Saldo suficiente. Quedarán ${fmt(saldo - inv)} tras la compra`;
     }
   } else if (aviso) {
     aviso.style.display = 'none';
@@ -3300,7 +3661,7 @@ async function confirmarRenovarStock(invId, stockActual) {
   if (!billeteraId) {
     const sel = document.getElementById('rs-billetera');
     if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(()=>sel.style.border='',2000); }
-    return toast('⚠️ Debes seleccionar de qué billetera sale el dinero', 'error');
+    return toast('Debes seleccionar de qué billetera sale el dinero', 'error');
   }
 
   const idx = STATE.db.inversiones.findIndex(i=>i.id===invId);
@@ -3313,7 +3674,7 @@ async function confirmarRenovarStock(invId, stockActual) {
   const saldo = saldoBilletera(billeteraId);
   if (saldo < inversionNueva) {
     const bill = STATE.db.billeteras?.find(b=>b.id===billeteraId);
-    return toast(`⛔ Saldo insuficiente en ${bill?.nombre||'billetera'}. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(inversionNueva)}`, 'error');
+    return toast(`Saldo insuficiente en ${bill?.nombre||'billetera'}. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(inversionNueva)}`, 'error');
   }
 
   // Actualizar inversión: sumar unidades (costos se leen de renovaciones[] en calcInversion)
@@ -3363,14 +3724,14 @@ function openModalGastoAdicionalInv(invId) {
   const billeterasOpts = (STATE.db.billeteras||[]).map(b => {
     const s = saldoBilletera(b.id);
     return `<option value="${b.id}" style="color:${s>0?'inherit':'var(--red)'}">
-      ${BILL_ICONOS[b.tipo]||'💳'} ${b.nombre} — ${fmt(s)}
+      ${BILL_ICONOS[b.tipo]||''} ${b.nombre} — ${fmt(s)}
     </option>`;
   }).join('');
 
   const overlay = document.getElementById('modal-inv-form-overlay');
   overlay.innerHTML = `
     <div class="modal" style="max-width:440px;width:100%;">
-      <div class="modal-title">💸 Gasto adicional — ${inv.nombre}
+      <div class="modal-title">Gasto adicional — ${inv.nombre}
         <button onclick="closeInvModal()" style="float:right;background:none;border:none;font-size:1rem;color:var(--muted);cursor:pointer;">✕</button>
       </div>
       <div class="modal-body-wrap">
@@ -3388,7 +3749,7 @@ function openModalGastoAdicionalInv(invId) {
             <input type="text" class="form-control" id="ga-desc" placeholder="Ej: Publicidad Meta, empaque, envío local...">
           </div>
           <div class="form-group" style="grid-column:1/-1">
-            <label>💳 Dinero sale de *</label>
+            <label> Dinero sale de *</label>
             <select class="form-control" id="ga-billetera" onchange="calcGastoAdicPreview()">
               <option value="">— Selecciona billetera (obligatorio) —</option>
               ${billeterasOpts}
@@ -3402,7 +3763,7 @@ function openModalGastoAdicionalInv(invId) {
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeInvModal()">Cancelar</button>
-        <button class="btn btn-danger" onclick="confirmarGastoAdicionalInv('${invId}')">💸 Registrar gasto</button>
+        <button class="btn btn-danger" onclick="confirmarGastoAdicionalInv('${invId}')"> Registrar gasto</button>
       </div>
     </div>`;
   overlay.style.display = 'flex';
@@ -3418,11 +3779,11 @@ function calcGastoAdicPreview() {
     if (saldo < monto) {
       aviso.style.display = '';
       aviso.style.color   = 'var(--red)';
-      aviso.textContent   = `⛔ Saldo insuficiente. Disponible: ${fmt(saldo)} — Necesario: ${fmt(monto)}`;
+      aviso.textContent   = `Saldo insuficiente. Disponible: ${fmt(saldo)} — Necesario: ${fmt(monto)}`;
     } else {
       aviso.style.display = '';
       aviso.style.color   = 'var(--green)';
-      aviso.textContent   = `✅ Saldo suficiente. Quedarán ${fmt(saldo - monto)} tras el gasto`;
+      aviso.textContent   = `Saldo suficiente. Quedarán ${fmt(saldo - monto)} tras el gasto`;
     }
   } else {
     aviso.style.display = 'none';
@@ -3442,13 +3803,13 @@ async function confirmarGastoAdicionalInv(invId) {
   if (!billeteraId) {
     const sel = document.getElementById('ga-billetera');
     if (sel) { sel.style.border='2px solid var(--red)'; setTimeout(()=>sel.style.border='',2000); }
-    return toast('⚠️ Debes seleccionar de qué billetera sale el dinero', 'error');
+    return toast('Debes seleccionar de qué billetera sale el dinero', 'error');
   }
 
   const saldo = saldoBilletera(billeteraId);
   if (saldo < monto) {
     const bill = STATE.db.billeteras?.find(b=>b.id===billeteraId);
-    return toast(`⛔ Saldo insuficiente en ${bill?.nombre||'billetera'}. Disponible: ${fmt(saldo)}`, 'error');
+    return toast(`Saldo insuficiente en ${bill?.nombre||'billetera'}. Disponible: ${fmt(saldo)}`, 'error');
   }
 
   const idx = STATE.db.inversiones.findIndex(i=>i.id===invId);
@@ -3500,8 +3861,8 @@ async function eliminarGastoAdicionalInv(gastoId, invId) {
    ============================================================ */
 
 const BILL_ICONOS = {
-  'Nequi':'💜','Bancolombia':'🏦','Efectivo':'💵','Daviplata':'🔴',
-  'Banco':'🏛️','BBVA':'🔵','Ahorro':'🐷','PayPal':'🅿️','Otro':'💳'
+  'Nequi':'N','Bancolombia':'BC','Efectivo':'$','Daviplata':'D',
+  'Banco':'B','BBVA':'BB','Ahorro':'A','PayPal':'PP','Otro':'+'
 };
 const BILL_COLORS = {
   'Nequi':'var(--purple)','Bancolombia':'var(--yellow)','Efectivo':'var(--green)',
@@ -3514,10 +3875,14 @@ function getBilleteras() { return STATE.db.billeteras || []; }
 function saldoBilletera(id) {
   const b = getBilleteras().find(b => b.id === id);
   if (!b) return 0;
-  // Saldo inicial + ingresos asignados - gastos asignados - abonos
   let saldo = Number(b.saldoInicial || 0);
+  // Incluir TODOS los ingresos y gastos (incluyendo transferencias antiguas del sistema viejo)
   saldo += STATE.db.ingresos.filter(i => i.billeteraId === id).reduce((a,i)=>a+Number(i.monto),0);
   saldo -= STATE.db.gastos.filter(g => g.billeteraId === id).reduce((a,g)=>a+Number(g.monto),0);
+  // Transferencias nuevas (colección separada) — solo las que NO tienen ya un ingreso/gasto equivalente
+  const transfs = (STATE.db.transferencias || []).filter(t => !t.legado);
+  saldo -= transfs.filter(t => t.origenId === id).reduce((a,t)=>a+Number(t.monto),0);
+  saldo += transfs.filter(t => t.destinoId === id).reduce((a,t)=>a+Number(t.monto),0);
   return saldo;
 }
 
@@ -3538,7 +3903,7 @@ function openModalBilletera(id=null) {
           </div>
           <div class="form-group"><label>Tipo</label>
             <select class="form-control" id="fb-tipo">
-              ${tipos.map(t=>`<option value="${t}" ${(b?.tipo||'Otro')===t?'selected':''}>${BILL_ICONOS[t]||'💳'} ${t}</option>`).join('')}
+              ${tipos.map(t=>`<option value="${t}" ${(b?.tipo||'Otro')===t?'selected':''}>${BILL_ICONOS[t]||''} ${t}</option>`).join('')}
             </select>
           </div>
           <div class="form-group" style="grid-column:1/-1"><label>Saldo inicial (COP)</label>
@@ -3547,13 +3912,13 @@ function openModalBilletera(id=null) {
           </div>
           <div class="form-group" style="grid-column:1/-1"><label>Color / estilo</label>
             <select class="form-control" id="fb-color">
-              <option value="var(--accent)" ${(b?.color||'var(--accent)')===('var(--accent)')?'selected':''}>🔵 Azul</option>
-              <option value="var(--green)"  ${b?.color==='var(--green)'?'selected':''}>🟢 Verde</option>
-              <option value="var(--purple)" ${b?.color==='var(--purple)'?'selected':''}>🟣 Morado</option>
-              <option value="var(--red)"    ${b?.color==='var(--red)'?'selected':''}>🔴 Rojo</option>
-              <option value="var(--yellow)" ${b?.color==='var(--yellow)'?'selected':''}>🟡 Amarillo</option>
+              <option value="var(--accent)" ${(b?.color||'var(--accent)')===('var(--accent)')?'selected':''}>● Azul</option>
+              <option value="var(--green)"  ${b?.color==='var(--green)'?'selected':''}>● Verde</option>
+              <option value="var(--purple)" ${b?.color==='var(--purple)'?'selected':''}>● Morado</option>
+              <option value="var(--red)"    ${b?.color==='var(--red)'?'selected':''}>● Rojo</option>
+              <option value="var(--yellow)" ${b?.color==='var(--yellow)'?'selected':''}>● Amarillo</option>
               <option value="var(--teal)"   ${b?.color==='var(--teal)'?'selected':''}>🩵 Teal</option>
-              <option value="var(--orange)" ${b?.color==='var(--orange)'?'selected':''}>🟠 Naranja</option>
+              <option value="var(--orange)" ${b?.color==='var(--orange)'?'selected':''}>● Naranja</option>
             </select>
           </div>
         </div>
@@ -3579,10 +3944,10 @@ async function guardarBilletera(id='') {
   if (id) {
     const idx = STATE.db.billeteras.findIndex(b=>b.id===id);
     if (idx !== -1) STATE.db.billeteras[idx] = { ...STATE.db.billeteras[idx], nombre, tipo, saldoInicial:saldo, color };
-    toast('Billetera actualizada ✅', 'success');
+    toast('Billetera actualizada', 'success');
   } else {
     STATE.db.billeteras.push({ id:uid(), nombre, tipo, saldoInicial:saldo, color });
-    toast('Billetera creada ✅', 'success');
+    toast('Billetera creada', 'success');
   }
   closeInvModal();
   renderBilleteras();
@@ -3615,7 +3980,7 @@ function openModalTransferencia() {
     list.forEach(b => {
       const opt = document.createElement('option');
       opt.value = b.id;
-      opt.textContent = (BILL_ICONOS[b.tipo]||'💳') + ' ' + b.nombre + ' — ' + fmt(saldoBilletera(b.id));
+      opt.textContent = (BILL_ICONOS[b.tipo]||'') + ' ' + b.nombre + ' — ' + fmt(saldoBilletera(b.id));
       sel.appendChild(opt);
     });
   });
@@ -3707,34 +4072,24 @@ async function ejecutarTransferencia() {
   const bDestino = getBilleteras().find(b=>b.id===destinoId);
   const hora     = horaActual();
   const label    = descExtra || `Transferencia ${bOrigen?.nombre} → ${bDestino?.nombre}`;
-  const tId      = uid(); // ID compartido para vincular los dos movimientos
 
-  // Gasto en origen (salida)
-  STATE.db.gastos.push({
+  // ── Guardar en colección separada "transferencias" ──
+  // NO se registra como ingreso ni gasto para no afectar totales
+  if (!STATE.db.transferencias) STATE.db.transferencias = [];
+  STATE.db.transferencias.push({
     id: uid(), fecha, hora,
     monto,
     desc: label,
-    cat: 'Transferencia',
-    billeteraId: origenId,
-    autoGenerado: true,
-    transferId: tId
-  });
-
-  // Ingreso en destino (entrada)
-  STATE.db.ingresos.push({
-    id: uid(), fecha, hora,
-    monto,
-    fuente: label,
-    cat: 'Transferencia',
-    billeteraId: destinoId,
-    autoGenerado: true,
-    transferId: tId
+    origenId,
+    destinoId,
+    origenNombre: bOrigen?.nombre || '',
+    destinoNombre: bDestino?.nombre || '',
   });
 
   closeModal('modal-transferencia');
   renderAll();
-  await saveDb(['gastos','ingresos']);
-  toast(`✅ ${fmt(monto)} transferido de ${bOrigen?.nombre} a ${bDestino?.nombre}`, 'success');
+  await saveDb(['transferencias']);
+  toast(`${fmt(monto)} transferido de ${bOrigen?.nombre} a ${bDestino?.nombre}`, 'success');
 }
 
 function verMovimientosBilletera(id) {
@@ -3766,7 +4121,7 @@ function verMovimientosBilletera(id) {
   const tbody = document.getElementById('bill-mov-tbody');
   if (!sec) return;
 
-  title.textContent = `📋 Movimientos — ${b.nombre}`;
+  title.textContent = ` Movimientos — ${b.nombre}`;
   sec.style.display = '';
 
   if (!movs.length) {
@@ -3780,7 +4135,7 @@ function verMovimientosBilletera(id) {
       <td style="white-space:nowrap">${m.fecha||'—'}</td>
       <td style="color:var(--muted);font-size:.8rem;white-space:nowrap">${m.hora||'—'}</td>
       <td>${m.fuente||m.desc||'—'}</td>
-      <td><span class="badge ${m.tipo==='ingreso'?'badge-green':'badge-red'}">${m.cat==='Transferencia'?'🔄 transferencia':m.tipo}</span></td>
+      <td><span class="badge ${m.tipo==='ingreso'?'badge-green':'badge-red'}">${m.cat==='Transferencia'?'↺ transferencia':m.tipo}</span></td>
       <td style="color:${m.tipo==='ingreso'?'var(--green)':'var(--red)'};font-weight:600;white-space:nowrap">
         ${m.tipo==='ingreso'?'+':'-'}${fmt(m.monto)}
       </td>
@@ -3788,6 +4143,124 @@ function verMovimientosBilletera(id) {
     </tr>`).join('');
 
   sec.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function verMovimientosBilletera(id) {
+  const b = getBilleteras().find(b=>b.id===id);
+  if (!b) return;
+
+  // Movimientos reales (excluir cat:'Transferencia' del sistema antiguo)
+  const movs = [
+    ...STATE.db.ingresos.filter(i=>i.billeteraId===id && i.cat!=='Transferencia').map(i=>({...i,tipo:'ingreso'})),
+    ...STATE.db.gastos.filter(g=>g.billeteraId===id && g.cat!=='Transferencia').map(g=>({...g,tipo:'gasto'})),
+  ].sort((a,b)=>{
+    const fd = (b.fecha||'').localeCompare(a.fecha||'');
+    return fd !== 0 ? fd : convertirHora(b.hora) - convertirHora(a.hora);
+  });
+
+  // Calcular saldo acumulado
+  let saldoAcc = Number(b.saldoInicial||0);
+  const movsOrden = [...movs].reverse();
+  const saldos = [];
+  movsOrden.forEach(m => {
+    if (m.tipo === 'ingreso') saldoAcc += Number(m.monto);
+    else saldoAcc -= Number(m.monto);
+    saldos.push(saldoAcc);
+  });
+  saldos.reverse();
+
+  const sec = document.getElementById('bill-movimientos');
+  const title = document.getElementById('bill-mov-title');
+  const tbody = document.getElementById('bill-mov-tbody');
+  if (!sec) return;
+
+  title.textContent = `Movimientos — ${b.nombre}`;
+  sec.style.display = '';
+
+  if (!movs.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;font-style:italic">Sin movimientos registrados aún</td></tr>';
+  } else {
+    tbody.innerHTML = movs.map((m,i) => `
+      <tr>
+        <td style="white-space:nowrap">${m.fecha||'—'}</td>
+        <td style="color:var(--muted);font-size:.8rem;white-space:nowrap">${m.hora||'—'}</td>
+        <td>${m.fuente||m.desc||'—'}</td>
+        <td><span class="badge ${m.tipo==='ingreso'?'badge-green':'badge-red'}">${m.tipo==='ingreso'?'Ingreso':'Gasto'}</span></td>
+        <td style="color:${m.tipo==='ingreso'?'var(--green)':'var(--red)'};font-weight:600;white-space:nowrap">
+          ${m.tipo==='ingreso'?'+':'-'}${fmt(m.monto)}
+        </td>
+        <td style="font-weight:600;white-space:nowrap;color:${saldos[i]>=0?'var(--text)':'var(--red)'}">${fmt(saldos[i])}</td>
+      </tr>`).join('');
+  }
+
+  sec.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function renderTablaTransferencias() {
+  const sec = document.getElementById('bill-transferencias-sec');
+  if (!sec) return;
+  const transfs = (STATE.db.transferencias || []).slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  if (!transfs.length) {
+    sec.innerHTML = `
+      <div class="section" style="margin-top:20px;">
+        <div class="section-header">
+          <span class="section-title">Historial de transferencias entre billeteras</span>
+        </div>
+        <p style="color:var(--muted);font-size:.88rem;padding:20px;text-align:center;font-style:italic">Sin transferencias registradas aún.</p>
+      </div>`;
+    return;
+  }
+  const totalTransferido = transfs.reduce((a,t)=>a+Number(t.monto),0);
+  sec.innerHTML = `
+    <div class="section" style="margin-top:20px;">
+      <div class="section-header">
+        <span class="section-title">Historial de transferencias entre billeteras</span>
+        <span style="font-size:.82rem;color:var(--muted)">${transfs.length} transferencias · Total movido: <strong>${fmt(totalTransferido)}</strong></span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Hora</th>
+              <th>Descripción</th>
+              <th>Origen</th>
+              <th>Destino</th>
+              <th>Monto</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${transfs.map(t => {
+              const bOri = getBilleteras().find(b=>b.id===t.origenId);
+              const bDst = getBilleteras().find(b=>b.id===t.destinoId);
+              const oriNombre = bOri?.nombre || t.origenNombre || '—';
+              const dstNombre = bDst?.nombre || t.destinoNombre || '—';
+              return `<tr>
+                <td style="white-space:nowrap">${t.fecha||'—'}</td>
+                <td style="color:var(--muted);font-size:.8rem;white-space:nowrap">${t.hora||'—'}</td>
+                <td>${t.desc||'—'}</td>
+                <td><span class="badge badge-red" style="font-size:.75rem">${oriNombre}</span></td>
+                <td><span class="badge badge-green" style="font-size:.75rem">${dstNombre}</span></td>
+                <td style="font-weight:700;color:var(--accent);white-space:nowrap">${fmt(t.monto)}</td>
+                <td><button class="btn btn-danger btn-sm" onclick="deleteTransferencia('${t.id}')" title="Eliminar transferencia">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                </button></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+async function deleteTransferencia(id) {
+  if (!confirm('¿Eliminar esta transferencia? Los saldos de ambas billeteras se ajustarán automáticamente.')) return;
+  STATE.db.transferencias = (STATE.db.transferencias||[]).filter(t=>t.id!==id);
+  renderBilleteras();
+  renderTablaTransferencias();
+  await saveDb(['transferencias']);
+  toast('Transferencia eliminada', 'info');
 }
 
 function renderBilleteras() {
@@ -3806,30 +4279,54 @@ function renderBilleteras() {
   if (!list.length) {
     if(grid) grid.innerHTML = '';
     if(empty) empty.style.display = '';
+    renderTablaTransferencias();
     return;
   }
   if(empty) empty.style.display = 'none';
 
+  const BILL_SVG = {
+    'Nequi':       `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1" y="4" width="22" height="16" rx="2"/><circle cx="12" cy="12" r="2"/></svg>`,
+    'Bancolombia': `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><polyline points="8 8 12 12 16 8"/></svg>`,
+    'Efectivo':    `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1" y="6" width="22" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M17 12h.01M7 12h.01"/></svg>`,
+    'Daviplata':   `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`,
+    'Banco':       `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
+    'BBVA':        `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M9 9h6a1 1 0 0 1 0 3H9a1 1 0 0 0 0 3h6"/></svg>`,
+    'Ahorro':      `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><circle cx="16" cy="13" r="1.5"/></svg>`,
+    'PayPal':      `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>`,
+    'Otro':        `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`,
+  };
+
   grid.innerHTML = list.map(b => {
     const saldo = saldoBilletera(b.id);
-    const icono = BILL_ICONOS[b.tipo] || '💳';
+    const svgIcon = BILL_SVG[b.tipo] || BILL_SVG['Otro'];
     const color = b.color || 'var(--accent)';
-    const numIng = STATE.db.ingresos.filter(i=>i.billeteraId===b.id).length;
-    const numGas = STATE.db.gastos.filter(g=>g.billeteraId===b.id).length;
+    const numIng = STATE.db.ingresos.filter(i=>i.billeteraId===b.id && i.cat!=='Transferencia').length;
+    const numGas = STATE.db.gastos.filter(g=>g.billeteraId===b.id && g.cat!=='Transferencia').length;
+    const numTrf = (STATE.db.transferencias||[]).filter(t=>t.origenId===b.id||t.destinoId===b.id).length;
     return `
       <div class="bill-card" style="color:${color}">
-        <div class="bill-icon">${icono}</div>
+        <div class="bill-icon" style="color:${color}">${svgIcon}</div>
         <div class="bill-nombre">${b.nombre}</div>
         <div class="bill-saldo" style="color:${saldo>=0?color:'var(--red)'}">${fmt(saldo)}</div>
-        <div style="font-size:.72rem;color:var(--muted)">${numIng} ingresos · ${numGas} gastos</div>
+        <div style="font-size:.72rem;color:var(--muted)">${numIng} ingresos · ${numGas} gastos · ${numTrf} transf.</div>
         <div class="bill-actions">
-          <button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center" onclick="verMovimientosBilletera('${b.id}')">📋 Ver</button>
-          <button class="btn btn-ghost btn-sm" title="Transferir" onclick="openModalTransferenciaDesde('${b.id}')">🔄</button>
-          <button class="btn btn-ghost btn-sm" onclick="openModalBilletera('${b.id}')">✏️</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteBilletera('${b.id}')">🗑️</button>
+          <button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center" onclick="verMovimientosBilletera('${b.id}')">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Detalle
+          </button>
+          <button class="btn btn-ghost btn-sm" title="Transferir" onclick="openModalTransferenciaDesde('${b.id}')">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.46"/></svg>
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick="openModalBilletera('${b.id}')">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="deleteBilletera('${b.id}')">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          </button>
         </div>
       </div>`;
   }).join('');
+
+  renderTablaTransferencias();
 }
 
 // Poblar todos los selects de billetera en los formularios
@@ -3844,7 +4341,7 @@ function populateBilleteraSelects() {
     list.forEach(b => {
       const opt = document.createElement('option');
       opt.value = b.id;
-      opt.textContent = (BILL_ICONOS[b.tipo]||'💳') + ' ' + b.nombre + ' — ' + fmt(saldoBilletera(b.id));
+      opt.textContent = (BILL_ICONOS[b.tipo]||'') + ' ' + b.nombre + ' — ' + fmt(saldoBilletera(b.id));
       if (b.id === cur) opt.selected = true;
       sel.appendChild(opt);
     });
@@ -3868,7 +4365,7 @@ function renderBilleterasDashWidget() {
   return;
   const total = list.reduce((a,b)=>a+saldoBilletera(b.id),0);
   el.innerHTML = `
-    <div class="section-header"><span class="section-title">👛 Mis billeteras</span>
+    <div class="section-header"><span class="section-title"> Mis billeteras</span>
       <button class="btn btn-ghost btn-sm" onclick="navigate('billeteras')">Ver todas →</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;">
@@ -3876,7 +4373,7 @@ function renderBilleterasDashWidget() {
         const s=saldoBilletera(b.id);
         const c=b.color||'var(--accent)';
         return `<div style="background:var(--bg2);border-radius:var(--radius-sm);padding:10px 12px;border-left:3px solid ${c}">
-          <div style="font-size:.8rem;font-weight:600;color:var(--text)">${BILL_ICONOS[b.tipo]||'💳'} ${b.nombre}</div>
+          <div style="font-size:.8rem;font-weight:600;color:var(--text)">${BILL_ICONOS[b.tipo]||''} ${b.nombre}</div>
           <div style="font-size:1rem;font-weight:700;color:${s>=0?c:'var(--red)'};">${fmt(s)}</div>
         </div>`;
       }).join('')}
@@ -3931,16 +4428,16 @@ function renderReportes() {
     const mejorMes = datos.reduce((a,d)=>d.balance>a.balance?d:a, datos[0]);
     const peorMes  = datos.reduce((a,d)=>d.balance<a.balance?d:a, datos[0]);
     kpisEl.innerHTML = `
-      <div class="stat-card green"><div class="stat-icon-box"><span>📈</span></div>
+      <div class="stat-card green"><div class="stat-icon-box"><span>&#x2191;</span></div>
         <div class="stat-body"><div class="stat-label">Total ingresos (${nMeses}m)</div>
           <div class="stat-value positive">${fmt(totIng)}</div></div></div>
-      <div class="stat-card red"><div class="stat-icon-box"><span>📉</span></div>
+      <div class="stat-card red"><div class="stat-icon-box"><span>&#x2193;</span></div>
         <div class="stat-body"><div class="stat-label">Total gastos (${nMeses}m)</div>
           <div class="stat-value negative">${fmt(totGas)}</div></div></div>
       <div class="stat-card blue"><div class="stat-icon-box"><span>⚖️</span></div>
         <div class="stat-body"><div class="stat-label">Balance período</div>
           <div class="stat-value ${totIng-totGas>=0?'positive':'negative'}">${fmt(totIng-totGas)}</div></div></div>
-      <div class="stat-card teal"><div class="stat-icon-box"><span>🏆</span></div>
+      <div class="stat-card teal"><div class="stat-icon-box"><span>★</span></div>
         <div class="stat-body"><div class="stat-label">Mejor mes</div>
           <div class="stat-value">${mejorMes ? monthLabel(mejorMes.m) : '—'}</div>
           <div class="stat-sub">${mejorMes ? fmt(mejorMes.balance) : ''}</div></div></div>`;
@@ -4125,7 +4622,7 @@ async function forceSyncFirebase() {
   try {
     await saveDb();
     hideLoadingOverlay();
-    toast('Sincronización completada ✅', 'success');
+    toast('Sincronización completada', 'success');
     updateFbStatus(true);
   } catch (err) {
     hideLoadingOverlay();
@@ -4172,20 +4669,22 @@ function importBackup() {
       if (!confirm('¿Importar este backup? Se reemplazarán todos los datos actuales.')) return;
       delete data._meta; // quitar metadatos del export
       STATE.db = {
-        ingresos: data.ingresos || [],
-        gastos: data.gastos || [],
-        deudas: data.deudas || [],
-        pass: data.pass || [],
-        prestamos: data.prestamos || [],
-        gastosFijos: data.gastosFijos || [],
-        inversiones: data.inversiones || [],
-        ventasInv: data.ventasInv || [],
+        ingresos:       data.ingresos       || [],
+        gastos:         data.gastos         || [],
+        deudas:         data.deudas         || [],
+        pass:           data.pass           || [],
+        prestamos:      data.prestamos      || [],
+        gastosFijos:    data.gastosFijos    || [],
+        inversiones:    data.inversiones    || [],
+        ventasInv:      data.ventasInv      || [],
+        billeteras:     data.billeteras     || [],
+        transferencias: data.transferencias || [],
       };
       showLoadingOverlay('Importando datos...');
       await saveDb();
       hideLoadingOverlay();
       renderAll();
-      toast('Backup importado correctamente ✅', 'success');
+      toast('Backup importado correctamente', 'success');
     } catch (err) {
       hideLoadingOverlay();
       toast('Error al importar: ' + err.message, 'error');
