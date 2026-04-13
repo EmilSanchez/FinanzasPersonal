@@ -206,7 +206,7 @@ function mostrarAvisoSinConexion() {
     display:flex;align-items:center;justify-content:center;
     padding:20px;
   `;
-  modal.innerHTML = \`
+  modal.innerHTML = `
     <div style="
       background:#1e293b;border-radius:16px;padding:32px 28px;
       max-width:380px;width:100%;text-align:center;
@@ -232,7 +232,7 @@ function mostrarAvisoSinConexion() {
         ">Cerrar</button>
       </div>
     </div>
-  \`;
+  "`;
   document.body.appendChild(modal);
 }
 
