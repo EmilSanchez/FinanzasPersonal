@@ -26,6 +26,8 @@
            setDoc, deleteDoc, writeBatch,
            onSnapshot, enableIndexedDbPersistence }
     from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  import { getAuth, signInAnonymously }
+    from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
   const firebaseConfig = {
     apiKey:            "AIzaSyCMsgSK8tJW4-7OHkB-ZTcjGSOenmPRIog",
@@ -40,11 +42,23 @@
   const firebaseApp = initializeApp(firebaseConfig);
   const db_firebase = getFirestore(firebaseApp);
 
-  // ── Activar caché offline (funciona sin internet) ──
+  // ── Activar caché offline ANTES de autenticar ──
   enableIndexedDbPersistence(db_firebase).catch(err => {
     if (err.code === 'failed-precondition') console.warn('Firebase offline: múltiples pestañas abiertas');
     else if (err.code === 'unimplemented')  console.warn('Firebase offline: navegador no soportado');
   });
+
+  // ── Autenticación anónima (protege el acceso a Firestore) ──
+  const auth = getAuth(firebaseApp);
+  try {
+    await signInAnonymously(auth);
+    console.log('✅ Autenticación anónima exitosa');
+    // Notificar a la app que Firebase está conectado de verdad
+    window.__fbAuthReady = true;
+    window.dispatchEvent(new Event('firebase-auth-ready'));
+  } catch(authErr) {
+    console.warn('Auth anónima falló, continuando sin auth:', authErr.message);
+  }
 
   // ── Colecciones en Firestore ──
   const COLLECTIONS = ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras','transferencias'];

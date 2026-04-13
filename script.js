@@ -319,6 +319,10 @@ function pinSubmit() {
         } catch (e) { console.warn('No se pudo sincronizar PIN:', e); }
       }
     });
+    // Actualizar badge cuando la auth anónima confirme conexión real
+    window.addEventListener('firebase-auth-ready', () => {
+      updateFbStatus(true);
+    }, { once: true });
   } else {
     document.getElementById('pin-error').textContent = 'PIN incorrecto. Intenta de nuevo.';
     pinBuffer = '';
