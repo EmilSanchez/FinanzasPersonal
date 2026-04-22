@@ -80,16 +80,16 @@ async function loadDb() {
       toast('Modo offline: usando datos locales', 'info');
     }
 
-    // Sincronizar PIN — en bloque separado para que un error aquí
-    // nunca afecte la carga de datos ni muestre "modo offline"
+    // Sincronizar hash del PIN desde Firebase (solo si es un hash SHA-256 válido)
     try {
       if (window.__FB.loadPin) {
-        const pinRemoto = await window.__FB.loadPin();
-        if (pinRemoto) {
-          localStorage.setItem('fp_pin', pinRemoto);
-        } else {
-          const pinLocal = localStorage.getItem('fp_pin') || '1234';
-          await window.__FB.savePin(pinLocal).catch(()=>{});
+        const hashRemoto = await window.__FB.loadPin();
+        if (hashRemoto && hashRemoto.length === 64) {
+          // Es un hash válido — actualizar local
+          localStorage.setItem('fp_pin_hash', hashRemoto);
+        } else if (!hashRemoto && localStorage.getItem('fp_pin_hash')) {
+          // No hay hash en Firebase — subir el local
+          await window.__FB.savePin(localStorage.getItem('fp_pin_hash')).catch(()=>{});
         }
       }
     } catch (e) {
@@ -122,26 +122,69 @@ function hideLoading() {
 }
 
 async function saveDb(coleccionesEspecificas = null) {
-  if (!estaConectado()) { mostrarAvisoSinConexion(); return false; }
-
+  // Siempre guardar en localStorage primero (respaldo inmediato)
   localStorage.setItem('finanzas_pro_v2', JSON.stringify(STATE.db));
-  showSavingDot();
 
+  // Si Firebase ya está listo, guardar inmediatamente
+  // Si no, esperar hasta 8 segundos a que se conecte
+  if (!estaConectado()) {
+    showSavingDot();
+    const connected = await esperarFirebase(8000);
+    if (!connected) {
+      // Guardar en cola pendiente para sincronizar cuando vuelva la conexión
+      _pendingSync = true;
+      showSaveError({ message: 'Sin conexión — datos guardados localmente' });
+      toast('⚠️ Guardado localmente. Se sincronizará al conectarse.', 'info');
+      return false;
+    }
+  }
+
+  showSavingDot();
   try {
     const toSave = coleccionesEspecificas ||
       ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras','transferencias'];
-
     await Promise.all(
       toSave.map(col => window.__FB.saveCollection(col, STATE.db[col] || []))
     );
+    _pendingSync = false;
     showSaveSuccess();
     return true;
   } catch (err) {
     console.error('Error guardando en Firebase:', err);
+    _pendingSync = true;
     showSaveError(err);
     return false;
   }
 }
+
+// Espera a que Firebase esté listo, con timeout en ms
+let _pendingSync = false;
+function esperarFirebase(timeoutMs = 8000) {
+  if (estaConectado()) return Promise.resolve(true);
+  return new Promise(resolve => {
+    const t = setTimeout(() => { resolve(false); }, timeoutMs);
+    window.addEventListener('firebase-auth-ready', () => {
+      clearTimeout(t);
+      resolve(true);
+    }, { once: true });
+  });
+}
+
+// Cuando Firebase se conecta, sincronizar datos pendientes automáticamente
+window.addEventListener('firebase-auth-ready', async () => {
+  if (_pendingSync && STATE.db) {
+    console.log('Firebase conectado — sincronizando datos pendientes...');
+    toast('☁️ Sincronizando datos con la nube...', 'info');
+    try {
+      const cols = ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras','transferencias'];
+      await Promise.all(cols.map(col => window.__FB.saveCollection(col, STATE.db[col] || [])));
+      _pendingSync = false;
+      toast('✅ Datos sincronizados correctamente', 'success');
+    } catch(e) {
+      console.error('Error en sync pendiente:', e);
+    }
+  }
+});
 
 // ── Indicador visual de guardado ──
 let _saveTimer = null;
@@ -274,6 +317,7 @@ async function intentarReconectar() {
 
 // ── Guardar un solo item de una colección (más rápido que batch) ──
 async function saveItem(colName, item) {
+  if (!estaConectado()) { await esperarFirebase(5000); }
   if (!estaConectado()) { mostrarAvisoSinConexion(); return false; }
 
   // Actualizar STATE primero (UI inmediata)
