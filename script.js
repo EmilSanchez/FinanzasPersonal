@@ -427,6 +427,15 @@ function updateFbStatus(connected) {
    SESIÓN & SEGURIDAD
    ============================================================ */
 
+/* ── Formateador de monto en tiempo real (ej: 1,000,000) ── */
+function fmtMontoDisplay(input, displayId) {
+  const el = document.getElementById(displayId);
+  if (!el) return;
+  const val = parseFloat(input.value);
+  if (!val || isNaN(val)) { el.textContent = ''; return; }
+  el.textContent = val.toLocaleString('es-CO', { style:'currency', currency:'COP', minimumFractionDigits:0, maximumFractionDigits:0 });
+}
+
 /* ── SHA-256 helper (Web Crypto API) ── */
 async function sha256(text) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
