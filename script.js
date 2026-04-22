@@ -789,6 +789,18 @@ function renderAll() {
   renderBilleterasDashWidget();
   renderReportes();
   renderPass();
+  // Inicializar rango de movimientos al mes actual si no hay valor
+  const movDesde = document.getElementById('mov-filter-desde');
+  const movHasta = document.getElementById('mov-filter-hasta');
+  if (movDesde && movHasta && !movDesde.value && !movHasta.value) {
+    const hoy = new Date();
+    const y = hoy.getFullYear();
+    const mPad = String(hoy.getMonth()+1).padStart(2,'0');
+    movDesde.value = `${y}-${mPad}-01`;
+    const ultDia = new Date(y, hoy.getMonth()+1, 0);
+    movHasta.value = `${y}-${mPad}-${String(ultDia.getDate()).padStart(2,'0')}`;
+  }
+  renderMovimientos();
 }
 
 // Populate GF billetera select
@@ -4054,6 +4066,15 @@ function openModalBilletera(id=null) {
               <option value="var(--orange)" ${b?.color==='var(--orange)'?'selected':''}>● Naranja</option>
             </select>
           </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:500;">
+              <input type="checkbox" id="fb-cobra4x1000" ${b?.cobra4x1000 ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;">
+              Cobra 4x1000 (GMF)
+            </label>
+            <small style="color:var(--muted);font-size:.72rem;margin-top:4px;display:block;">
+              Actívalo en cuentas bancarias (Bancolombia, BBVA, Davivienda, etc.). El GMF se registrará automáticamente como gasto al hacer retiros.
+            </small>
+          </div>
         </div>
       </div>
       <div class="modal-actions">
@@ -4067,6 +4088,7 @@ function openModalBilletera(id=null) {
 }
 
 async function guardarBilletera(id='') {
+  const cobra4x1000 = document.getElementById('fb-cobra4x1000')?.checked || false;
   const nombre = document.getElementById('fb-nombre')?.value.trim();
   const tipo   = document.getElementById('fb-tipo')?.value;
   const saldo  = parseFloat(document.getElementById('fb-saldo')?.value) || 0;
@@ -4076,16 +4098,18 @@ async function guardarBilletera(id='') {
 
   if (id) {
     const idx = STATE.db.billeteras.findIndex(b=>b.id===id);
-    if (idx !== -1) STATE.db.billeteras[idx] = { ...STATE.db.billeteras[idx], nombre, tipo, saldoInicial:saldo, color };
+    if (idx !== -1) STATE.db.billeteras[idx] = { ...STATE.db.billeteras[idx], nombre, tipo, saldoInicial: saldo, color, cobra4x1000 };
     toast('Billetera actualizada', 'success');
   } else {
-    STATE.db.billeteras.push({ id:uid(), nombre, tipo, saldoInicial:saldo, color });
+    STATE.db.billeteras.push({ id: uid(), nombre, tipo, saldoInicial: saldo, color, cobra4x1000 });
+    
     toast('Billetera creada', 'success');
   }
   closeInvModal();
   renderBilleteras();
   populateBilleteraSelects();
   await saveDb(['billeteras']);
+  
 }
 
 async function deleteBilletera(id) {
@@ -4229,13 +4253,21 @@ function verMovimientosBilletera(id) {
   const b = getBilleteras().find(b=>b.id===id);
   if (!b) return;
 
+  const transfs = (STATE.db.transferencias||[]).filter(t=>!t.legado);
   const movs = [
-    ...STATE.db.ingresos.filter(i=>i.billeteraId===id).map(i=>({...i,tipo:'ingreso'})),
-    ...STATE.db.gastos.filter(g=>g.billeteraId===id).map(g=>({...g,tipo:'gasto'})),
-  ].sort((a,b)=>{
-    const fd = (b.fecha||'').localeCompare(a.fecha||'');
-    return fd !== 0 ? fd : convertirHora(b.hora) - convertirHora(a.hora);
-  });
+    ...STATE.db.ingresos.filter(i=>i.billeteraId===id && i.cat!=='Transferencia').map(i=>({...i,tipo:'ingreso'})),
+    ...STATE.db.gastos.filter(g=>g.billeteraId===id && g.cat!=='Transferencia').map(g=>({...g,tipo:'gasto'})),
+    ...transfs.filter(t=>t.destinoId===id).map(t=>({
+      id:t.id, fecha:t.fecha, hora:t.hora,
+      fuente:`↙ Transferencia desde ${t.origenNombre}`,
+      monto:t.monto, tipo:'transferencia-entrada'
+    })),
+    ...transfs.filter(t=>t.origenId===id).map(t=>({
+      id:t.id, fecha:t.fecha, hora:t.hora,
+      fuente:`↗ Transferencia a ${t.destinoNombre}`,
+      monto:t.monto, tipo:'transferencia-salida'
+    })),
+  ]
 
   // Calcular saldo acumulado
   let saldoAcc = Number(b.saldoInicial||0);
@@ -4254,6 +4286,8 @@ function verMovimientosBilletera(id) {
   const tbody = document.getElementById('bill-mov-tbody');
   if (!sec) return;
 
+
+
   title.textContent = ` Movimientos — ${b.nombre}`;
   sec.style.display = '';
 
@@ -4262,6 +4296,14 @@ function verMovimientosBilletera(id) {
     sec.scrollIntoView({ behavior:'smooth', block:'nearest' });
     return;
   }
+
+  const esEntrada = m.tipo==='ingreso'||m.tipo==='transferencia-entrada';
+  const color = esEntrada ? 'var(--green)' : 'var(--red)';
+  const badgeClass = esEntrada ? 'badge-green' : 'badge-red';
+  const badgeLabel = m.tipo==='transferencia-entrada' ? '↙ entrada'
+                  : m.tipo==='transferencia-salida'  ? '↗ salida'
+                  : m.tipo==='ingreso' ? 'Ingreso' : 'Gasto';
+  const signo = esEntrada ? '+' : '-';
 
   tbody.innerHTML = movs.map((m,i) => `
     <tr>
@@ -4276,6 +4318,401 @@ function verMovimientosBilletera(id) {
     </tr>`).join('');
 
   sec.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+// ── Modal Nuevo Ingreso (módulo unificado) ──
+function openModalNuevoIngreso() {
+  const sel = document.getElementById('mi-billetera');
+  const montoEl = document.getElementById('mi-monto');
+
+  if (montoEl) {
+    montoEl.value = '';
+    montoEl.oninput = () => onMiBilleteraChange();
+  }
+
+  if (sel) {
+    sel.innerHTML = '<option value="">— Selecciona billetera —</option>';
+    getBilleteras().forEach(b => {
+      const o = document.createElement('option');
+      o.value = b.id;
+      o.textContent = (BILL_ICONOS[b.tipo]||'') + ' ' + b.nombre + ' — ' + fmt(saldoBilletera(b.id));
+      sel.appendChild(o);
+    });
+    sel.onchange = () => onMiBilleteraChange();
+  }
+
+  if (document.getElementById('mi-fuente')) document.getElementById('mi-fuente').value = '';
+  if (document.getElementById('mi-fecha')) document.getElementById('mi-fecha').value = new Date().toISOString().slice(0,10);
+  if (document.getElementById('mi-saldo-info')) document.getElementById('mi-saldo-info').style.display = 'none';
+
+  openModal('modal-nuevo-ingreso');
+}
+
+async function saveIngresoModal() {
+  const monto = parseFloat(document.getElementById('mi-monto').value) || 0;
+  const fuente = document.getElementById('mi-fuente').value.trim();
+  const fecha = document.getElementById('mi-fecha').value;
+  const cat = document.getElementById('mi-cat').value;
+  const billeteraId = document.getElementById('mi-billetera').value;
+  if (!monto || monto <= 0) return toast('El monto debe ser mayor a 0', 'error');
+  if (!fuente) return toast('La descripción es obligatoria', 'error');
+  if (!fecha) return toast('La fecha es obligatoria', 'error');
+  STATE.db.ingresos.push({ id:uid(), fecha, hora:horaActual(), monto, fuente, cat, billeteraId });
+  await saveDb(['ingresos']);
+  closeModal('modal-nuevo-ingreso');
+  renderAll();
+  toast('Ingreso registrado ✅', 'success');
+}
+
+function openModalNuevoGasto() {
+  const sel = document.getElementById('mg-billetera');
+  const fechaEl = document.getElementById('mg-fecha');
+  const montoEl = document.getElementById('mg-monto');
+
+  if (fechaEl) fechaEl.value = new Date().toISOString().slice(0,10);
+  if (montoEl) {
+    montoEl.value = '';
+    // Recarga el select cada vez que cambia el monto
+    montoEl.oninput = () => {
+      calcularPreview4x1000();
+      poblarBilleterasGasto();
+      onMgBilleteraChange();
+    };
+  }
+  if (document.getElementById('mg-desc')) document.getElementById('mg-desc').value = '';
+  if (document.getElementById('mg-4x1000-preview')) document.getElementById('mg-4x1000-preview').style.display = 'none';
+  if (document.getElementById('mg-saldo-info')) document.getElementById('mg-saldo-info').style.display = 'none';
+
+  poblarBilleterasGasto();
+  openModal('modal-nuevo-gasto');
+}
+
+function poblarBilleterasGasto() {
+  const sel = document.getElementById('mg-billetera');
+  if (!sel) return;
+
+  const monto = parseFloat(document.getElementById('mg-monto')?.value) || 0;
+  const valorAnterior = sel.value;
+
+  sel.innerHTML = '<option value="">— Selecciona billetera —</option>';
+
+  const billeteras = getBilleteras();
+  let hayAlguna = false;
+
+  billeteras.forEach(b => {
+    const saldo = saldoBilletera(b.id);
+    const alcanza = monto === 0 || saldo >= monto;
+    const opt = document.createElement('option');
+    opt.value = b.id;
+
+    if (alcanza) {
+      opt.textContent = (BILL_ICONOS[b.tipo]||'') + ' ' + b.nombre + ' — ' + fmt(saldo);
+      hayAlguna = true;
+    } else {
+      opt.textContent = (BILL_ICONOS[b.tipo]||'') + ' ' + b.nombre + ' — Saldo insuficiente (' + fmt(saldo) + ')';
+      opt.disabled = true;
+      opt.style.color = '#999';
+    }
+
+    // Restaurar selección previa si sigue siendo válida
+    if (b.id === valorAnterior && alcanza) opt.selected = true;
+
+    sel.appendChild(opt);
+  });
+
+  // Si el monto es mayor a lo que tiene cualquier billetera, mostrar aviso
+  const aviso = document.getElementById('mg-sin-saldo-aviso');
+  if (aviso) {
+    if (monto > 0 && !hayAlguna) {
+      aviso.style.display = 'flex';
+      aviso.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        Ninguna billetera tiene ${fmt(monto)} disponibles. Reduce el monto o recarga una billetera.
+      `;
+    } else {
+      aviso.style.display = 'none';
+    }
+  }
+
+  // Si la billetera seleccionada ya no es válida, resetear
+  if (valorAnterior && sel.value !== valorAnterior) {
+    sel.value = '';
+    if (document.getElementById('mg-saldo-info')) {
+      document.getElementById('mg-saldo-info').style.display = 'none';
+    }
+  }
+}
+
+function onMiBilleteraChange() {
+  const sel = document.getElementById('mi-billetera');
+  const info = document.getElementById('mi-saldo-info');
+  if (!sel || !info) return;
+  if (!sel.value) { info.style.display = 'none'; return; }
+
+  const s = saldoBilletera(sel.value);
+  const monto = parseFloat(document.getElementById('mi-monto')?.value) || 0;
+  const saldoPost = s + monto;
+
+  info.style.display = 'flex';
+  info.style.flexDirection = 'column';
+  info.style.gap = '6px';
+  info.style.background = 'var(--green-light)';
+  info.style.padding = '10px 12px';
+  info.style.borderRadius = 'var(--radius-sm)';
+  info.style.border = '1px solid rgba(5,150,105,.2)';
+
+  info.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="color:var(--muted);font-size:.78rem;">Saldo actual</span>
+      <strong style="color:var(--green)">${fmt(s)}</strong>
+    </div>
+    ${monto > 0 ? `
+    <div style="height:1px;background:rgba(0,0,0,.06);"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="color:var(--muted);font-size:.78rem;">+ Ingreso</span>
+      <strong style="color:var(--green);font-size:.82rem;">+${fmt(monto)}</strong>
+    </div>
+    <div style="height:1px;background:rgba(0,0,0,.1);"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="color:var(--text);font-size:.82rem;font-weight:600;">Quedaría en </span>
+      <strong style="color:var(--green);font-size:1rem;">${fmt(saldoPost)}</strong>
+    </div>
+    ` : ''}
+  `;
+}
+
+function onMgBilleteraChange() {
+  const sel = document.getElementById('mg-billetera');
+  const info = document.getElementById('mg-saldo-info');
+  if (!sel || !info) return;
+  if (!sel.value) { info.style.display = 'none'; return; }
+
+  const s = saldoBilletera(sel.value);
+  const monto = parseFloat(document.getElementById('mg-monto')?.value) || 0;
+  const saldoPost = s - monto;
+  const alcanza = monto === 0 || saldoPost >= 0;
+
+  info.style.display = 'flex';
+  info.style.flexDirection = 'column';
+  info.style.gap = '6px';
+  info.style.background = alcanza ? 'var(--green-light)' : 'var(--red-light)';
+  info.style.padding = '10px 12px';
+  info.style.borderRadius = 'var(--radius-sm)';
+  info.style.border = `1px solid ${alcanza ? 'rgba(5,150,105,.2)' : 'rgba(220,38,38,.2)'}`;
+
+  info.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="color:var(--muted);font-size:.78rem;">Saldo disponible</span>
+      <strong style="color:${s > 0 ? 'var(--green)' : 'var(--red)'}">${fmt(s)}</strong>
+    </div>
+    ${monto > 0 ? `
+    <div style="height:1px;background:rgba(0,0,0,.06);"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="color:var(--muted);font-size:.78rem;">Quedaría después</span>
+      <strong style="color:${alcanza ? 'var(--green)' : 'var(--red)'};font-size:.95rem;">${fmt(saldoPost)}</strong>
+    </div>
+     ` : ''}
+  `;
+}
+
+function calcularPreview4x1000() {
+  const monto = parseFloat(document.getElementById('mg-monto')?.value) || 0;
+  const billId = document.getElementById('mg-billetera')?.value;
+  const preview = document.getElementById('mg-4x1000-preview');
+  const texto = document.getElementById('mg-4x1000-texto');
+  if (!preview || !texto) return;
+  const bill = getBilleteras().find(b=>b.id===billId);
+  if (bill?.cobra4x1000 && monto > 0) {
+    const gmf = Math.round(monto * 0.004);
+    texto.textContent = `⚠️ Esta billetera cobra 4x1000. Se registrará ${fmt(gmf)} adicional como impuesto.`;
+    preview.style.display = '';
+  } else {
+    preview.style.display = 'none';
+  }
+}
+
+// Estado de visibilidad de balances en movimientos
+let _movBalancesVisible = false;
+
+function toggleMovBalances() {
+  _movBalancesVisible = !_movBalancesVisible;
+  renderMovimientos();
+}
+
+function setMovRangoMesActual() {
+  const hoy = new Date();
+  const y = hoy.getFullYear();
+  const m = String(hoy.getMonth()+1).padStart(2,'0');
+  const primerDia = `${y}-${m}-01`;
+  const ultimoDia = new Date(y, hoy.getMonth()+1, 0);
+  const ult = `${y}-${m}-${String(ultimoDia.getDate()).padStart(2,'0')}`;
+  const desde = document.getElementById('mov-filter-desde');
+  const hasta = document.getElementById('mov-filter-hasta');
+  if (desde) desde.value = primerDia;
+  if (hasta) hasta.value = ult;
+  renderMovimientos();
+}
+
+function clearMovRango() {
+  const desde = document.getElementById('mov-filter-desde');
+  const hasta = document.getElementById('mov-filter-hasta');
+  if (desde) desde.value = '';
+  if (hasta) hasta.value = '';
+  renderMovimientos();
+}
+
+function renderMovimientos() {
+  const filtroTipo  = document.getElementById('mov-filter-tipo')?.value || '';
+  const filtroDesde = document.getElementById('mov-filter-desde')?.value || '';
+  const filtroHasta = document.getElementById('mov-filter-hasta')?.value || '';
+  const filtroCat   = document.getElementById('mov-filter-cat')?.value || '';
+  const filtroText  = (document.getElementById('mov-filter-search')?.value || '').toLowerCase();
+
+  let items = [
+    ...STATE.db.ingresos.filter(i=>i.cat!=='Transferencia').map(i=>({...i,tipo:'ingreso'})),
+    ...STATE.db.gastos.filter(g=>g.cat!=='Transferencia').map(g=>({...g,tipo:'gasto'})),
+  ].sort((a,b)=>{
+    const fd=(b.fecha||'').localeCompare(a.fecha||'');
+    return fd!==0?fd:convertirHora(b.hora)-convertirHora(a.hora);
+  });
+
+  if (filtroTipo)   items = items.filter(i=>i.tipo===filtroTipo);
+  if (filtroDesde)  items = items.filter(i=>(i.fecha||'') >= filtroDesde);
+  if (filtroHasta)  items = items.filter(i=>(i.fecha||'') <= filtroHasta);
+  if (filtroCat)    items = items.filter(i=>i.cat===filtroCat);
+  if (filtroText)   items = items.filter(i=>(i.fuente||i.desc||'').toLowerCase().includes(filtroText)||(i.cat||'').toLowerCase().includes(filtroText));
+
+  // Poblar cats
+  const cats = [...new Set([
+    ...STATE.db.ingresos.map(i=>i.cat),
+    ...STATE.db.gastos.map(g=>g.cat)
+  ].filter(c=>c && c!=='Transferencia'))].sort();
+  const catSel = document.getElementById('mov-filter-cat');
+  if (catSel) {
+    const cur = catSel.value;
+    catSel.innerHTML = '<option value="">Todas las categorías</option>';
+    cats.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      if (c===cur) o.selected=true;
+      catSel.appendChild(o);
+    });
+  }
+
+  const totalIng = items.filter(i=>i.tipo==='ingreso').reduce((a,i)=>a+Number(i.monto),0);
+  const totalGas = items.filter(i=>i.tipo==='gasto').reduce((a,i)=>a+Number(i.monto),0);
+  const balance  = totalIng - totalGas;
+
+  const resumen = document.getElementById('mov-resumen');
+  if (resumen) {
+    const eyeOpen = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+    const eyeClosed = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+    const mask = '•••••';
+    resumen.innerHTML = `<div style="display:flex;align-items:center;gap:14px;padding:4px 0;">
+      <span style="color:var(--muted);font-size:.8rem;font-weight:600;">${items.length} mov.</span>
+      <span style="font-size:.8rem;color:var(--muted);">Ingresos: <strong style="color:var(--green);">${_movBalancesVisible ? fmt(totalIng) : mask}</strong></span>
+      <span style="font-size:.8rem;color:var(--muted);">Gastos: <strong style="color:var(--red);">${_movBalancesVisible ? fmt(totalGas) : mask}</strong></span>
+      <button onclick="toggleMovBalances()" style="margin-left:auto;background:none;border:1px solid var(--border);border-radius:8px;padding:3px 10px;cursor:pointer;color:var(--muted);display:flex;align-items:center;gap:5px;font-size:.78rem;">
+        ${_movBalancesVisible ? eyeOpen : eyeClosed} ${_movBalancesVisible ? 'Ocultar' : 'Mostrar'}
+      </button>
+    </div>`;
+  }
+
+  const lista = document.getElementById('mov-lista');
+  if (!lista) return;
+  if (!items.length) {
+    lista.innerHTML = '<p style="text-align:center;color:var(--muted);padding:32px;">Sin movimientos para el período seleccionado</p>';
+    return;
+  }
+
+  // Agrupar por fecha
+  const grupos = {};
+  items.forEach(i => { (grupos[i.fecha]||=[]).push(i); });
+
+  lista.innerHTML = Object.entries(grupos).sort((a,b)=>b[0].localeCompare(a[0])).map(([fecha, movs]) => {
+    const fechaLabel = (() => {
+      const d = new Date(fecha+'T12:00:00');
+      return d.toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    })();
+    return `<div style="margin-bottom:16px;">
+      <div style="font-size:.78rem;color:var(--muted);font-weight:600;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:4px;text-transform:capitalize;">${fechaLabel}</div>
+      ${movs.map(m => {
+        const esIng = m.tipo==='ingreso';
+        const label = m.fuente || m.desc || '—';
+        const montoMostrar = `${esIng?'+':'-'}${fmt(m.monto)}`;
+        const billNombre = STATE.db.billeteras?.find(b=>b.id===m.billeteraId)?.nombre || '';
+        const procedencia = esIng
+          ? (billNombre ? `→ ${billNombre}` : '')
+          : (billNombre ? `← ${billNombre}` : '');
+        return `<div style="display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--border);">
+          <div style="width:38px;height:38px;border-radius:50%;background:${esIng?'var(--green)':'var(--red)'};display:flex;align-items:center;justify-content:center;color:#fff;font-size:1rem;flex-shrink:0;">
+            ${esIng?'↑':'↓'}
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${label}</div>
+            <div style="font-size:.74rem;color:var(--muted);margin-top:2px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
+              ${m.cat ? `<span style="background:var(--bg2);border-radius:4px;padding:1px 6px;">${m.cat}</span>` : ''}
+              ${procedencia ? `<span style="color:var(--accent);font-weight:600;">${procedencia}</span>` : ''}
+              ${m.hora ? `<span style="opacity:.7;">${m.hora}</span>` : ''}
+            </div>
+          </div>
+          <div style="font-weight:700;font-size:.95rem;color:${esIng?'var(--green)':'var(--red)'};white-space:nowrap;flex-shrink:0;">
+            ${montoMostrar}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
+}
+
+function clearMovFilters() {
+  ['mov-filter-tipo','mov-filter-cat'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
+  const s=document.getElementById('mov-filter-search'); if(s) s.value='';
+  clearMovRango();
+}
+
+async function saveGastoModal() {
+  const monto = parseFloat(document.getElementById('mg-monto').value) || 0;
+  const desc = document.getElementById('mg-desc').value.trim();
+  const fecha = document.getElementById('mg-fecha').value;
+  const cat = document.getElementById('mg-cat').value;
+  const billeteraId = document.getElementById('mg-billetera').value;
+
+  if (!monto || monto <= 0) return toast('El monto debe ser mayor a 0', 'error');
+  if (!desc) return toast('La descripción es obligatoria', 'error');
+  if (!billeteraId) return toast('Selecciona la billetera', 'error');
+
+  // Validar saldo suficiente
+  const saldo = saldoBilletera(billeteraId);
+  if (monto > saldo) {
+    const bill = getBilleteras().find(b => b.id === billeteraId);
+    // Marcar el select en rojo
+    const sel = document.getElementById('mg-billetera');
+    if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(() => sel.style.border = '', 2500); }
+    return toast(`Saldo insuficiente en ${bill?.nombre || 'la billetera'}. Disponible: ${fmt(saldo)} — Necesitas: ${fmt(monto)}`, 'error');
+  }
+
+  const bill = getBilleteras().find(b => b.id === billeteraId);
+  const cobra4x1000 = bill?.cobra4x1000 || false;
+  const gmf = cobra4x1000 ? Math.round(monto * 0.004) : 0;
+
+  STATE.db.gastos.push({ id: uid(), fecha, hora: horaActual(), monto, desc, cat, billeteraId });
+  if (gmf > 0) {
+    STATE.db.gastos.push({
+      id: uid(), fecha, hora: horaActual(), monto: gmf,
+      desc: `4x1000 sobre ${fmt(monto)}`, cat: 'Impuestos', billeteraId
+    });
+  }
+  await saveDb(['gastos']);
+  closeModal('modal-nuevo-gasto');
+  renderAll();
+  toast(gmf > 0 ? `Retiro registrado + 4x1000 (${fmt(gmf)}) ✅` : 'Retiro registrado ✅', 'success');
 }
 
 function verMovimientosBilletera(id) {
@@ -4296,7 +4733,7 @@ function verMovimientosBilletera(id) {
   const movsOrden = [...movs].reverse();
   const saldos = [];
   movsOrden.forEach(m => {
-    if (m.tipo === 'ingreso') saldoAcc += Number(m.monto);
+    if (m.tipo==='ingreso'||m.tipo==='transferencia-entrada') saldoAcc += Number(m.monto);
     else saldoAcc -= Number(m.monto);
     saldos.push(saldoAcc);
   });
@@ -4837,9 +5274,13 @@ function clearForm(ids) {
 }
 
 // Close modals on overlay click
+const MODALES_PROTEGIDOS = ['modal-nuevo-ingreso', 'modal-nuevo-gasto'];
+
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
   overlay.addEventListener('click', e => {
-    if (e.target === overlay) overlay.classList.remove('open');
+    if (e.target === overlay && !MODALES_PROTEGIDOS.includes(overlay.id)) {
+      overlay.classList.remove('open');
+    }
   });
 });
 

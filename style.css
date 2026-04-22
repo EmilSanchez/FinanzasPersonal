@@ -1005,3 +1005,22 @@ canvas { max-width: 100%; display: block; }
   .btn { font-size: .78rem; }
   .section { padding: 10px; }
 }
+
+/* Bloquear zoom en móvil */
+html, body {
+  touch-action: pan-x pan-y;
+  -ms-touch-action: pan-x pan-y;
+}
+
+/* Save spinner */
+@keyframes spin-save {
+  to { transform: rotate(360deg); }
+}
+.save-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255,255,255,0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin-save 0.7s linear infinite;
+}
