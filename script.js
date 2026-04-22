@@ -51,11 +51,22 @@ function loadDbLocal() {
   if (!STATE.db.transferencias) STATE.db.transferencias = [];
 }
 
-// ── Cargar datos (usa Firebase si disponible, localStorage si no) ──
+// ── Cargar datos (espera Firebase hasta 10s, fallback a localStorage) ──
 async function loadDb() {
-  if (window.__FB && window.__FB.ready) {
+  showLoadingOverlay('Cargando datos...');
+
+  // Si Firebase no está listo, esperar hasta 10 segundos
+  if (!window.__FB?.ready) {
+    await new Promise(resolve => {
+      const t = setTimeout(resolve, 10000); // máximo 10s
+      window.addEventListener('firebase-auth-ready', () => {
+        clearTimeout(t); resolve();
+      }, { once: true });
+    });
+  }
+
+  if (window.__FB?.ready) {
     try {
-      showLoadingOverlay('Cargando datos...');
       const data = await window.__FB.loadAll();
       STATE.db = {
         ingresos:       data.ingresos       || [],
@@ -69,36 +80,34 @@ async function loadDb() {
         billeteras:     data.billeteras     || [],
         transferencias: data.transferencias || [],
       };
-      // Guardar en localStorage como respaldo offline
       localStorage.setItem('finanzas_pro_v2', JSON.stringify(STATE.db));
       hideLoadingOverlay();
-      console.log('Datos cargados desde Firestore');
+      console.log('✅ Datos cargados desde Firestore');
+
+      // Sincronizar hash del PIN
+      try {
+        if (window.__FB.loadPin) {
+          const hashRemoto = await window.__FB.loadPin();
+          if (hashRemoto && hashRemoto.length === 64) {
+            localStorage.setItem('fp_pin_hash', hashRemoto);
+          } else if (!hashRemoto && localStorage.getItem('fp_pin_hash')) {
+            await window.__FB.savePin(localStorage.getItem('fp_pin_hash')).catch(()=>{});
+          }
+        }
+      } catch(e) { console.warn('PIN sync omitido:', e); }
+
     } catch (err) {
       console.error('Error cargando Firebase, usando localStorage:', err);
       loadDbLocal();
       hideLoadingOverlay();
       toast('Modo offline: usando datos locales', 'info');
     }
-
-    // Sincronizar hash del PIN desde Firebase (solo si es un hash SHA-256 válido)
-    try {
-      if (window.__FB.loadPin) {
-        const hashRemoto = await window.__FB.loadPin();
-        if (hashRemoto && hashRemoto.length === 64) {
-          // Es un hash válido — actualizar local
-          localStorage.setItem('fp_pin_hash', hashRemoto);
-        } else if (!hashRemoto && localStorage.getItem('fp_pin_hash')) {
-          // No hay hash en Firebase — subir el local
-          await window.__FB.savePin(localStorage.getItem('fp_pin_hash')).catch(()=>{});
-        }
-      }
-    } catch (e) {
-      console.warn('PIN sync omitido:', e);
-    }
-
   } else {
-    // Firebase aún no está listo — usar localStorage
+    // Firebase no respondió en 10s — usar localStorage como fallback
+    console.warn('Firebase no disponible, cargando desde localStorage');
     loadDbLocal();
+    hideLoadingOverlay();
+    toast('Sin conexión: usando datos locales', 'info');
   }
 }
 
