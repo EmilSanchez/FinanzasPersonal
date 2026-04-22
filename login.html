@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Finanzas PRO — Acceso</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+CiAgPGRlZnM+CiAgICA8cmFkaWFsR3JhZGllbnQgaWQ9ImJnIiBjeD0iNDAlIiBjeT0iMzUlIiByPSI2NSUiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjMzRkMzk5Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iNTUlIiBzdG9wLWNvbG9yPSIjMDU5NjY5Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzA2NWY0NiIvPgogICAgPC9yYWRpYWxHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0ic2giIGN4PSIzNSUiIGN5PSIyOCUiIHI9IjM4JSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IndoaXRlIiBzdG9wLW9wYWNpdHk9IjAuNCIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IndoaXRlIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjE1LjUiIGZpbGw9InVybCgjYmcpIi8+CiAgPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTUuNSIgZmlsbD0idXJsKCNzaCkiLz4KICA8cmVjdCB4PSI2IiAgeT0iMTgiIHdpZHRoPSI0IiBoZWlnaHQ9IjgiICByeD0iMSIgZmlsbD0id2hpdGUiIG9wYWNpdHk9IjAuOTUiLz4KICA8cmVjdCB4PSIxMiIgeT0iMTMiIHdpZHRoPSI0IiBoZWlnaHQ9IjEzIiByeD0iMSIgZmlsbD0id2hpdGUiIG9wYWNpdHk9IjAuOTUiLz4KICA8cmVjdCB4PSIxOCIgeT0iOSIgIHdpZHRoPSI0IiBoZWlnaHQ9IjE3IiByeD0iMSIgZmlsbD0id2hpdGUiIG9wYWNpdHk9IjAuOTUiLz4KPC9zdmc+">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%; font-family: 'Inter', system-ui, sans-serif;
+    background: linear-gradient(135deg, #1a2332 0%, #243049 50%, #1a2332 100%);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; overflow-y: auto;
+  }
+  .lock-card {
+    background: #ffffff; border-radius: 24px;
+    padding: 48px 40px; width: 340px;
+    text-align: center; animation: slideUp .4s ease;
+    box-shadow: 0 20px 60px rgba(0,0,0,.3);
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .lock-icon { margin-bottom: 16px; display: block; filter: drop-shadow(0 0 20px rgba(59,130,246,0.4)); }
+  h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -.5px; margin-bottom: 6px; color: #1a2332; }
+  p  { color: #64748b; margin-bottom: 28px; font-size: .88rem; }
+  .pin-dots { display: flex; justify-content: center; gap: 12px; margin-bottom: 28px; }
+  .pin-dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid #dde3ed; transition: all .2s ease;
+  }
+  .pin-dot.filled { background: #2563eb; border-color: #2563eb; box-shadow: 0 0 8px rgba(59,130,246,.5); }
+  .pin-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+  .pin-btn {
+    background: #f4f6f9; border: 1px solid #dde3ed;
+    color: #1a2332; font-size: 1.2rem; font-weight: 600;
+    border-radius: 6px; padding: 14px;
+    cursor: pointer; transition: all .2s ease; user-select: none;
+    font-family: inherit;
+  }
+  .pin-btn:hover { background: #eef1f6; border-color: #2563eb; transform: scale(1.04); }
+  .pin-btn:active { transform: scale(.96); }
+  .pin-btn.delete { font-size: .9rem; color: #64748b; }
+  .pin-btn.enter { background: #2563eb; border-color: #2563eb; color: #fff; }
+  .pin-btn.enter:hover { background: #1d4ed8; }
+  .pin-error { color: #dc2626; font-size: .82rem; min-height: 20px; transition: all .2s; }
+  .spinner-wrap {
+    display: none; flex-direction: column; align-items: center;
+    gap: 12px; padding: 20px 0;
+  }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid rgba(37,99,235,.2);
+    border-top-color: #2563eb; border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (max-width: 400px) {
+    .lock-card { width: 96%; padding: 28px 18px; border-radius: 18px; }
+    .pin-btn { padding: 13px; font-size: 1.1rem; }
+    h1 { font-size: 1.3rem; }
+  }
+</style>
+</head>
+<body>
+<div class="lock-card">
+  <span class="lock-icon">
+    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.5"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+  </span>
+  <h1>Finanzas PRO</h1>
+  <p>Ingresa tu PIN para continuar</p>
+  <div class="pin-dots">
+    <div class="pin-dot" id="dot0"></div>
+    <div class="pin-dot" id="dot1"></div>
+    <div class="pin-dot" id="dot2"></div>
+    <div class="pin-dot" id="dot3"></div>
+  </div>
+  <div class="pin-pad">
+    <button class="pin-btn" onclick="pinPress('1')">1</button>
+    <button class="pin-btn" onclick="pinPress('2')">2</button>
+    <button class="pin-btn" onclick="pinPress('3')">3</button>
+    <button class="pin-btn" onclick="pinPress('4')">4</button>
+    <button class="pin-btn" onclick="pinPress('5')">5</button>
+    <button class="pin-btn" onclick="pinPress('6')">6</button>
+    <button class="pin-btn" onclick="pinPress('7')">7</button>
+    <button class="pin-btn" onclick="pinPress('8')">8</button>
+    <button class="pin-btn" onclick="pinPress('9')">9</button>
+    <button class="pin-btn delete" onclick="pinDelete()">⌫</button>
+    <button class="pin-btn" onclick="pinPress('0')">0</button>
+    <button class="pin-btn enter" onclick="pinSubmit()">✓</button>
+  </div>
+  <div class="pin-error" id="pin-error"></div>
+  <div class="spinner-wrap" id="spinner-wrap">
+    <div class="spinner"></div>
+    <span style="font-size:.8rem;color:#64748b;">Verificando...</span>
+  </div>
+</div>
+
+<script>
+const SESSION_KEY = 'fp_session';
+const SESSION_MS  = 30 * 60 * 1000;
+let pinBuffer = '';
+
+// Si ya hay sesión válida, ir directo a la app
+(function() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (raw) {
+      const { ts } = JSON.parse(raw);
+      if ((Date.now() - ts) < SESSION_MS) {
+        window.location.replace('index.html');
+      }
+    }
+  } catch(e) {}
+})();
+
+async function sha256(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+function updateDots() {
+  for (let i = 0; i < 4; i++) {
+    document.getElementById('dot' + i).classList.toggle('filled', i < pinBuffer.length);
+  }
+}
+
+function pinPress(d) {
+  if (pinBuffer.length >= 4) return;
+  pinBuffer += d;
+  updateDots();
+  if (pinBuffer.length === 4) setTimeout(pinSubmit, 200);
+}
+
+function pinDelete() {
+  pinBuffer = pinBuffer.slice(0, -1);
+  updateDots();
+}
+
+async function pinSubmit() {
+  const entered = pinBuffer;
+  pinBuffer = '';
+  updateDots();
+
+  // Mostrar spinner, ocultar pad
+  document.getElementById('spinner-wrap').style.display = 'flex';
+  document.querySelector('.pin-pad').style.display = 'none';
+
+  // Migrar PIN legacy si existe
+  const legacy = localStorage.getItem('fp_pin');
+  if (legacy) {
+    localStorage.setItem('fp_pin_hash', await sha256(legacy));
+    localStorage.removeItem('fp_pin');
+  }
+  if (!localStorage.getItem('fp_pin_hash')) {
+    localStorage.setItem('fp_pin_hash', await sha256('1234'));
+  }
+
+  const enteredHash = await sha256(entered);
+  const correctHash = localStorage.getItem('fp_pin_hash');
+
+  if (enteredHash === correctHash) {
+    // Guardar sesión y redirigir
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ ts: Date.now() }));
+    window.location.replace('index.html');
+  } else {
+    document.getElementById('spinner-wrap').style.display = 'none';
+    document.querySelector('.pin-pad').style.display = 'grid';
+    const err = document.getElementById('pin-error');
+    err.textContent = 'PIN incorrecto. Intenta de nuevo.';
+    setTimeout(() => { err.textContent = ''; }, 2000);
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') pinSubmit();
+  else if (e.key === 'Backspace') pinDelete();
+  else if (/^[0-9]$/.test(e.key)) pinPress(e.key);
+});
+</script>
+</body>
+</html>

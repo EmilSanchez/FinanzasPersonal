@@ -14,6 +14,25 @@
 -->
 <link rel="stylesheet" href="style.css">
 
+<!-- ═══════════ GUARD DE SESIÓN — redirige a login si no hay sesión válida ═══════════ -->
+<script>
+(function() {
+  const SESSION_KEY = 'fp_session';
+  const SESSION_MS  = 30 * 60 * 1000;
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) { window.location.replace('login.html'); return; }
+    const { ts } = JSON.parse(raw);
+    if ((Date.now() - ts) >= SESSION_MS) {
+      localStorage.removeItem(SESSION_KEY);
+      window.location.replace('login.html');
+    }
+  } catch(e) {
+    window.location.replace('login.html');
+  }
+})();
+</script>
+
 <!-- ═══════════ FIREBASE SDK ═══════════ -->
 <script type="module">
   // ──────────────────────────────────────────────────────────────
@@ -154,41 +173,9 @@
 </div>
 
 <!-- ============================================================
-     LOCK SCREEN
-     ============================================================ -->
-<div id="lock-screen">
-  <div class="lock-card">
-    <span class="lock-icon svg-icon" style="font-size:2.5rem;display:block;text-align:center"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span>
-    <h1>Finanzas PRO</h1>
-    <p>Ingresa tu PIN para continuar</p>
-    <div class="pin-dots">
-      <div class="pin-dot" id="dot0"></div>
-      <div class="pin-dot" id="dot1"></div>
-      <div class="pin-dot" id="dot2"></div>
-      <div class="pin-dot" id="dot3"></div>
-    </div>
-    <div class="pin-pad">
-      <button class="pin-btn" onclick="pinPress('1')">1</button>
-      <button class="pin-btn" onclick="pinPress('2')">2</button>
-      <button class="pin-btn" onclick="pinPress('3')">3</button>
-      <button class="pin-btn" onclick="pinPress('4')">4</button>
-      <button class="pin-btn" onclick="pinPress('5')">5</button>
-      <button class="pin-btn" onclick="pinPress('6')">6</button>
-      <button class="pin-btn" onclick="pinPress('7')">7</button>
-      <button class="pin-btn" onclick="pinPress('8')">8</button>
-      <button class="pin-btn" onclick="pinPress('9')">9</button>
-      <button class="pin-btn delete" onclick="pinDelete()">⌫</button>
-      <button class="pin-btn" onclick="pinPress('0')">0</button>
-      <button class="pin-btn enter" onclick="pinSubmit()">✓</button>
-    </div>
-    <div class="pin-error" id="pin-error"></div>
-  </div>
-</div>
-
-<!-- ============================================================
      APP
      ============================================================ -->
-<div id="app">
+<div id="app" class="visible">
 
   <!-- SIDEBAR -->
   <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
@@ -244,13 +231,13 @@
           <span class="nav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span> Contraseñas
         </button>
       </li>
+      <li class="nav-item">
+        <button class="nav-btn" onclick="navigate('config')" data-page="config">
+          <span class="nav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> Configuración
+        </button>
+      </li>
     </ul>
-    <div class="sidebar-bottom">
-      <button onclick="showChangePinModal()"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:5px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Cambiar PIN</button>
-      <button onclick="exportData()"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:5px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Exportar backup</button>
-      <button onclick="importBackup()"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:5px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Importar backup</button>
-      <button class="danger" onclick="confirmDeleteAll()"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:5px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg> Borrar todo</button>
-    </div>
+
   </aside>
 
   <!-- MAIN -->
@@ -527,62 +514,31 @@
     <div class="page" id="page-movimientos">
       <p class="page-title">Movimientos</p>
 
-      <!-- Botones de acción estilo MP -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px;">
-
-        <button onclick="openModalNuevoIngreso()" style="
-          background:#0f2d6b;border:none;border-radius:16px;
-          padding:22px 12px;display:flex;flex-direction:column;
-          align-items:center;gap:10px;cursor:pointer;
-          transition:all .18s ease;
-          box-shadow:0 4px 14px rgba(15,45,107,.45);
-        " onmouseover="this.style.background='#0a1f4e'"
-          onmouseout="this.style.background='#0f2d6b'">
-          <div style="width:48px;height:48px;background:rgba(255,255,255,.15);border-radius:12px;
-            display:flex;align-items:center;justify-content:center;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24"
-              fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <polyline points="19 12 12 19 5 12"/>
-            </svg>
-          </div>
-          <span style="font-size:.9rem;font-weight:700;color:#fff;letter-spacing:.01em;">Ingreso</span>
-        </button>
-
-        <button onclick="openModalNuevoGasto()" style="
-          background:#7f0000;border:none;border-radius:16px;
-          padding:22px 12px;display:flex;flex-direction:column;
-          align-items:center;gap:10px;cursor:pointer;
-          transition:all .18s ease;
-          box-shadow:0 4px 14px rgba(127,0,0,.45);
-        " onmouseover="this.style.background='#5c0000'"
-          onmouseout="this.style.background='#7f0000'">
-          <div style="width:48px;height:48px;background:rgba(255,255,255,.15);border-radius:12px;
-            display:flex;align-items:center;justify-content:center;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24"
-              fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="19" x2="12" y2="5"/>
-              <polyline points="5 12 12 5 19 12"/>
-            </svg>
-          </div>
-          <span style="font-size:.9rem;font-weight:700;color:#fff;letter-spacing:.01em;">Gasto</span>
-        </button>
-
-      </div>
-
-      <!-- Filtros -->
-      <div class="section" style="display:flex;flex-direction:column;gap:10px;">
-        <!-- Fila 1: Rango de fechas -->
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <span style="font-size:.75rem;color:var(--muted);font-weight:600;">Desde</span>
-          <input type="date" class="form-control" id="mov-filter-desde" style="flex:1;min-width:120px;" onchange="renderMovimientos()">
-          <span style="font-size:.75rem;color:var(--muted);font-weight:600;">Hasta</span>
-          <input type="date" class="form-control" id="mov-filter-hasta" style="flex:1;min-width:120px;" onchange="renderMovimientos()">
-          <button class="btn btn-ghost btn-sm" onclick="setMovRangoMesActual()" style="white-space:nowrap;font-size:.78rem;">&#128197; Este mes</button>
-          <button class="btn btn-ghost btn-sm" onclick="clearMovRango()" style="font-size:.78rem;">Ver todo</button>
+      <!-- Filtros + Botones inline -->
+      <div class="section mov-filtros-section" style="display:flex;flex-direction:column;gap:10px;overflow:visible;">
+        <!-- Fila de botones (solo visible en móvil, arriba) -->
+        <div class="mov-btns-row">
+          <button onclick="openModalNuevoIngreso()" class="mov-btn-ingreso">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+            Ingreso
+          </button>
+          <button onclick="openModalNuevoGasto()" class="mov-btn-gasto">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+            Gasto
+          </button>
         </div>
-        <!-- Fila 2: Tipo + Categoría + Búsqueda + Limpiar -->
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        <!-- Fila de filtros -->
+        <div class="mov-filtros-row">
+          <!-- Botones compactos (solo en desktop, inline con filtros) -->
+          <button onclick="openModalNuevoIngreso()" class="mov-btn-ingreso mov-btn-desktop">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+            Ingreso
+          </button>
+          <button onclick="openModalNuevoGasto()" class="mov-btn-gasto mov-btn-desktop">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+            Gasto
+          </button>
+          <input type="text" class="form-control" id="mov-filter-search" style="flex:3;min-width:130px;" placeholder="Buscar..." oninput="renderMovimientos()">
           <select class="form-control" id="mov-filter-tipo" style="flex:1;min-width:110px;max-width:150px;" onchange="renderMovimientos()">
             <option value="">Todo</option>
             <option value="ingreso">Ingresos</option>
@@ -591,8 +547,66 @@
           <select class="form-control" id="mov-filter-cat" style="flex:2;min-width:140px;" onchange="renderMovimientos()">
             <option value="">Todas las categorías</option>
           </select>
-          <input type="text" class="form-control" id="mov-filter-search" style="flex:2;min-width:130px;" placeholder="Buscar..." oninput="renderMovimientos()">
-          <button class="btn btn-ghost btn-sm" onclick="clearMovFilters()" title="Limpiar filtros">&#x2715;</button>
+          <!-- Selector de período tipo pill -->
+          <div style="position:relative;">
+            <button id="mov-periodo-btn" onclick="toggleMovPeriodoPicker()" style="display:flex;align-items:center;gap:6px;padding:0 14px;height:36px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer;font-size:.82rem;font-weight:600;color:var(--text);white-space:nowrap;box-shadow:var(--shadow);">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span id="mov-periodo-label">Este mes</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+
+            <!-- Dropdown del picker -->
+            <div id="mov-periodo-picker" style="display:none;position:absolute;top:calc(100% + 6px);right:0;z-index:1000;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:0;min-width:560px;overflow:hidden;">
+              <div style="display:flex;">
+                <!-- Opciones rápidas -->
+                <div style="display:flex;flex-direction:column;padding:12px 8px;gap:2px;border-right:1px solid var(--border);min-width:130px;">
+                  <div style="font-size:.68rem;font-weight:700;color:var(--muted);padding:4px 8px 6px;letter-spacing:.05em;text-transform:uppercase;">Período</div>
+                  <button class="mov-quick-btn" data-q="hoy" onclick="applyMovQuick('hoy')">Hoy</button>
+                  <button class="mov-quick-btn" data-q="ayer" onclick="applyMovQuick('ayer')">Ayer</button>
+                  <button class="mov-quick-btn" data-q="7d" onclick="applyMovQuick('7d')">Últimos 7 días</button>
+                  <button class="mov-quick-btn" data-q="30d" onclick="applyMovQuick('30d')">Últimos 30 días</button>
+                  <button class="mov-quick-btn active" data-q="mes" onclick="applyMovQuick('mes')">Este mes</button>
+                  <button class="mov-quick-btn" data-q="mesant" onclick="applyMovQuick('mesant')">Mes pasado</button>
+                  <button class="mov-quick-btn" data-q="todo" onclick="applyMovQuick('todo')">Ver todo</button>
+                </div>
+                <!-- Calendarios -->
+                <div style="padding:12px 14px;flex:1;">
+                  <div style="display:flex;gap:20px;">
+                    <!-- Mes izquierdo -->
+                    <div style="flex:1;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                        <button onclick="movCalNav(-1)" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:2px 6px;border-radius:4px;font-size:1rem;line-height:1;">‹</button>
+                        <span id="mov-cal-title-l" style="font-size:.82rem;font-weight:700;color:var(--text);"></span>
+                        <div style="width:24px;"></div>
+                      </div>
+                      <div id="mov-cal-left" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;"></div>
+                    </div>
+                    <!-- Mes derecho -->
+                    <div style="flex:1;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                        <div style="width:24px;"></div>
+                        <span id="mov-cal-title-r" style="font-size:.82rem;font-weight:700;color:var(--text);"></span>
+                        <button onclick="movCalNav(1)" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:2px 6px;border-radius:4px;font-size:1rem;line-height:1;">›</button>
+                      </div>
+                      <div id="mov-cal-right" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;"></div>
+                    </div>
+                  </div>
+                  <!-- Footer del picker -->
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">
+                    <span id="mov-cal-range-label" style="font-size:.78rem;color:var(--accent);font-weight:600;"></span>
+                    <div style="display:flex;gap:6px;">
+                      <button onclick="cancelMovPicker()" style="padding:5px 14px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;font-size:.78rem;color:var(--muted);font-weight:600;">Cancelar</button>
+                      <button onclick="applyMovPicker()" style="padding:5px 14px;border:none;border-radius:7px;background:var(--teal);color:#fff;cursor:pointer;font-size:.78rem;font-weight:700;">Aplicar</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Inputs ocultos para compatibilidad con renderMovimientos -->
+          <input type="hidden" id="mov-filter-desde">
+          <input type="hidden" id="mov-filter-hasta">
         </div>
         <!-- Resumen -->
         <div id="mov-resumen"></div>
@@ -604,202 +618,139 @@
 
     <!-- Modal Nuevo Ingreso -->
     <div class="modal-overlay" id="modal-nuevo-ingreso">
-      <div class="modal" style="max-width:500px;width:100%;">
-        <div class="modal-title" style="display:flex;align-items:center;gap:10px;padding:20px 24px;">
-          <div style="width:36px;height:36px;background:#0f2d6b;border-radius:10px;
-            display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-              fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
-            </svg>
+      <div class="modal" style="max-width:480px;width:100%;">
+        <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:32px;height:32px;background:var(--green-light);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+            </div>
+            <div>
+              <div style="font-size:.95rem;font-weight:700;color:var(--text);">Nuevo ingreso</div>
+              <div style="font-size:.72rem;color:var(--muted);">Registra dinero entrante</div>
+            </div>
           </div>
-          <div>
-            <div style="font-size:1rem;font-weight:700;color:var(--text)">Registrar ingreso</div>
-            <div style="font-size:.75rem;color:var(--muted);font-weight:400">El dinero entrará a la billetera seleccionada</div>
-          </div>
-          <button onclick="closeModal('modal-nuevo-ingreso')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;line-height:1;">✕</button>
+          <button onclick="closeModal('modal-nuevo-ingreso')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;border-radius:6px;line-height:1;font-size:1.1rem;">✕</button>
         </div>
-
-        <div class="modal-body-wrap" style="padding:0;">
-
-          <!-- Monto destacado -->
-          <div style="background:linear-gradient(135deg,#0f2d6b,#1e40af);padding:24px 24px 20px;">
-            <div style="font-size:.72rem;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Monto a ingresar</div>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:1.6rem;font-weight:700;color:rgba(255,255,255,.7);">$</span>
+        <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:14px;">
+          <!-- Monto -->
+          <div class="form-group">
+            <label>Monto *</label>
+            <div style="position:relative;">
+              <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--muted);font-size:.95rem;">$</span>
               <input type="number" id="mi-monto" placeholder="0" oninput="onMiBilleteraChange()"
-                style="background:none;border:none;outline:none;font-size:2rem;font-weight:800;
-                color:#fff;width:100%;font-family:var(--font-head);">
+                class="form-control" style="padding-left:28px;font-size:1.1rem;font-weight:700;height:48px;">
             </div>
-            <div style="height:1px;background:rgba(255,255,255,.2);margin-top:12px;"></div>
           </div>
-
-          <!-- Campos -->
-          <div style="padding:20px 24px;display:flex;flex-direction:column;gap:16px;">
-
-            <!-- Billetera -->
-            <div>
-              <label style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">Entra a</label>
-              <select class="form-control" id="mi-billetera" onchange="onMiBilleteraChange()"
-                style="height:44px;font-size:.9rem;font-weight:600;">
-                <option value="">— Selecciona billetera —</option>
+          <!-- Billetera -->
+          <div class="form-group">
+            <label>Entra a *</label>
+            <select class="form-control" id="mi-billetera" onchange="onMiBilleteraChange()" style="height:44px;">
+              <option value="">— Selecciona billetera —</option>
+            </select>
+            <div id="mi-saldo-info" style="margin-top:6px;padding:8px 12px;background:var(--bg2);border-radius:var(--radius-sm);font-size:.82rem;color:var(--muted);display:flex;align-items:center;justify-content:space-between;">
+              <span>Saldo actual</span>
+              <strong id="mi-saldo-val" style="color:var(--green);">$0</strong>
+            </div>
+          </div>
+          <!-- Descripción -->
+          <div class="form-group">
+            <label>Descripción *</label>
+            <input type="text" class="form-control" id="mi-fuente" placeholder="Ej: Salario, venta..." style="height:44px;">
+          </div>
+          <!-- Fecha + Categoría -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group">
+              <label>Fecha</label>
+              <input type="date" class="form-control" id="mi-fecha" style="height:44px;">
+            </div>
+            <div class="form-group">
+              <label>Categoría</label>
+              <select class="form-control" id="mi-cat" style="height:44px;">
+                <option value="Salario">Salario</option>
+                <option value="Freelance">Freelance</option>
+                <option value="Negocio">Negocio</option>
+                <option value="Inversión">Inversión</option>
+                <option value="Arriendo">Arriendo</option>
+                <option value="Otro">Otro</option>
               </select>
-              <div id="mi-saldo-info" style="margin-top:6px;padding:8px 12px;background:var(--bg2);
-                border-radius:var(--radius-sm);font-size:.82rem;color:var(--muted);display:none;
-                display:flex;align-items:center;justify-content:space-between;">
-                <span>Saldo actual</span>
-                <strong id="mi-saldo-val" style="color:var(--green);">$0</strong>
-              </div>
             </div>
-
-            <!-- Descripción -->
-            <div>
-              <label style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">Descripción *</label>
-              <input type="text" class="form-control" id="mi-fuente" placeholder="Ej: Salario, venta, transferencia..."
-                style="height:44px;font-size:.9rem;">
-            </div>
-
-            <!-- Fila fecha + categoría -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div>
-                <label style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">Fecha</label>
-                <input type="date" class="form-control" id="mi-fecha" style="height:44px;font-size:.88rem;">
-              </div>
-              <div>
-                <label style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">Categoría</label>
-                <select class="form-control" id="mi-cat" style="height:44px;font-size:.88rem;">
-                  <option value="Salario">Salario</option>
-                  <option value="Freelance">Freelance</option>
-                  <option value="Negocio">Negocio</option>
-                  <option value="Inversión">Inversión</option>
-                  <option value="Arriendo">Arriendo</option>
-                  <option value="Otro">Otro</option>
-                </select>
-              </div>
-            </div>
-
           </div>
         </div>
-
         <div class="modal-actions" style="padding:16px 24px;gap:10px;">
           <button class="btn btn-ghost" onclick="closeModal('modal-nuevo-ingreso')" style="flex:1;">Cancelar</button>
-          <button onclick="saveIngresoModal()" style="
-            flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);
-            padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;
-            display:flex;align-items:center;justify-content:center;gap:8px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-              fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
-            </svg>
-            Confirmar ingreso
-          </button>
+          <button onclick="saveIngresoModal()" class="btn btn-success" style="flex:2;">Registrar ingreso</button>
         </div>
       </div>
     </div>
 
     <!-- Modal Nuevo Gasto -->
     <div class="modal-overlay" id="modal-nuevo-gasto">
-      <div class="modal" style="max-width:500px;width:100%;">
-        <div class="modal-title" style="display:flex;align-items:center;gap:10px;padding:20px 24px;">
-          <div style="width:36px;height:36px;background:#7f0000;border-radius:10px;
-            display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-              fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
-            </svg>
+      <div class="modal" style="max-width:480px;width:100%;">
+        <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:32px;height:32px;background:var(--red-light);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+            </div>
+            <div>
+              <div style="font-size:.95rem;font-weight:700;color:var(--text);">Nuevo gasto</div>
+              <div style="font-size:.72rem;color:var(--muted);">Registra dinero saliente</div>
+            </div>
           </div>
-          <div>
-            <div style="font-size:1rem;font-weight:700;color:var(--text)">Registrar gasto</div>
-            <div style="font-size:.75rem;color:var(--muted);font-weight:400">El dinero saldrá de la billetera seleccionada</div>
-          </div>
-          <button onclick="closeModal('modal-nuevo-gasto')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;line-height:1;">✕</button>
+          <button onclick="closeModal('modal-nuevo-gasto')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;border-radius:6px;line-height:1;font-size:1.1rem;">✕</button>
         </div>
-
-        <div class="modal-body-wrap" style="padding:0;">
-
-          <!-- Monto destacado -->
-          <div style="background:#7f0000;padding:24px 24px 20px;">
-            <div style="font-size:.72rem;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Monto del Gasto</div>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:1.6rem;font-weight:700;color:rgba(255,255,255,.7);">$</span>
+        <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:14px;">
+          <!-- Monto -->
+          <div class="form-group">
+            <label>Monto *</label>
+            <div style="position:relative;">
+              <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--muted);font-size:.95rem;">$</span>
               <input type="number" id="mg-monto" placeholder="0" oninput="calcularPreview4x1000();onMgBilleteraChange()"
-                style="background:none;border:none;outline:none;font-size:2rem;font-weight:800;
-                color:#fff;width:100%;font-family:var(--font-head);">
+                class="form-control" style="padding-left:28px;font-size:1.1rem;font-weight:700;height:48px;">
             </div>
-            <div style="height:1px;background:rgba(255,255,255,.2);margin-top:12px;"></div>
-            <!-- Preview 4x1000 dentro del hero -->
-            <div id="mg-4x1000-preview" style="display:none;margin-top:10px;">
-              <span id="mg-4x1000-texto" style="font-size:.78rem;color:rgba(255,255,255,.75);"></span>
+            <div id="mg-4x1000-preview" style="display:none;margin-top:6px;padding:8px 12px;background:var(--yellow-light);border-radius:var(--radius-sm);">
+              <span id="mg-4x1000-texto" style="font-size:.78rem;color:var(--yellow);font-weight:600;"></span>
             </div>
           </div>
-
-          <!-- Campos -->
-          <div style="padding:20px 24px;display:flex;flex-direction:column;gap:16px;">
-
-            <!-- Billetera -->
-            <div>
-              <label style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">Sale de</label>
-              <select class="form-control" id="mg-billetera" onchange="calcularPreview4x1000();onMgBilleteraChange()"
-                style="height:44px;font-size:.9rem;font-weight:600;">
-                <option value="">— Selecciona billetera —</option>
+          <!-- Billetera -->
+          <div class="form-group">
+            <label>Sale de *</label>
+            <select class="form-control" id="mg-billetera" onchange="calcularPreview4x1000();onMgBilleteraChange()" style="height:44px;">
+              <option value="">— Selecciona billetera —</option>
+            </select>
+            <div id="mg-sin-saldo-aviso" style="display:none;margin-top:8px;padding:10px 12px;background:var(--red-light);border:1px solid rgba(220,38,38,.25);border-radius:var(--radius-sm);font-size:.78rem;font-weight:600;color:var(--red);"></div>
+            <div id="mg-saldo-info" style="display:none;margin-top:6px;padding:10px 12px;border-radius:var(--radius-sm);font-size:.82rem;flex-direction:column;gap:6px;">...</div>
+          </div>
+          <!-- Descripción -->
+          <div class="form-group">
+            <label>Descripción *</label>
+            <input type="text" class="form-control" id="mg-desc" placeholder="Ej: Mercado, gasolina..." style="height:44px;">
+          </div>
+          <!-- Fecha + Categoría -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group">
+              <label>Fecha</label>
+              <input type="date" class="form-control" id="mg-fecha" style="height:44px;">
+            </div>
+            <div class="form-group">
+              <label>Categoría</label>
+              <select class="form-control" id="mg-cat" style="height:44px;">
+                <option value="Alimentación">Alimentación</option>
+                <option value="Transporte">Transporte</option>
+                <option value="Salud">Salud</option>
+                <option value="Servicios">Servicios</option>
+                <option value="Educación">Educación</option>
+                <option value="Entretenimiento">Entretenimiento</option>
+                <option value="Ropa">Ropa</option>
+                <option value="Hogar">Hogar</option>
+                <option value="Negocio">Negocio</option>
+                <option value="Otro">Otro</option>
               </select>
-              <!-- Aviso ninguna billetera alcanza -->
-              <div id="mg-sin-saldo-aviso" style="display:none;margin-top:8px;padding:10px 12px;
-                background:var(--red-light);border:1px solid rgba(220,38,38,.25);border-radius:var(--radius-sm);
-                font-size:.78rem;font-weight:600;color:var(--red);gap:8px;align-items:flex-start;">
-              </div>
             </div>
-            <div id="mg-saldo-info" style="display:none;margin-top:6px;padding:10px 12px;
-              border-radius:var(--radius-sm);font-size:.82rem;
-              flex-direction:column;gap:6px;">
-              ...
-            </div>
-
-            <!-- Descripción -->
-            <div>
-              <label style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">Descripción *</label>
-              <input type="text" class="form-control" id="mg-desc" placeholder="Ej: Mercado, gasolina, arriendo..."
-                style="height:44px;font-size:.9rem;">
-            </div>
-
-            <!-- Fila fecha + categoría -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div>
-                <label style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">Fecha</label>
-                <input type="date" class="form-control" id="mg-fecha" style="height:44px;font-size:.88rem;">
-              </div>
-              <div>
-                <label style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">Categoría</label>
-                <select class="form-control" id="mg-cat" style="height:44px;font-size:.88rem;">
-                  <option value="Alimentación">Alimentación</option>
-                  <option value="Transporte">Transporte</option>
-                  <option value="Salud">Salud</option>
-                  <option value="Servicios">Servicios</option>
-                  <option value="Educación">Educación</option>
-                  <option value="Entretenimiento">Entretenimiento</option>
-                  <option value="Ropa">Ropa</option>
-                  <option value="Hogar">Hogar</option>
-                  <option value="Negocio">Negocio</option>
-                  <option value="Otro">Otro</option>
-                </select>
-              </div>
-            </div>
-
           </div>
         </div>
-
         <div class="modal-actions" style="padding:16px 24px;gap:10px;">
           <button class="btn btn-ghost" onclick="closeModal('modal-nuevo-gasto')" style="flex:1;">Cancelar</button>
-          <button onclick="saveGastoModal()" style="
-            flex:2;background:#7f0000;color:#fff;border:none;border-radius:var(--radius-sm);
-            padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;
-            display:flex;align-items:center;justify-content:center;gap:8px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-              fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
-            </svg>
-            Confirmar Gasto
-          </button>
+          <button onclick="saveGastoModal()" class="btn btn-danger" style="flex:2;">Registrar gasto</button>
         </div>
       </div>
     </div>
@@ -1300,6 +1251,65 @@
       <!-- DETALLE INVERSIÓN (dinámica) -->
       <div class="page" id="page-detalle-inv"></div>
 
+      <!-- ====== CONFIGURACIÓN ====== -->
+      <div class="page" id="page-config">
+        <p class="page-title">Configuración</p>
+        <p class="page-sub">Gestiona tu seguridad y datos</p>
+
+        <div class="section" style="max-width:520px;">
+
+          <!-- Cambiar PIN -->
+          <div class="config-item" onclick="showChangePinModal()">
+            <div class="config-item-icon" style="background:rgba(37,99,235,.12);color:var(--accent);">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </div>
+            <div class="config-item-text">
+              <div class="config-item-title">Cambiar PIN</div>
+              <div class="config-item-sub">Actualiza tu código de acceso de 4 dígitos</div>
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--light)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+
+          <div class="config-divider"></div>
+
+          <!-- Exportar backup -->
+          <div class="config-item" onclick="exportData()">
+            <div class="config-item-icon" style="background:rgba(5,150,105,.12);color:var(--green);">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <div class="config-item-text">
+              <div class="config-item-title">Exportar backup</div>
+              <div class="config-item-sub">Descarga una copia de todos tus datos en JSON</div>
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--light)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+
+          <div class="config-divider"></div>
+
+          <!-- Importar backup -->
+          <div class="config-item" onclick="importBackup()">
+            <div class="config-item-icon" style="background:rgba(13,148,136,.12);color:var(--teal);">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </div>
+            <div class="config-item-text">
+              <div class="config-item-title">Importar backup</div>
+              <div class="config-item-sub">Restaura tus datos desde un archivo JSON</div>
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--light)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+
+
+        </div>
+
+        <!-- Info de sesión -->
+        <div class="section" style="max-width:520px;margin-top:0;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span style="font-size:.8rem;color:var(--muted);">Sesión activa · expira en <strong id="config-session-timer">—</strong></span>
+          </div>
+        </div>
+      </div>
+
   </main>
 </div>
 
@@ -1355,6 +1365,9 @@
   <button class="drawer-item" data-page="claves" onclick="mobileNav('claves');closeDrawer()">
     <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span> Contraseñas
   </button>
+  <button class="drawer-item" data-page="config" onclick="mobileNav('config');closeDrawer()">
+    <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> Configuración
+  </button>
   <div class="drawer-section-label" style="margin-top:8px;">Configuración</div>
   <button class="drawer-item" onclick="showChangePinModal();closeDrawer()">
     <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> Cambiar PIN
@@ -1365,9 +1378,7 @@
   <button class="drawer-item" onclick="importBackup();closeDrawer()">
     <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span> Importar backup
   </button>
-  <button class="drawer-item" style="color:var(--red)" onclick="confirmDeleteAll();closeDrawer()">
-    <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span> Borrar todo
-  </button>
+
   <button class="drawer-item" onclick="forceSyncFirebase();closeDrawer()">
     <span class="di-icon">☁️</span> Sync Firebase
   </button>
@@ -1673,6 +1684,94 @@
       <button class="btn btn-success" onclick="confirmarAmpliarPrestamo()">Registrar desembolso</button>
     </div>
     <input type="hidden" id="map-idx">
+  </div>
+</div>
+
+<!-- Modal eliminar movimiento con código -->
+<div class="modal-overlay" id="modal-eliminar-mov">
+  <div class="modal" style="max-width:360px;width:100%;">
+    <div class="modal-title" style="display:flex;align-items:center;gap:10px;padding:20px 24px;">
+      <div style="width:36px;height:36px;background:var(--red);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+      </div>
+      <div>
+        <div style="font-size:1rem;font-weight:700;color:var(--text)">Eliminar movimiento</div>
+        <div style="font-size:.75rem;color:var(--muted)">Ingresa el código de seguridad para confirmar</div>
+      </div>
+      <button onclick="cancelarEliminarMov()" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+    </div>
+    <div class="modal-body-wrap" style="padding:20px 24px;">
+      <div class="form-group">
+        <label style="font-size:.78rem;font-weight:600;color:var(--muted);display:block;margin-bottom:6px;">Código de seguridad</label>
+        <input type="password" inputmode="numeric" maxlength="4" id="mov-del-codigo"
+          class="form-control"
+          style="text-align:center;font-size:1.4rem;letter-spacing:.4em;font-weight:700;"
+          placeholder="••••"
+          onkeydown="if(event.key==='Enter') confirmarEliminarMov()">
+        <div id="mov-del-error" style="display:none;color:var(--red);font-size:.78rem;margin-top:6px;text-align:center;font-weight:600;"></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="cancelarEliminarMov()">Cancelar</button>
+      <button class="btn btn-danger" onclick="confirmarEliminarMov()">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Editar Movimiento -->
+<div class="modal-overlay" id="modal-editar-mov">
+  <div class="modal" style="max-width:480px;width:100%;">
+    <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:32px;height:32px;background:var(--accent-light);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </div>
+        <div>
+          <div style="font-size:.95rem;font-weight:700;color:var(--text);" id="em-titulo">Editar movimiento</div>
+          <div style="font-size:.72rem;color:var(--muted);">Los cambios afectan el saldo de la billetera</div>
+        </div>
+      </div>
+      <button onclick="closeModal('modal-editar-mov')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:1.1rem;">✕</button>
+    </div>
+    <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:14px;">
+      <input type="hidden" id="em-id">
+      <input type="hidden" id="em-tipo">
+      <!-- Monto -->
+      <div class="form-group">
+        <label>Monto *</label>
+        <div style="position:relative;">
+          <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--muted);font-size:.95rem;">$</span>
+          <input type="number" id="em-monto" class="form-control" style="padding-left:28px;font-size:1.1rem;font-weight:700;height:48px;" placeholder="0">
+        </div>
+      </div>
+      <!-- Descripción -->
+      <div class="form-group">
+        <label>Descripción *</label>
+        <input type="text" id="em-desc" class="form-control" style="height:44px;" placeholder="Descripción...">
+      </div>
+      <!-- Billetera -->
+      <div class="form-group">
+        <label>Billetera</label>
+        <select id="em-billetera" class="form-control" style="height:44px;">
+          <option value="">— Sin billetera —</option>
+        </select>
+      </div>
+      <!-- Fecha + Categoría -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group">
+          <label>Fecha</label>
+          <input type="date" id="em-fecha" class="form-control" style="height:44px;">
+        </div>
+        <div class="form-group">
+          <label>Categoría</label>
+          <select id="em-cat" class="form-control" style="height:44px;"></select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions" style="padding:16px 24px;gap:10px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-editar-mov')" style="flex:1;">Cancelar</button>
+      <button onclick="guardarEdicionMov()" class="btn btn-primary" style="flex:2;">Guardar cambios</button>
+    </div>
   </div>
 </div>
 

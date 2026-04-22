@@ -107,6 +107,20 @@ async function loadDb() {
 const _dirtyCollections = new Set();
 function markDirty(col) { _dirtyCollections.add(col); }
 
+/* ── Overlay de carga global ── */
+function showLoading() {
+  let ov = document.getElementById('loading-overlay');
+  if (ov) { ov.style.display = 'flex'; return; }
+  ov = document.createElement('div');
+  ov.id = 'loading-overlay';
+  ov.innerHTML = '<div class="loading-spinner"></div>';
+  document.body.appendChild(ov);
+}
+function hideLoading() {
+  const ov = document.getElementById('loading-overlay');
+  if (ov) ov.style.display = 'none';
+}
+
 async function saveDb(coleccionesEspecificas = null) {
   if (!estaConectado()) { mostrarAvisoSinConexion(); return false; }
 
@@ -410,89 +424,88 @@ function updateFbStatus(connected) {
 }
 
 /* ============================================================
-   PIN / LOCK
+   SESIÓN & SEGURIDAD
    ============================================================ */
-let pinBuffer = '';
 
-function pinPress(d) {
-  if (pinBuffer.length >= 4) return;
-  pinBuffer += d;
-  updatePinDots();
-  if (pinBuffer.length === 4) setTimeout(pinSubmit, 200);
+/* ── SHA-256 helper (Web Crypto API) ── */
+async function sha256(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
-function pinDelete() {
-  pinBuffer = pinBuffer.slice(0, -1);
-  updatePinDots();
+const SESSION_KEY = 'fp_session';
+const SESSION_MS  = 30 * 60 * 1000;
+let _sessionTimer = null;
+
+function sessionClear() {
+  localStorage.removeItem(SESSION_KEY);
+  clearTimeout(_sessionTimer);
 }
 
-function updatePinDots() {
-  for (let i = 0; i < 4; i++) {
-    document.getElementById('dot' + i).classList.toggle('filled', i < pinBuffer.length);
-  }
+function _scheduleSessionExpiry() {
+  clearTimeout(_sessionTimer);
+  const raw = localStorage.getItem(SESSION_KEY);
+  if (!raw) return;
+  const { ts } = JSON.parse(raw);
+  const remaining = SESSION_MS - (Date.now() - ts);
+  _sessionTimer = setTimeout(() => {
+    sessionClear();
+    window.location.replace('login.html');
+  }, Math.max(remaining, 0));
 }
 
-function pinSubmit() {
-  const saved = localStorage.getItem('fp_pin') || '1234';
-  if (pinBuffer === saved) {
-    document.getElementById('lock-screen').classList.add('hidden');
-    const app = document.getElementById('app');
-    app.classList.add('visible');
-    // initApp es async — esperamos a que cargue Firebase
-    initApp().then(async () => {
-      const fbOk = window.__FB && window.__FB.ready;
-      updateFbStatus(fbOk);
-      // Sincronizar PIN desde Firebase (por si fue cambiado en otro dispositivo)
-      if (fbOk && window.__FB.loadPin) {
-        try {
-          const pinRemoto = await window.__FB.loadPin();
-          if (pinRemoto && pinRemoto !== localStorage.getItem('fp_pin')) {
-            localStorage.setItem('fp_pin', pinRemoto);
-          }
-        } catch (e) { console.warn('No se pudo sincronizar PIN:', e); }
-      }
-    });
-    // Actualizar badge cuando la auth anónima confirme conexión real
-    window.addEventListener('firebase-auth-ready', () => {
-      updateFbStatus(true);
-    }, { once: true });
-  } else {
-    document.getElementById('pin-error').textContent = 'PIN incorrecto. Intenta de nuevo.';
-    pinBuffer = '';
-    updatePinDots();
-    setTimeout(() => { document.getElementById('pin-error').textContent = ''; }, 2000);
-  }
+function sessionUpdateTimer() {
+  const el = document.getElementById('config-session-timer');
+  if (!el) return;
+  const raw = localStorage.getItem(SESSION_KEY);
+  if (!raw) { el.textContent = '—'; return; }
+  const { ts } = JSON.parse(raw);
+  const rem = SESSION_MS - (Date.now() - ts);
+  if (rem <= 0) { el.textContent = 'expirada'; return; }
+  const m = Math.floor(rem / 60000);
+  const s = Math.floor((rem % 60000) / 1000);
+  el.textContent = `${m}:${String(s).padStart(2,'0')}`;
 }
+
+
 
 function lockApp() {
-  pinBuffer = '';
-  updatePinDots();
-  document.getElementById('pin-error').textContent = '';
-  document.getElementById('lock-screen').classList.remove('hidden');
-  document.getElementById('app').classList.remove('visible');
+  sessionClear();
+  window.location.replace('login.html');
 }
 
 async function changePin() {
-  const old = document.getElementById('m-pin-old').value;
-  const nw  = document.getElementById('m-pin-new').value;
-  const cf  = document.getElementById('m-pin-conf').value;
-  const saved = localStorage.getItem('fp_pin') || '1234';
+  const oldVal = document.getElementById('m-pin-old').value;
+  const nw     = document.getElementById('m-pin-new').value;
+  const cf     = document.getElementById('m-pin-conf').value;
 
-  if (old !== saved)          return toast('PIN actual incorrecto', 'error');
-  if (nw.length !== 4)        return toast('El nuevo PIN debe tener 4 dígitos', 'error');
-  if (!/^\d+$/.test(nw))      return toast('El PIN sólo puede contener números', 'error');
-  if (nw !== cf)               return toast('Los PINs no coinciden', 'error');
+  // Migrar legacy si existe
+  const legacyPin2 = localStorage.getItem('fp_pin');
+  if (legacyPin2) {
+    localStorage.setItem('fp_pin_hash', await sha256(legacyPin2));
+    localStorage.removeItem('fp_pin');
+  }
+  if (!localStorage.getItem('fp_pin_hash')) {
+    localStorage.setItem('fp_pin_hash', await sha256('1234'));
+  }
 
-  // Guardar en localStorage siempre
-  localStorage.setItem('fp_pin', nw);
+  const oldHash   = await sha256(oldVal);
+  const savedHash = localStorage.getItem('fp_pin_hash');
 
-  // Sincronizar con Firebase
+  if (oldHash !== savedHash)   return toast('PIN actual incorrecto', 'error');
+  if (nw.length !== 4)         return toast('El nuevo PIN debe tener 4 dígitos', 'error');
+  if (!/^\d+$/.test(nw))       return toast('El PIN sólo puede contener números', 'error');
+  if (nw !== cf)                return toast('Los PINs no coinciden', 'error');
+
+  const newHash = await sha256(nw);
+  localStorage.setItem('fp_pin_hash', newHash);
+  localStorage.removeItem('fp_pin'); // limpiar texto plano si existía
+
   if (window.__FB && window.__FB.ready && window.__FB.savePin) {
     try {
-      await window.__FB.savePin(nw);
-      toast('PIN actualizado y sincronizado en la nube', 'success');
+      await window.__FB.savePin(newHash); // guardar hash, nunca el PIN en texto
+      toast('PIN actualizado y cifrado en la nube ✅', 'success');
     } catch (e) {
-      console.warn('No se pudo guardar PIN en Firebase:', e);
       toast('PIN actualizado localmente (Firebase no disponible)', 'info');
     }
   } else {
@@ -502,6 +515,18 @@ async function changePin() {
   closeModal('modal-pin');
   ['m-pin-old','m-pin-new','m-pin-conf'].forEach(id => document.getElementById(id).value = '');
 }
+
+/* ============================================================
+   INICIO — la sesión ya fue validada por index.html guard
+   ============================================================ */
+window.addEventListener('DOMContentLoaded', () => {
+  _scheduleSessionExpiry();
+  setInterval(sessionUpdateTimer, 1000);
+  initApp().then(() => {
+    updateFbStatus(window.__FB && window.__FB.ready);
+  });
+  window.addEventListener('firebase-auth-ready', () => { updateFbStatus(true); }, { once: true });
+});
 
 /* ============================================================
    APP INIT
@@ -551,7 +576,7 @@ function setDateLabels() {
    ============================================================ */
 const PAGE_TITLES = {
   dashboard: 'Dashboard', ingresos: 'Ingresos',
-  gastos: 'Gastos', deudas: 'Deudas', claves: 'Contraseñas',
+  gastos: 'Gastos', deudas: 'Deudas', claves: 'Contraseñas', config: 'Configuración',
   prestamos: 'Préstamos a Terceros', fijos: 'Gastos Fijos',
   inversiones: 'Inversiones', 'detalle-inv': 'Detalle de Inversión', billeteras: 'Billeteras',
 };
@@ -4358,8 +4383,10 @@ async function saveIngresoModal() {
   if (!fuente) return toast('La descripción es obligatoria', 'error');
   if (!fecha) return toast('La fecha es obligatoria', 'error');
   STATE.db.ingresos.push({ id:uid(), fecha, hora:horaActual(), monto, fuente, cat, billeteraId });
-  await saveDb(['ingresos']);
   closeModal('modal-nuevo-ingreso');
+  showLoading();
+  await saveDb(['ingresos']);
+  hideLoading();
   renderAll();
   toast('Ingreso registrado ✅', 'success');
 }
@@ -4577,7 +4604,11 @@ function renderMovimientos() {
     ...STATE.db.gastos.filter(g=>g.cat!=='Transferencia').map(g=>({...g,tipo:'gasto'})),
   ].sort((a,b)=>{
     const fd=(b.fecha||'').localeCompare(a.fecha||'');
-    return fd!==0?fd:convertirHora(b.hora)-convertirHora(a.hora);
+    if (fd !== 0) return fd;
+    const hd = convertirHora(b.hora) - convertirHora(a.hora);
+    if (hd !== 0) return hd;
+    // Desempate por timestamp exacto (garantiza gasto antes que su 4x1000)
+    return (b.ts||0) - (a.ts||0);
   });
 
   if (filtroTipo)   items = items.filter(i=>i.tipo===filtroTipo);
@@ -4612,13 +4643,16 @@ function renderMovimientos() {
     const eyeOpen = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
     const eyeClosed = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
     const mask = '•••••';
-    resumen.innerHTML = `<div style="display:flex;align-items:center;gap:14px;padding:4px 0;">
+    resumen.innerHTML = `<div style="display:flex;align-items:center;gap:14px;padding:4px 0;flex-wrap:wrap;">
       <span style="color:var(--muted);font-size:.8rem;font-weight:600;">${items.length} mov.</span>
       <span style="font-size:.8rem;color:var(--muted);">Ingresos: <strong style="color:var(--green);">${_movBalancesVisible ? fmt(totalIng) : mask}</strong></span>
       <span style="font-size:.8rem;color:var(--muted);">Gastos: <strong style="color:var(--red);">${_movBalancesVisible ? fmt(totalGas) : mask}</strong></span>
-      <button onclick="toggleMovBalances()" style="margin-left:auto;background:none;border:1px solid var(--border);border-radius:8px;padding:3px 10px;cursor:pointer;color:var(--muted);display:flex;align-items:center;gap:5px;font-size:.78rem;">
-        ${_movBalancesVisible ? eyeOpen : eyeClosed} ${_movBalancesVisible ? 'Ocultar' : 'Mostrar'}
-      </button>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+        <button onclick="toggleMovBalances()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:3px 10px;cursor:pointer;color:var(--muted);display:flex;align-items:center;gap:5px;font-size:.78rem;">
+          ${_movBalancesVisible ? eyeOpen : eyeClosed} ${_movBalancesVisible ? 'Ocultar' : 'Mostrar'}
+        </button>
+        <button onclick="clearMovFilters()" title="Limpiar filtros" style="background:none;border:1px solid var(--border);border-radius:8px;padding:3px 8px;cursor:pointer;color:var(--muted);font-size:.78rem;line-height:1;">&#x2715;</button>
+      </div>
     </div>`;
   }
 
@@ -4663,10 +4697,140 @@ function renderMovimientos() {
           <div style="font-weight:700;font-size:.95rem;color:${esIng?'var(--green)':'var(--red)'};white-space:nowrap;flex-shrink:0;">
             ${montoMostrar}
           </div>
+          <button onclick="abrirEditarMov('${m.tipo}','${m.id}')" title="Editar" style="background:none;border:none;cursor:pointer;color:var(--light);padding:4px 6px;border-radius:6px;flex-shrink:0;transition:color .15s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--light)'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button onclick="pedirCodigoEliminarMov('${m.tipo}','${m.id}')" title="Eliminar" style="background:none;border:none;cursor:pointer;color:var(--light);padding:4px 6px;border-radius:6px;flex-shrink:0;transition:color .15s;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--light)'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </button>
         </div>`;
       }).join('')}
     </div>`;
   }).join('');
+}
+
+function abrirEditarMov(tipo, id) {
+  const item = tipo === 'ingreso'
+    ? STATE.db.ingresos.find(i => i.id === id)
+    : STATE.db.gastos.find(g => g.id === id);
+  if (!item) return;
+
+  document.getElementById('em-id').value    = id;
+  document.getElementById('em-tipo').value  = tipo;
+  document.getElementById('em-monto').value = item.monto;
+  document.getElementById('em-desc').value  = item.fuente || item.desc || '';
+  document.getElementById('em-fecha').value = item.fecha || '';
+  document.getElementById('em-titulo').textContent = tipo === 'ingreso' ? 'Editar ingreso' : 'Editar gasto';
+
+  // Poblar billeteras
+  const selBill = document.getElementById('em-billetera');
+  selBill.innerHTML = '<option value="">— Sin billetera —</option>';
+  getBilleteras().forEach(b => {
+    const o = document.createElement('option');
+    o.value = b.id; o.textContent = b.nombre;
+    if (b.id === item.billeteraId) o.selected = true;
+    selBill.appendChild(o);
+  });
+
+  // Poblar categorías según tipo
+  const selCat = document.getElementById('em-cat');
+  const cats = tipo === 'ingreso'
+    ? ['Salario','Freelance','Negocio','Inversión','Arriendo','Otro']
+    : ['Alimentación','Transporte','Salud','Servicios','Educación','Entretenimiento','Ropa','Hogar','Negocio','Impuestos','Otro'];
+  selCat.innerHTML = cats.map(c =>
+    `<option value="${c}" ${c === item.cat ? 'selected' : ''}>${c}</option>`
+  ).join('');
+
+  openModal('modal-editar-mov');
+}
+
+async function guardarEdicionMov() {
+  const id        = document.getElementById('em-id').value;
+  const tipo      = document.getElementById('em-tipo').value;
+  const monto     = parseFloat(document.getElementById('em-monto').value) || 0;
+  const desc      = document.getElementById('em-desc').value.trim();
+  const fecha     = document.getElementById('em-fecha').value;
+  const cat       = document.getElementById('em-cat').value;
+  const billId    = document.getElementById('em-billetera').value;
+
+  if (!monto || monto <= 0) return toast('El monto debe ser mayor a 0', 'error');
+  if (!desc)                return toast('La descripción es obligatoria', 'error');
+
+  closeModal('modal-editar-mov');
+  showLoading();
+
+  if (tipo === 'ingreso') {
+    const idx = STATE.db.ingresos.findIndex(i => i.id === id);
+    if (idx === -1) { hideLoading(); return; }
+    STATE.db.ingresos[idx] = { ...STATE.db.ingresos[idx], monto, fuente: desc, fecha, cat, billeteraId: billId };
+    await saveDb(['ingresos']);
+  } else {
+    const idx = STATE.db.gastos.findIndex(g => g.id === id);
+    if (idx === -1) { hideLoading(); return; }
+    STATE.db.gastos[idx] = { ...STATE.db.gastos[idx], monto, desc, fecha, cat, billeteraId: billId };
+    await saveDb(['gastos']);
+  }
+
+  hideLoading();
+  renderAll();
+  toast('Movimiento actualizado ✅', 'success');
+}
+
+function pedirCodigoEliminarMov(tipo, id) {
+  const modal = document.getElementById('modal-eliminar-mov');
+  if (!modal) return;
+  // Guardar datos en el modal
+  modal.dataset.tipo = tipo;
+  modal.dataset.id   = id;
+  // Limpiar input y error
+  const inp = document.getElementById('mov-del-codigo');
+  const err = document.getElementById('mov-del-error');
+  if (inp) { inp.value = ''; }
+  if (err) { err.style.display = 'none'; err.textContent = ''; }
+  modal.classList.add('open');
+  setTimeout(() => { if (inp) inp.focus(); }, 150);
+}
+
+async function confirmarEliminarMov() {
+  const modal = document.getElementById('modal-eliminar-mov');
+  const inp   = document.getElementById('mov-del-codigo');
+  const err   = document.getElementById('mov-del-error');
+  if (!modal || !inp) return;
+
+  const codigo = inp.value.trim();
+  if (codigo !== '2356') {
+    if (err) {
+      err.textContent = 'Código incorrecto. Inténtalo de nuevo.';
+      err.style.display = 'block';
+    }
+    inp.value = '';
+    inp.focus();
+    // Sacudir el input
+    inp.classList.add('mov-del-shake');
+    setTimeout(() => inp.classList.remove('mov-del-shake'), 500);
+    return;
+  }
+
+  const tipo = modal.dataset.tipo;
+  const id   = modal.dataset.id;
+  modal.classList.remove('open');
+
+  showLoading();
+  if (tipo === 'ingreso') {
+    STATE.db.ingresos = STATE.db.ingresos.filter(i => i.id !== id);
+    await saveDb(['ingresos']);
+  } else {
+    STATE.db.gastos = STATE.db.gastos.filter(g => g.id !== id);
+    await saveDb(['gastos']);
+  }
+  hideLoading();
+  renderAll();
+  toast('Movimiento eliminado', 'info');
+}
+
+function cancelarEliminarMov() {
+  const modal = document.getElementById('modal-eliminar-mov');
+  if (modal) modal.classList.remove('open');
 }
 
 function clearMovFilters() {
@@ -4702,15 +4866,18 @@ async function saveGastoModal() {
   const cobra4x1000 = bill?.cobra4x1000 || false;
   const gmf = cobra4x1000 ? Math.round(monto * 0.004) : 0;
 
-  STATE.db.gastos.push({ id: uid(), fecha, hora: horaActual(), monto, desc, cat, billeteraId });
+  const _ts = Date.now();
+  STATE.db.gastos.push({ id: uid(), fecha, hora: horaActual(), monto, desc, cat, billeteraId, ts: _ts });
   if (gmf > 0) {
     STATE.db.gastos.push({
       id: uid(), fecha, hora: horaActual(), monto: gmf,
-      desc: `4x1000 sobre ${fmt(monto)}`, cat: 'Impuestos', billeteraId
+      desc: `4x1000 sobre ${fmt(monto)}`, cat: 'Impuestos', billeteraId, ts: _ts + 1
     });
   }
-  await saveDb(['gastos']);
   closeModal('modal-nuevo-gasto');
+  showLoading();
+  await saveDb(['gastos']);
+  hideLoading();
   renderAll();
   toast(gmf > 0 ? `Retiro registrado + 4x1000 (${fmt(gmf)}) ✅` : 'Retiro registrado ✅', 'success');
 }
@@ -4719,25 +4886,43 @@ function verMovimientosBilletera(id) {
   const b = getBilleteras().find(b=>b.id===id);
   if (!b) return;
 
-  // Movimientos reales (excluir cat:'Transferencia' del sistema antiguo)
+  // Transferencias nuevas (colección separada, no legacy)
+  const transfs = (STATE.db.transferencias || []).filter(t => !t.legado);
+
+  // Todos los movimientos: ingresos, gastos Y transferencias
   const movs = [
-    ...STATE.db.ingresos.filter(i=>i.billeteraId===id && i.cat!=='Transferencia').map(i=>({...i,tipo:'ingreso'})),
-    ...STATE.db.gastos.filter(g=>g.billeteraId===id && g.cat!=='Transferencia').map(g=>({...g,tipo:'gasto'})),
-  ].sort((a,b)=>{
+    ...STATE.db.ingresos
+      .filter(i => i.billeteraId === id && i.cat !== 'Transferencia')
+      .map(i => ({...i, tipo:'ingreso'})),
+    ...STATE.db.gastos
+      .filter(g => g.billeteraId === id && g.cat !== 'Transferencia')
+      .map(g => ({...g, tipo:'gasto'})),
+    ...transfs
+      .filter(t => t.origenId === id)
+      .map(t => ({...t, tipo:'transferencia-salida', desc: `Transferencia → ${t.destinoNombre||''}`, fecha: t.fecha, hora: t.hora||''})),
+    ...transfs
+      .filter(t => t.destinoId === id)
+      .map(t => ({...t, tipo:'transferencia-entrada', desc: `Transferencia ← ${t.origenNombre||''}`, fecha: t.fecha, hora: t.hora||''})),
+  ].sort((a,b) => {
     const fd = (b.fecha||'').localeCompare(a.fecha||'');
-    return fd !== 0 ? fd : convertirHora(b.hora) - convertirHora(a.hora);
+    if (fd !== 0) return fd;
+    const hd = convertirHora(b.hora) - convertirHora(a.hora);
+    if (hd !== 0) return hd;
+    return (b.ts||0) - (a.ts||0);
   });
 
-  // Calcular saldo acumulado
-  let saldoAcc = Number(b.saldoInicial||0);
-  const movsOrden = [...movs].reverse();
-  const saldos = [];
-  movsOrden.forEach(m => {
-    if (m.tipo==='ingreso'||m.tipo==='transferencia-entrada') saldoAcc += Number(m.monto);
-    else saldoAcc -= Number(m.monto);
-    saldos.push(saldoAcc);
-  });
-  saldos.reverse();
+  // Calcular saldo hacia ATRÁS desde el saldo real actual (siempre cuadra)
+  // El saldo real es la fuente de verdad
+  const saldoReal = saldoBilletera(id);
+  let saldoAcc = saldoReal;
+  const saldos = new Array(movs.length);
+  for (let i = 0; i < movs.length; i++) {
+    saldos[i] = saldoAcc; // saldo DESPUÉS de este movimiento
+    const m = movs[i];
+    // Revertir hacia atrás: deshacer el efecto de este movimiento
+    if (m.tipo === 'ingreso' || m.tipo === 'transferencia-entrada') saldoAcc -= Number(m.monto);
+    else saldoAcc += Number(m.monto);
+  }
 
   const sec = document.getElementById('bill-movimientos');
   const title = document.getElementById('bill-mov-title');
@@ -4750,14 +4935,21 @@ function verMovimientosBilletera(id) {
   if (!movs.length) {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;font-style:italic">Sin movimientos registrados aún</td></tr>';
   } else {
+    const tipoLabel = t => {
+      if (t==='ingreso') return '<span class="badge badge-green">Ingreso</span>';
+      if (t==='gasto') return '<span class="badge badge-red">Gasto</span>';
+      if (t==='transferencia-entrada') return '<span class="badge" style="background:rgba(13,148,136,.12);color:var(--teal);">↙ Transferencia</span>';
+      return '<span class="badge" style="background:rgba(100,116,139,.12);color:var(--muted);">↗ Transferencia</span>';
+    };
+    const esPositivo = t => t==='ingreso'||t==='transferencia-entrada';
     tbody.innerHTML = movs.map((m,i) => `
       <tr>
         <td style="white-space:nowrap">${m.fecha||'—'}</td>
         <td style="color:var(--muted);font-size:.8rem;white-space:nowrap">${m.hora||'—'}</td>
         <td>${m.fuente||m.desc||'—'}</td>
-        <td><span class="badge ${m.tipo==='ingreso'?'badge-green':'badge-red'}">${m.tipo==='ingreso'?'Ingreso':'Gasto'}</span></td>
-        <td style="color:${m.tipo==='ingreso'?'var(--green)':'var(--red)'};font-weight:600;white-space:nowrap">
-          ${m.tipo==='ingreso'?'+':'-'}${fmt(m.monto)}
+        <td>${tipoLabel(m.tipo)}</td>
+        <td style="color:${esPositivo(m.tipo)?'var(--green)':'var(--red)'};font-weight:600;white-space:nowrap">
+          ${esPositivo(m.tipo)?'+':'-'}${fmt(m.monto)}
         </td>
         <td style="font-weight:600;white-space:nowrap;color:${saldos[i]>=0?'var(--text)':'var(--red)'}">${fmt(saldos[i])}</td>
       </tr>`).join('');
@@ -5295,7 +5487,7 @@ document.addEventListener('keydown', e => {
   if (!document.getElementById('lock-screen').classList.contains('hidden')) return;
   // nothing special needed outside lock
 });
-document.getElementById('lock-screen').addEventListener('keydown', e => {
+document.addEventListener('keydown', e => { // heredado de login.html
   if (e.key === 'Enter') pinSubmit();
   else if (e.key === 'Backspace') pinDelete();
   else if (/^[0-9]$/.test(e.key)) pinPress(e.key);
@@ -5311,3 +5503,278 @@ window.addEventListener('resize', () => {
     }
   }, 200);
 });
+/* ============================================================
+   MOVIMIENTOS – PERIOD PICKER
+   ============================================================ */
+(function() {
+  // Internal state
+  let _calBaseYear, _calBaseMonth; // left calendar month
+  let _selStart = null, _selEnd = null, _hoverDate = null;
+  let _picking = false; // true while selecting range (first click done)
+  let _activeQuick = 'mes';
+
+  function toYMD(d) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  function fromYMD(s) { return s ? new Date(s + 'T12:00:00') : null; }
+
+  function initCalBase() {
+    const hoy = new Date();
+    _calBaseYear = hoy.getFullYear();
+    _calBaseMonth = hoy.getMonth(); // 0-indexed
+  }
+
+  /* ── Toggle picker ── */
+  window.toggleMovPeriodoPicker = function() {
+    const picker = document.getElementById('mov-periodo-picker');
+    if (!picker) return;
+    const open = picker.style.display !== 'none';
+    if (open) { picker.style.display = 'none'; return; }
+    initCalBase();
+    renderMovCal();
+    picker.style.display = 'block';
+  };
+
+  // El picker detiene su propio bubbling — así los clicks internos no llegan al document
+  document.addEventListener('DOMContentLoaded', function() {
+    const picker = document.getElementById('mov-periodo-picker');
+    if (picker) {
+      picker.addEventListener('click', function(e) { e.stopPropagation(); });
+    }
+  });
+
+  // Cierre al hacer click fuera (solo llega aquí si no fue dentro del picker)
+  document.addEventListener('click', function(e) {
+    const picker = document.getElementById('mov-periodo-picker');
+    const btn = document.getElementById('mov-periodo-btn');
+    if (!picker || picker.style.display === 'none') return;
+    if (btn && btn.contains(e.target)) return;
+    picker.style.display = 'none';
+  });
+
+  /* ── Navigate months ── */
+  window.movCalNav = function(dir) {
+    _calBaseMonth += dir;
+    if (_calBaseMonth > 11) { _calBaseMonth = 0; _calBaseYear++; }
+    if (_calBaseMonth < 0)  { _calBaseMonth = 11; _calBaseYear--; }
+    renderMovCal();
+  };
+
+  /* ── Quick presets ── */
+  window.applyMovQuick = function(q) {
+    _activeQuick = q;
+    document.querySelectorAll('.mov-quick-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.q === q);
+    });
+    const hoy = new Date();
+    const hoyYMD = toYMD(hoy);
+
+    if (q === 'hoy') {
+      _selStart = hoyYMD; _selEnd = hoyYMD;
+    } else if (q === 'ayer') {
+      const ay = new Date(hoy); ay.setDate(ay.getDate()-1);
+      _selStart = _selEnd = toYMD(ay);
+    } else if (q === '7d') {
+      const d = new Date(hoy); d.setDate(d.getDate()-6);
+      _selStart = toYMD(d); _selEnd = hoyYMD;
+    } else if (q === '30d') {
+      const d = new Date(hoy); d.setDate(d.getDate()-29);
+      _selStart = toYMD(d); _selEnd = hoyYMD;
+    } else if (q === 'mes') {
+      const y = hoy.getFullYear(), m = String(hoy.getMonth()+1).padStart(2,'0');
+      const last = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0);
+      _selStart = `${y}-${m}-01`; _selEnd = toYMD(last);
+    } else if (q === 'mesant') {
+      const d = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
+      const ini = new Date(d.getFullYear(), d.getMonth(), 1);
+      _selStart = toYMD(ini); _selEnd = toYMD(d);
+    } else if (q === 'todo') {
+      _selStart = null; _selEnd = null;
+    }
+
+    _picking = false;
+    updateRangeLabel();
+    renderMovCal();
+    // Auto-apply for quick presets
+    applyMovPicker();
+  };
+
+  /* ── Apply & close ── */
+  window.applyMovPicker = function() {
+    const desde = document.getElementById('mov-filter-desde');
+    const hasta = document.getElementById('mov-filter-hasta');
+    if (desde) desde.value = _selStart || '';
+    if (hasta) hasta.value = _selEnd || '';
+
+    // Update button label
+    updatePeriodoBtnLabel();
+    document.getElementById('mov-periodo-picker').style.display = 'none';
+    renderMovimientos();
+  };
+
+  window.cancelMovPicker = function() {
+    document.getElementById('mov-periodo-picker').style.display = 'none';
+  };
+
+  function updatePeriodoBtnLabel() {
+    const lbl = document.getElementById('mov-periodo-label');
+    if (!lbl) return;
+    if (!_selStart && !_selEnd) { lbl.textContent = 'Ver todo'; return; }
+    const labels = { hoy:'Hoy', ayer:'Ayer', '7d':'Últimos 7 días', '30d':'Últimos 30 días', mes:'Este mes', mesant:'Mes pasado' };
+    if (labels[_activeQuick] && _activeQuick !== 'todo') {
+      lbl.textContent = labels[_activeQuick];
+    } else if (_selStart && _selEnd && _selStart !== _selEnd) {
+      lbl.textContent = `${formatDateShort(_selStart)} → ${formatDateShort(_selEnd)}`;
+    } else if (_selStart) {
+      lbl.textContent = formatDateShort(_selStart);
+    } else {
+      lbl.textContent = 'Ver todo';
+    }
+  }
+
+  function formatDateShort(ymd) {
+    if (!ymd) return '';
+    const [y,m,d] = ymd.split('-');
+    const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    return `${parseInt(d)}/${meses[parseInt(m)-1]}/${y}`;
+  }
+
+  function updateRangeLabel() {
+    const el = document.getElementById('mov-cal-range-label');
+    if (!el) return;
+    if (!_selStart) { el.textContent = ''; return; }
+    const s = formatDateShort(_selStart);
+    const e = _selEnd ? formatDateShort(_selEnd) : '...';
+    el.textContent = `${s} → ${e}`;
+  }
+
+  /* ── Render both calendars ── */
+  function renderMovCal() {
+    renderOneMovCal('left',  _calBaseYear, _calBaseMonth);
+    let ry = _calBaseYear, rm = _calBaseMonth + 1;
+    if (rm > 11) { rm = 0; ry++; }
+    renderOneMovCal('right', ry, rm);
+
+    const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const tl = document.getElementById('mov-cal-title-l');
+    const tr = document.getElementById('mov-cal-title-r');
+    if (tl) tl.textContent = `${meses[_calBaseMonth]} ${_calBaseYear}`;
+    if (tr) tr.textContent = `${meses[rm]} ${ry}`;
+    setupCalListeners();
+    updateRangeLabel();
+  }
+
+  function renderOneMovCal(side, year, month) {
+    const el = document.getElementById(`mov-cal-${side}`);
+    if (!el) return;
+    const dias = ['LU','MA','MI','JU','VI','SA','DO'];
+    const hoyYMD = toYMD(new Date());
+
+    let html = dias.map(d => `<div class="mov-cal-header">${d}</div>`).join('');
+
+    const firstDay = new Date(year, month, 1);
+    let startDow = firstDay.getDay();
+    startDow = startDow === 0 ? 6 : startDow - 1;
+
+    const daysInMonth = new Date(year, month+1, 0).getDate();
+    const prevDays = new Date(year, month, 0).getDate();
+
+    // Prev month padding
+    for (let i = startDow - 1; i >= 0; i--) {
+      const d = prevDays - i;
+      const m2 = month - 1 < 0 ? 11 : month - 1;
+      const y2 = month - 1 < 0 ? year - 1 : year;
+      const ymd = `${y2}-${String(m2+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      html += `<div class="mov-cal-day other-month" data-ymd="${ymd}" data-other="1">${d}</div>`;
+    }
+
+    // Current month
+    for (let d = 1; d <= daysInMonth; d++) {
+      const ymd = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const cls = getDayClass(ymd, hoyYMD);
+      html += `<div class="mov-cal-day ${cls}" data-ymd="${ymd}" data-other="0">${d}</div>`;
+    }
+
+    // Next month padding
+    const totalCells = startDow + daysInMonth;
+    const remaining = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+    for (let d = 1; d <= remaining; d++) {
+      const m2 = month + 1 > 11 ? 0 : month + 1;
+      const y2 = month + 1 > 11 ? year + 1 : year;
+      const ymd = `${y2}-${String(m2+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      html += `<div class="mov-cal-day other-month" data-ymd="${ymd}" data-other="1">${d}</div>`;
+    }
+
+    el.innerHTML = html;
+  }
+
+  function setupCalListeners() {
+    ['mov-cal-left','mov-cal-right'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el || el._calReady) return;
+      el._calReady = true;
+      el.addEventListener('click', function(e) {
+        const day = e.target.closest('[data-ymd]');
+        if (day) movCalDayClick(day.dataset.ymd);
+      });
+      el.addEventListener('mouseover', function(e) {
+        const day = e.target.closest('[data-ymd]');
+        if (day) movCalHover(day.dataset.ymd);
+      });
+    });
+  }
+
+  function getDayClass(ymd, hoyYMD) {
+    let cls = '';
+    if (ymd === hoyYMD) cls += ' today';
+    const effEnd = (_picking && _hoverDate) ? (_hoverDate > _selStart ? _hoverDate : _selStart) : _selEnd;
+    const effStart = (_picking && _hoverDate && _hoverDate < _selStart) ? _hoverDate : _selStart;
+
+    if (_selStart && ymd === _selStart) cls += ' range-start';
+    if (effEnd && ymd === effEnd && ymd !== _selStart) cls += ' range-end';
+    if (effStart && effEnd && ymd > effStart && ymd < effEnd) cls += ' in-range';
+    if (_selStart && !effEnd && ymd === _selStart) cls += ' range-end'; // single day
+    return cls;
+  }
+
+  /* ── Day click ── */
+  window.movCalDayClick = function(ymd) {
+    if (!_picking || !_selStart) {
+      // First click
+      _selStart = ymd; _selEnd = null;
+      _picking = true;
+      _activeQuick = 'custom';
+      document.querySelectorAll('.mov-quick-btn').forEach(b => b.classList.remove('active'));
+    } else {
+      // Second click
+      if (ymd < _selStart) { _selEnd = _selStart; _selStart = ymd; }
+      else { _selEnd = ymd; }
+      _picking = false;
+    }
+    updateRangeLabel();
+    renderMovCal();
+  };
+
+  window.movCalHover = function(ymd) {
+    if (!_picking) return;
+    _hoverDate = ymd;
+    // Actualizar solo clases CSS sin destruir el DOM
+    const hoyYMD = toYMD(new Date());
+    document.querySelectorAll('.mov-cal-day[data-ymd]').forEach(el => {
+      const d = el.dataset.ymd;
+      const isOther = el.dataset.other === '1';
+      el.className = 'mov-cal-day' + (isOther ? ' other-month' : '') + getDayClass(d, hoyYMD);
+    });
+    updateRangeLabel();
+  };
+
+  /* ── Override old functions to keep compatibility ── */
+  window.setMovRangoMesActual = function() { applyMovQuick('mes'); };
+  window.clearMovRango = function() { applyMovQuick('todo'); };
+
+  /* ── Init on load: set to "Este mes" ── */
+  document.addEventListener('DOMContentLoaded', function() {
+    applyMovQuick('mes');
+  });
+
+})();
