@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
 <title>Finanzas PRO</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+CiAgPGRlZnM+CiAgICA8cmFkaWFsR3JhZGllbnQgaWQ9ImJnIiBjeD0iNDAlIiBjeT0iMzUlIiByPSI2NSUiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjMzRkMzk5Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iNTUlIiBzdG9wLWNvbG9yPSIjMDU5NjY5Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzA2NWY0NiIvPgogICAgPC9yYWRpYWxHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0ic2giIGN4PSIzNSUiIGN5PSIyOCUiIHI9IjM4JSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IndoaXRlIiBzdG9wLW9wYWNpdHk9IjAuNCIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IndoaXRlIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjE1LjUiIGZpbGw9InVybCgjYmcpIi8+CiAgPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTUuNSIgZmlsbD0idXJsKCNzaCkiLz4KICA8IS0tIEJhciBjaGFydCBiYXJzIC0tPgogIDxyZWN0IHg9IjYiICB5PSIxOCIgd2lkdGg9IjQiIGhlaWdodD0iOCIgIHJ4PSIxIiBmaWxsPSJ3aGl0ZSIgb3BhY2l0eT0iMC45NSIvPgogIDxyZWN0IHg9IjEyIiB5PSIxMyIgd2lkdGg9IjQiIGhlaWdodD0iMTMiIHJ4PSIxIiBmaWxsPSJ3aGl0ZSIgb3BhY2l0eT0iMC45NSIvPgogIDxyZWN0IHg9IjE4IiB5PSI5IiAgd2lkdGg9IjQiIGhlaWdodD0iMTciIHJ4PSIxIiBmaWxsPSJ3aGl0ZSIgb3BhY2l0eT0iMC45NSIvPgogIDwhLS0gVHJlbmQgYXJyb3cgLS0+CiAgPHBvbHlsaW5lIHBvaW50cz0iNiwxOCAxMiwxMyAxOCw5IDI0LDYiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMS44IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIG9wYWNpdHk9IjAuOSIvPgogIDxwb2x5Z29uIHBvaW50cz0iMjQsNiAyMiwxMCAyNyw5IiBmaWxsPSJ3aGl0ZSIgb3BhY2l0eT0iMC45Ii8+Cjwvc3ZnPg==">
 
@@ -1730,57 +1730,62 @@
 
 <!-- Modal Editar Movimiento -->
 <div class="modal-overlay" id="modal-editar-mov">
-  <div class="modal" style="max-width:480px;width:100%;">
-    <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--border);">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <div style="width:32px;height:32px;background:var(--accent-light);border-radius:8px;display:flex;align-items:center;justify-content:center;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        </div>
-        <div>
-          <div style="font-size:.95rem;font-weight:700;color:var(--text);" id="em-titulo">Editar movimiento</div>
-          <div style="font-size:.72rem;color:var(--muted);">Los cambios afectan el saldo de la billetera</div>
-        </div>
+  <div class="modal" style="max-width:500px;width:100%;">
+    <!-- Header dinámico según tipo -->
+    <div class="modal-title" style="display:flex;align-items:center;gap:10px;padding:20px 24px;" id="em-header">
+      <div id="em-header-icon" style="width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"></div>
+      <div>
+        <div style="font-size:1rem;font-weight:700;color:var(--text);" id="em-titulo">Editar movimiento</div>
+        <div style="font-size:.75rem;color:var(--muted);font-weight:400;" id="em-subtitulo">Los cambios afectan el saldo de la billetera</div>
       </div>
-      <button onclick="closeModal('modal-editar-mov')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;font-size:1.1rem;">✕</button>
+      <button onclick="closeModal('modal-editar-mov')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;line-height:1;">✕</button>
     </div>
-    <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:14px;">
+    <div class="modal-body-wrap" style="padding:0;">
       <input type="hidden" id="em-id">
       <input type="hidden" id="em-tipo">
-      <!-- Monto -->
-      <div class="form-group">
-        <label>Monto *</label>
-        <div style="position:relative;">
-          <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--muted);font-size:.95rem;">$</span>
-          <input type="number" id="em-monto" class="form-control" style="padding-left:28px;font-size:1.1rem;font-weight:700;height:48px;" placeholder="0">
+      <!-- Monto grande igual que registrar -->
+      <div style="padding:24px 24px 20px;border-bottom:1px solid var(--border);">
+        <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-weight:600;" id="em-monto-label">Monto</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:1.6rem;font-weight:700;color:var(--muted);">$</span>
+          <input type="number" id="em-monto" placeholder="0" oninput="fmtMontoDisplay(this,'em-monto-display')"
+            style="background:none;border:none;outline:none;font-size:2rem;font-weight:800;color:var(--text);width:100%;font-family:var(--font-head);">
         </div>
+        <div id="em-monto-display" style="font-size:.82rem;color:var(--muted);margin-top:4px;min-height:18px;"></div>
       </div>
-      <!-- Descripción -->
-      <div class="form-group">
-        <label>Descripción *</label>
-        <input type="text" id="em-desc" class="form-control" style="height:44px;" placeholder="Descripción...">
-      </div>
-      <!-- Billetera -->
-      <div class="form-group">
-        <label>Billetera</label>
-        <select id="em-billetera" class="form-control" style="height:44px;">
-          <option value="">— Sin billetera —</option>
-        </select>
-      </div>
-      <!-- Fecha + Categoría -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div class="form-group">
-          <label>Fecha</label>
-          <input type="date" id="em-fecha" class="form-control" style="height:44px;">
+      <!-- Campos -->
+      <div style="padding:20px 24px;display:flex;flex-direction:column;gap:16px;">
+        <!-- Billetera -->
+        <div>
+          <label style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;" id="em-bill-label">Billetera</label>
+          <select id="em-billetera" class="form-control" style="height:44px;font-size:.9rem;font-weight:600;">
+            <option value="">— Sin billetera —</option>
+          </select>
         </div>
-        <div class="form-group">
-          <label>Categoría</label>
-          <select id="em-cat" class="form-control" style="height:44px;"></select>
+        <!-- Descripción -->
+        <div>
+          <label style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">Descripción *</label>
+          <input type="text" id="em-desc" class="form-control" style="height:44px;font-size:.9rem;" placeholder="Descripción...">
+        </div>
+        <!-- Fecha + Categoría -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">Fecha</label>
+            <input type="date" id="em-fecha" class="form-control" style="height:44px;font-size:.88rem;">
+          </div>
+          <div>
+            <label style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">Categoría</label>
+            <select id="em-cat" class="form-control" style="height:44px;font-size:.88rem;"></select>
+          </div>
         </div>
       </div>
     </div>
     <div class="modal-actions" style="padding:16px 24px;gap:10px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-editar-mov')" style="flex:1;">Cancelar</button>
-      <button onclick="guardarEdicionMov()" class="btn btn-primary" style="flex:2;">Guardar cambios</button>
+      <button onclick="guardarEdicionMov()" id="em-btn-guardar" style="flex:2;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
+        <svg id="em-btn-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></svg>
+        Guardar cambios
+      </button>
     </div>
   </div>
 </div>

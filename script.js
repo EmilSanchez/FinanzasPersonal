@@ -4724,26 +4724,74 @@ function abrirEditarMov(tipo, id) {
     : STATE.db.gastos.find(g => g.id === id);
   if (!item) return;
 
+  const esIng = tipo === 'ingreso';
+  const color = esIng ? '#0f2d6b' : '#7f0000';
+  const flechaSVG = esIng
+    ? '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>'
+    : '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>';
+
+  // Header dinámico
+  document.getElementById('em-header-icon').style.background = color;
+  document.getElementById('em-header-icon').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${flechaSVG}</svg>`;
+  document.getElementById('em-titulo').textContent    = esIng ? 'Editar ingreso' : 'Editar gasto';
+  document.getElementById('em-subtitulo').textContent = esIng ? 'El dinero entrará a la billetera seleccionada' : 'El dinero saldrá de la billetera seleccionada';
+  document.getElementById('em-monto-label').textContent = esIng ? 'Monto a ingresar' : 'Monto del gasto';
+  document.getElementById('em-bill-label').textContent  = esIng ? 'Entra a' : 'Sale de';
+
+  // Botón guardar con color del tipo
+  const btn = document.getElementById('em-btn-guardar');
+  btn.style.background = color;
+  btn.style.color = '#fff';
+  document.getElementById('em-btn-icon').innerHTML = flechaSVG;
+
+  // Datos
   document.getElementById('em-id').value    = id;
   document.getElementById('em-tipo').value  = tipo;
   document.getElementById('em-monto').value = item.monto;
   document.getElementById('em-desc').value  = item.fuente || item.desc || '';
   document.getElementById('em-fecha').value = item.fecha || '';
-  document.getElementById('em-titulo').textContent = tipo === 'ingreso' ? 'Editar ingreso' : 'Editar gasto';
 
-  // Poblar billeteras
+  // Actualizar display del monto con formato
+  fmtMontoDisplay(document.getElementById('em-monto'), 'em-monto-display');
+
+  // Poblar billeteras con saldo
   const selBill = document.getElementById('em-billetera');
   selBill.innerHTML = '<option value="">— Sin billetera —</option>';
   getBilleteras().forEach(b => {
     const o = document.createElement('option');
-    o.value = b.id; o.textContent = b.nombre;
-    if (b.id === item.billeteraId) o.selected = true;
+    o.value = b.id;
+    const saldo = saldoBilletera(b.id);
+    o.textContent = `${b.nombre}  —  ${fmt(saldo)}`;
+    if (b.id === item.billeteraId) {
+      o.selected = true;
+      o.style.fontWeight = '700';
+    }
     selBill.appendChild(o);
   });
 
+  // Info de saldo bajo el select
+  const updateSaldoInfo = () => {
+    let info = document.getElementById('em-saldo-info');
+    if (!info) {
+      info = document.createElement('div');
+      info.id = 'em-saldo-info';
+      info.style.cssText = 'margin-top:6px;padding:8px 12px;background:var(--bg2);border-radius:var(--radius-sm);font-size:.82rem;color:var(--muted);display:flex;align-items:center;justify-content:space-between;';
+      selBill.parentNode.appendChild(info);
+    }
+    const bid = selBill.value;
+    if (!bid) { info.style.display = 'none'; return; }
+    const bill = getBilleteras().find(b => b.id === bid);
+    const s = saldoBilletera(bid);
+    const esActual = bid === item.billeteraId;
+    info.style.display = 'flex';
+    info.innerHTML = `<span>${bill?.nombre || ''}${esActual ? ' <span style="font-size:.7rem;background:var(--accent-light);color:var(--accent);border-radius:4px;padding:1px 5px;font-weight:700;">actual</span>' : ''}</span><strong style="color:${s>=0?'var(--green)':'var(--red)'};">${fmt(s)}</strong>`;
+  };
+  selBill.onchange = updateSaldoInfo;
+  updateSaldoInfo();
+
   // Poblar categorías según tipo
   const selCat = document.getElementById('em-cat');
-  const cats = tipo === 'ingreso'
+  const cats = esIng
     ? ['Salario','Freelance','Negocio','Inversión','Arriendo','Otro']
     : ['Alimentación','Transporte','Salud','Servicios','Educación','Entretenimiento','Ropa','Hogar','Negocio','Impuestos','Otro'];
   selCat.innerHTML = cats.map(c =>

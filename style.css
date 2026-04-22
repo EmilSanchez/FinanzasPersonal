@@ -873,9 +873,14 @@ canvas { max-width: 100%; display: block; }
   .modal {
     max-width: 100%;
     width: 100%;
-    max-height: calc(88vh - 64px - env(safe-area-inset-bottom, 0px));
+    max-height: calc(92vh - env(safe-area-inset-bottom, 0px));
     border-radius: 20px 20px 0 0;
-    /* Handle drag affordance */
+    overflow: hidden;
+  }
+  .modal-body-wrap {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
   .modal::before {
     content: '';
@@ -1010,11 +1015,7 @@ canvas { max-width: 100%; display: block; }
   .section { padding: 10px; }
 }
 
-/* Bloquear zoom en móvil */
-html, body {
-  touch-action: pan-x pan-y;
-  -ms-touch-action: pan-x pan-y;
-}
+/* Zoom permitido en móvil */
 
 /* Save spinner */
 @keyframes spin-save {
@@ -1248,4 +1249,18 @@ html, body {
 .config-item-danger .config-item-title { color: var(--red); }
 .config-divider {
   height: 1px; background: var(--border-light); margin: 0 4px;
+}
+
+/* Modal eliminar movimiento — siempre centrado, nunca bottom sheet */
+@media (max-width: 768px) {
+  #modal-eliminar-mov {
+    align-items: center !important;
+    padding: 20px !important;
+  }
+  #modal-eliminar-mov .modal {
+    max-width: 360px !important;
+    border-radius: 16px !important;
+    max-height: none !important;
+  }
+  #modal-eliminar-mov .modal::before { display: none; }
 }
