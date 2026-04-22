@@ -481,12 +481,29 @@ function updateFbStatus(connected) {
    ============================================================ */
 
 /* ── Formateador de monto en tiempo real (ej: 1,000,000) ── */
-function fmtMontoDisplay(input, displayId) {
-  const el = document.getElementById(displayId);
-  if (!el) return;
-  const val = parseFloat(input.value);
-  if (!val || isNaN(val)) { el.textContent = ''; return; }
-  el.textContent = val.toLocaleString('es-CO', { style:'currency', currency:'COP', minimumFractionDigits:0, maximumFractionDigits:0 });
+function fmtMontoInput(input) {
+  const prevLen = input.value.length;
+  const pos = input.selectionStart;
+
+  // Solo dígitos
+  const raw = input.value.replace(/[^0-9]/g, '');
+  if (!raw) { input.value = ''; return; }
+
+  // Separador de miles manual con punto (estilo colombiano)
+  const formatted = raw.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  input.value = formatted;
+
+  // Ajustar cursor
+  const diff = formatted.length - prevLen;
+  const newPos = Math.max(0, pos + diff);
+  input.setSelectionRange(newPos, newPos);
+}
+
+/* ── Leer valor numérico real de un input formateado ── */
+function getMontoValue(id) {
+  const el = document.getElementById(id);
+  if (!el) return 0;
+  return parseInt(el.value.replace(/[^0-9]/g, ''), 10) || 0;
 }
 
 /* ── SHA-256 helper (Web Crypto API) ── */
@@ -540,38 +557,46 @@ async function changePin() {
   const oldVal = document.getElementById('m-pin-old').value;
   const nw     = document.getElementById('m-pin-new').value;
   const cf     = document.getElementById('m-pin-conf').value;
+  const u      = window.__CURRENT_USER;
+  const esAdmin = !u || u.isAdmin;
 
-  // Migrar legacy si existe
-  const legacyPin2 = localStorage.getItem('fp_pin');
-  if (legacyPin2) {
-    localStorage.setItem('fp_pin_hash', await sha256(legacyPin2));
-    localStorage.removeItem('fp_pin');
+  if (nw.length !== 4)   return toast('El nuevo PIN debe tener 4 dígitos', 'error');
+  if (!/^\d+$/.test(nw)) return toast('El PIN sólo puede contener números', 'error');
+  if (nw !== cf)          return toast('Los PINs no coinciden', 'error');
+
+  const oldHash = await sha256(oldVal);
+  let savedHash;
+
+  if (esAdmin) {
+    // Admin: verificar contra localStorage (con migración legacy)
+    const leg = localStorage.getItem('fp_pin');
+    if (leg) { localStorage.setItem('fp_pin_hash', await sha256(leg)); localStorage.removeItem('fp_pin'); }
+    if (!localStorage.getItem('fp_pin_hash')) localStorage.setItem('fp_pin_hash', await sha256('1234'));
+    savedHash = localStorage.getItem('fp_pin_hash');
+  } else {
+    // Usuario: verificar contra Firebase
+    try { savedHash = await window.__FB.loadPin(); } catch(e) { savedHash = null; }
   }
-  if (!localStorage.getItem('fp_pin_hash')) {
-    localStorage.setItem('fp_pin_hash', await sha256('1234'));
-  }
 
-  const oldHash   = await sha256(oldVal);
-  const savedHash = localStorage.getItem('fp_pin_hash');
-
-  if (oldHash !== savedHash)   return toast('PIN actual incorrecto', 'error');
-  if (nw.length !== 4)         return toast('El nuevo PIN debe tener 4 dígitos', 'error');
-  if (!/^\d+$/.test(nw))       return toast('El PIN sólo puede contener números', 'error');
-  if (nw !== cf)                return toast('Los PINs no coinciden', 'error');
+  if (oldHash !== savedHash) return toast('PIN actual incorrecto', 'error');
 
   const newHash = await sha256(nw);
-  localStorage.setItem('fp_pin_hash', newHash);
-  localStorage.removeItem('fp_pin'); // limpiar texto plano si existía
 
-  if (window.__FB && window.__FB.ready && window.__FB.savePin) {
+  if (esAdmin) {
+    localStorage.setItem('fp_pin_hash', newHash);
+    localStorage.removeItem('fp_pin');
+  }
+
+  if (window.__FB?.ready && window.__FB.savePin) {
     try {
-      await window.__FB.savePin(newHash); // guardar hash, nunca el PIN en texto
-      toast('PIN actualizado y cifrado en la nube ✅', 'success');
-    } catch (e) {
-      toast('PIN actualizado localmente (Firebase no disponible)', 'info');
+      await window.__FB.savePin(newHash);
+      toast('PIN actualizado ✅', 'success');
+    } catch(e) {
+      if (esAdmin) toast('PIN actualizado localmente', 'info');
+      else toast('Error actualizando PIN', 'error');
     }
   } else {
-    toast('PIN actualizado correctamente', 'success');
+    toast('PIN actualizado', 'success');
   }
 
   closeModal('modal-pin');
@@ -584,11 +609,43 @@ async function changePin() {
 window.addEventListener('DOMContentLoaded', () => {
   _scheduleSessionExpiry();
   setInterval(sessionUpdateTimer, 1000);
-  initApp().then(() => {
+  initApp().then(async () => {
     updateFbStatus(window.__FB && window.__FB.ready);
+    // Si es usuario no-admin, cargar sus módulos y verificar que sigue activo
+    const cu = window.__CURRENT_USER;
+    if (cu && !cu.isAdmin && window.__FB?.ready) {
+      try {
+        const usuarios = await window.__FB.getUsuarios();
+        const uData = usuarios.find(u => u.id === cu.id);
+        if (uData) {
+          if (uData.activo === false) {
+            toast('Tu cuenta ha sido desactivada. Contacta al administrador.', 'error');
+            setTimeout(() => lockApp(), 2500);
+            return;
+          }
+          // Guardar módulos en sesión
+          cu.modulos = uData.modulos || null; // null = todos
+          const sess = JSON.parse(localStorage.getItem(SESSION_KEY));
+          if (sess) { sess.user = cu; localStorage.setItem(SESSION_KEY, JSON.stringify(sess)); }
+          window.__CURRENT_USER = cu;
+          // Ocultar nav items sin acceso
+          filtrarNavPorModulos(cu.modulos);
+        }
+      } catch(e) { console.warn('No se pudo verificar módulos:', e); }
+    }
   });
   window.addEventListener('firebase-auth-ready', () => { updateFbStatus(true); }, { once: true });
 });
+
+function filtrarNavPorModulos(modulos) {
+  if (!modulos) return; // null = acceso a todo
+  document.querySelectorAll('.nav-btn[data-page], .bnav-btn[data-page], .drawer-item[data-page]').forEach(btn => {
+    const page = btn.dataset.page;
+    if (!page || page === 'dashboard' || page === 'config' || page === '__more') return;
+    const modulo = page.split('-')[0];
+    if (!modulos.includes(modulo)) btn.style.display = 'none';
+  });
+}
 
 /* ============================================================
    APP INIT
@@ -662,6 +719,15 @@ function navigate(page, param=null) {
     renderDetalleInv(param);
   } else {
     renderAll();
+  }
+  if(page === 'config') renderConfigUsuarios();
+  // Verificar acceso a módulo para usuarios no-admin
+  const cu = window.__CURRENT_USER;
+  if (cu && !cu.isAdmin && cu.modulos && !['dashboard','config'].includes(page)) {
+    if (!cu.modulos.includes(page.split('-')[0])) {
+      toast('No tienes acceso a este módulo', 'error');
+      navigate('dashboard');
+    }
   }
 }
 
@@ -4436,7 +4502,7 @@ function openModalNuevoIngreso() {
 }
 
 async function saveIngresoModal() {
-  const monto = parseFloat(document.getElementById('mi-monto').value) || 0;
+  const monto = getMontoValue('mi-monto');
   const fuente = document.getElementById('mi-fuente').value.trim();
   const fecha = document.getElementById('mi-fecha').value;
   const cat = document.getElementById('mi-cat').value;
@@ -4480,7 +4546,7 @@ function poblarBilleterasGasto() {
   const sel = document.getElementById('mg-billetera');
   if (!sel) return;
 
-  const monto = parseFloat(document.getElementById('mg-monto')?.value) || 0;
+  const monto = getMontoValue('mg-monto');
   const valorAnterior = sel.value;
 
   sel.innerHTML = '<option value="">— Selecciona billetera —</option>';
@@ -4543,7 +4609,7 @@ function onMiBilleteraChange() {
   if (!sel.value) { info.style.display = 'none'; return; }
 
   const s = saldoBilletera(sel.value);
-  const monto = parseFloat(document.getElementById('mi-monto')?.value) || 0;
+  const monto = getMontoValue('mi-monto');
   const saldoPost = s + monto;
 
   info.style.display = 'flex';
@@ -4581,7 +4647,7 @@ function onMgBilleteraChange() {
   if (!sel.value) { info.style.display = 'none'; return; }
 
   const s = saldoBilletera(sel.value);
-  const monto = parseFloat(document.getElementById('mg-monto')?.value) || 0;
+  const monto = getMontoValue('mg-monto');
   const saldoPost = s - monto;
   const alcanza = monto === 0 || saldoPost >= 0;
 
@@ -4609,7 +4675,7 @@ function onMgBilleteraChange() {
 }
 
 function calcularPreview4x1000() {
-  const monto = parseFloat(document.getElementById('mg-monto')?.value) || 0;
+  const monto = getMontoValue('mg-monto');
   const billId = document.getElementById('mg-billetera')?.value;
   const preview = document.getElementById('mg-4x1000-preview');
   const texto = document.getElementById('mg-4x1000-texto');
@@ -4800,7 +4866,8 @@ function abrirEditarMov(tipo, id) {
   // Datos
   document.getElementById('em-id').value    = id;
   document.getElementById('em-tipo').value  = tipo;
-  document.getElementById('em-monto').value = item.monto;
+  const emInput = document.getElementById('em-monto');
+  emInput.value = item.monto ? String(parseInt(item.monto)).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '';
   document.getElementById('em-desc').value  = item.fuente || item.desc || '';
   document.getElementById('em-fecha').value = item.fecha || '';
 
@@ -4857,7 +4924,7 @@ function abrirEditarMov(tipo, id) {
 async function guardarEdicionMov() {
   const id        = document.getElementById('em-id').value;
   const tipo      = document.getElementById('em-tipo').value;
-  const monto     = parseFloat(document.getElementById('em-monto').value) || 0;
+  const monto     = getMontoValue('em-monto');
   const desc      = document.getElementById('em-desc').value.trim();
   const fecha     = document.getElementById('em-fecha').value;
   const cat       = document.getElementById('em-cat').value;
@@ -4943,6 +5010,157 @@ function cancelarEliminarMov() {
   if (modal) modal.classList.remove('open');
 }
 
+/* ============================================================
+   MULTI-USUARIO
+   ============================================================ */
+const MODULOS_DISPONIBLES = [
+  { id: 'movimientos', label: 'Movimientos' },
+  { id: 'deudas',      label: 'Deudas' },
+  { id: 'prestamos',   label: 'Préstamos' },
+  { id: 'fijos',       label: 'Gastos Fijos' },
+  { id: 'inversiones', label: 'Inversiones' },
+  { id: 'billeteras',  label: 'Billeteras' },
+  { id: 'reportes',    label: 'Reportes' },
+  { id: 'claves',      label: 'Contraseñas' },
+];
+
+function renderConfigUsuarios() {
+  const section = document.getElementById('config-usuarios-section');
+  const lista   = document.getElementById('config-usuarios-lista');
+  if (!section) return;
+  const user = window.__CURRENT_USER;
+  if (!user || !user.isAdmin) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  if (!lista) return;
+  lista.innerHTML = '<p style="color:var(--muted);font-size:.85rem;">Cargando...</p>';
+
+  window.__FB.getUsuarios().then(usuarios => {
+    if (!usuarios.length) {
+      lista.innerHTML = '<p style="color:var(--muted);font-size:.85rem;text-align:center;padding:16px;">No hay usuarios creados aún.</p>';
+      return;
+    }
+    lista.innerHTML = usuarios.map(u => {
+      const activo = u.activo !== false;
+      return `<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);opacity:${activo?1:.5};">
+        <div style="width:36px;height:36px;border-radius:50%;background:${activo?'var(--accent-light)':'var(--bg2)'};display:flex;align-items:center;justify-content:center;font-weight:700;color:${activo?'var(--accent)':'var(--muted)'};font-size:.9rem;flex-shrink:0;">
+          ${(u.nombre||'?')[0].toUpperCase()}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:.9rem;">${u.nombre}</div>
+          <div style="font-size:.72rem;color:var(--muted);">${activo?'Activo':'Desactivado'} · ${(u.modulos||[]).length||'Todos'} módulos</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button onclick="abrirEditarUsuario('${u.id}')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer;color:var(--accent);font-size:.75rem;font-weight:600;">Editar</button>
+          <button onclick="pedirCodigoDesactivar('${u.id}','${u.nombre}',${activo})" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer;color:${activo?'var(--red)':'var(--green)'};font-size:.75rem;font-weight:600;">${activo?'Desactivar':'Activar'}</button>
+        </div>
+      </div>`;
+    }).join('');
+  });
+}
+
+function abrirModalNuevoUsuario() {
+  document.getElementById('nu-nombre').value = '';
+  document.getElementById('nu-pin').value = '';
+  openModal('modal-nuevo-usuario');
+}
+
+async function guardarNuevoUsuario() {
+  const nombre = document.getElementById('nu-nombre').value.trim();
+  const pin    = document.getElementById('nu-pin').value.trim();
+  if (!nombre) return toast('El nombre es obligatorio', 'error');
+  if (pin.length !== 4 || !/^\d+$/.test(pin)) return toast('El PIN debe ser 4 dígitos', 'error');
+  const id = 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+  const pinHash = await sha256(pin);
+  showLoading();
+  try {
+    await window.__FB.createUsuario(id, nombre, pinHash);
+    hideLoading();
+    closeModal('modal-nuevo-usuario');
+    toast(`Usuario "${nombre}" creado ✅`, 'success');
+    renderConfigUsuarios();
+  } catch(e) {
+    hideLoading();
+    toast('Error creando usuario', 'error');
+    console.error(e);
+  }
+}
+
+// ── Editar usuario ──
+let _editUserId = null;
+async function abrirEditarUsuario(id) {
+  const usuarios = await window.__FB.getUsuarios();
+  const u = usuarios.find(x => x.id === id);
+  if (!u) return;
+  _editUserId = id;
+  document.getElementById('eu-nombre').value = u.nombre || '';
+  // Poblar checkboxes de módulos
+  const cont = document.getElementById('eu-modulos');
+  const activos = u.modulos || MODULOS_DISPONIBLES.map(m => m.id); // si no tiene, todos activos
+  cont.innerHTML = MODULOS_DISPONIBLES.map(m => `
+    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;font-size:.85rem;">
+      <input type="checkbox" value="${m.id}" ${activos.includes(m.id)?'checked':''} style="width:16px;height:16px;accent-color:var(--accent);">
+      ${m.label}
+    </label>`).join('');
+  openModal('modal-editar-usuario');
+}
+
+async function guardarEdicionUsuario() {
+  if (!_editUserId) return;
+  const nombre = document.getElementById('eu-nombre').value.trim();
+  if (!nombre) return toast('El nombre es obligatorio', 'error');
+  const modulosChecked = [...document.getElementById('eu-modulos').querySelectorAll('input:checked')].map(i => i.value);
+  showLoading();
+  try {
+    const { setDoc, doc } = window.__FB;
+    await window.__FB.updateUsuario(_editUserId, { nombre, modulos: modulosChecked });
+    hideLoading();
+    closeModal('modal-editar-usuario');
+    toast('Usuario actualizado ✅', 'success');
+    renderConfigUsuarios();
+  } catch(e) {
+    hideLoading();
+    toast('Error actualizando usuario', 'error');
+    console.error(e);
+  }
+}
+
+// ── Desactivar/Activar con código ──
+let _toggleUserId = null, _toggleNombre = null, _toggleActivo = null;
+function pedirCodigoDesactivar(id, nombre, activo) {
+  _toggleUserId = id; _toggleNombre = nombre; _toggleActivo = activo;
+  const inp = document.getElementById('du-codigo');
+  const err = document.getElementById('du-error');
+  const titulo = document.getElementById('du-titulo');
+  if (inp) inp.value = '';
+  if (err) { err.style.display='none'; err.textContent=''; }
+  if (titulo) titulo.textContent = activo ? `Desactivar a "${nombre}"` : `Activar a "${nombre}"`;
+  openModal('modal-desactivar-usuario');
+  setTimeout(() => { if(inp) inp.focus(); }, 150);
+}
+
+async function confirmarDesactivarUsuario() {
+  const codigo = document.getElementById('du-codigo').value.trim();
+  const err    = document.getElementById('du-error');
+  if (codigo !== '2356') {
+    if (err) { err.textContent='Código incorrecto.'; err.style.display='block'; }
+    document.getElementById('du-codigo').value = '';
+    document.getElementById('du-codigo').classList.add('mov-del-shake');
+    setTimeout(() => document.getElementById('du-codigo').classList.remove('mov-del-shake'), 500);
+    return;
+  }
+  closeModal('modal-desactivar-usuario');
+  showLoading();
+  try {
+    await window.__FB.updateUsuario(_toggleUserId, { activo: !_toggleActivo });
+    hideLoading();
+    toast(`Usuario "${_toggleNombre}" ${_toggleActivo ? 'desactivado' : 'activado'}`, 'info');
+    renderConfigUsuarios();
+  } catch(e) {
+    hideLoading();
+    toast('Error actualizando usuario', 'error');
+  }
+}
+
 function clearMovFilters() {
   ['mov-filter-tipo','mov-filter-cat'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
@@ -4952,7 +5170,7 @@ function clearMovFilters() {
 }
 
 async function saveGastoModal() {
-  const monto = parseFloat(document.getElementById('mg-monto').value) || 0;
+  const monto = getMontoValue('mg-monto');
   const desc = document.getElementById('mg-desc').value.trim();
   const fecha = document.getElementById('mg-fecha').value;
   const cat = document.getElementById('mg-cat').value;

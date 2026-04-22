@@ -2,6 +2,9 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
 <title>Finanzas PRO</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+CiAgPGRlZnM+CiAgICA8cmFkaWFsR3JhZGllbnQgaWQ9ImJnIiBjeD0iNDAlIiBjeT0iMzUlIiByPSI2NSUiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjMzRkMzk5Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iNTUlIiBzdG9wLWNvbG9yPSIjMDU5NjY5Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzA2NWY0NiIvPgogICAgPC9yYWRpYWxHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0ic2giIGN4PSIzNSUiIGN5PSIyOCUiIHI9IjM4JSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IndoaXRlIiBzdG9wLW9wYWNpdHk9IjAuNCIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IndoaXRlIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjE1LjUiIGZpbGw9InVybCgjYmcpIi8+CiAgPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTUuNSIgZmlsbD0idXJsKCNzaCkiLz4KICA8IS0tIEJhciBjaGFydCBiYXJzIC0tPgogIDxyZWN0IHg9IjYiICB5PSIxOCIgd2lkdGg9IjQiIGhlaWdodD0iOCIgIHJ4PSIxIiBmaWxsPSJ3aGl0ZSIgb3BhY2l0eT0iMC45NSIvPgogIDxyZWN0IHg9IjEyIiB5PSIxMyIgd2lkdGg9IjQiIGhlaWdodD0iMTMiIHJ4PSIxIiBmaWxsPSJ3aGl0ZSIgb3BhY2l0eT0iMC45NSIvPgogIDxyZWN0IHg9IjE4IiB5PSI5IiAgd2lkdGg9IjQiIGhlaWdodD0iMTciIHJ4PSIxIiBmaWxsPSJ3aGl0ZSIgb3BhY2l0eT0iMC45NSIvPgogIDwhLS0gVHJlbmQgYXJyb3cgLS0+CiAgPHBvbHlsaW5lIHBvaW50cz0iNiwxOCAxMiwxMyAxOCw5IDI0LDYiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMS44IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIG9wYWNpdHk9IjAuOSIvPgogIDxwb2x5Z29uIHBvaW50cz0iMjQsNiAyMiwxMCAyNyw5IiBmaWxsPSJ3aGl0ZSIgb3BhY2l0eT0iMC45Ii8+Cjwvc3ZnPg==">
@@ -22,11 +25,14 @@
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) { window.location.replace('login.html'); return; }
-    const { ts } = JSON.parse(raw);
-    if ((Date.now() - ts) >= SESSION_MS) {
+    const session = JSON.parse(raw);
+    if ((Date.now() - session.ts) >= SESSION_MS) {
       localStorage.removeItem(SESSION_KEY);
       window.location.replace('login.html');
+      return;
     }
+    // Cargar usuario activo en scope global
+    window.__CURRENT_USER = session.user || { isAdmin: true };
   } catch(e) {
     window.location.replace('login.html');
   }
@@ -82,63 +88,108 @@
   // ── Colecciones en Firestore ──
   const COLLECTIONS = ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras','transferencias'];
 
-  // ── Exponer al scope global para que el resto del JS lo use ──
+  // ── Helper: prefijo de colección según usuario activo ──
+  // Admin usa colecciones raíz. Otros usuarios usan usuarios/{id}/{col}
+  function userCol(colName) {
+    const u = window.__CURRENT_USER;
+    if (!u || u.isAdmin) return collection(db_firebase, colName);
+    return collection(db_firebase, 'usuarios', u.id, colName);
+  }
+  function userDoc(colName, docId) {
+    const u = window.__CURRENT_USER;
+    if (!u || u.isAdmin) return doc(db_firebase, colName, docId);
+    return doc(db_firebase, 'usuarios', u.id, colName, docId);
+  }
+
+  // ── Exponer al scope global ──
   window.__FB = {
     db: db_firebase,
-    col: (name) => collection(db_firebase, name),
-    doc: (colName, id) => doc(db_firebase, colName, id),
+    col: userCol,
+    doc: userDoc,
     getDocs, setDoc, deleteDoc, writeBatch, onSnapshot,
     COLLECTIONS,
     ready: false,
   };
 
-  // ── Guardar PIN en Firestore ──
-  window.__FB.savePin = async function(pin) {
-    await setDoc(doc(db_firebase, 'config', 'app'), { pin });
+  // ── PIN del usuario actual ──
+  window.__FB.savePin = async function(pinHash) {
+    const u = window.__CURRENT_USER;
+    if (!u || u.isAdmin) {
+      await setDoc(doc(db_firebase, 'config', 'app'), { pin: pinHash }, { merge: true });
+    } else {
+      await setDoc(doc(db_firebase, 'usuarios', u.id), { pinHash }, { merge: true });
+    }
   };
-
-  // ── Leer PIN desde Firestore ──
   window.__FB.loadPin = async function() {
     try {
-      const snap = await getDoc(doc(db_firebase, 'config', 'app'));
-      return snap.exists() ? snap.data().pin : null;
+      const u = window.__CURRENT_USER;
+      if (!u || u.isAdmin) {
+        const snap = await getDoc(doc(db_firebase, 'config', 'app'));
+        return snap.exists() ? snap.data().pin : null;
+      } else {
+        const snap = await getDoc(doc(db_firebase, 'usuarios', u.id));
+        return snap.exists() ? snap.data().pinHash : null;
+      }
     } catch { return null; }
   };
 
-  // ── Cargar todos los datos al inicio ──
+  // ── Cargar todos los datos del usuario activo ──
   window.__FB.loadAll = async function() {
     const result = {};
     for (const col of COLLECTIONS) {
-      const snap = await getDocs(collection(db_firebase, col));
+      const snap = await getDocs(userCol(col));
       result[col] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     }
     return result;
   };
 
-  // ── Guardar un documento (upsert) ──
+  // ── Guardar un documento ──
   window.__FB.save = async function(colName, item) {
     if (!item.id) item.id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-    await setDoc(doc(db_firebase, colName, item.id), item);
+    await setDoc(userDoc(colName, item.id), item);
     return item;
   };
 
   // ── Eliminar un documento ──
   window.__FB.remove = async function(colName, id) {
-    await deleteDoc(doc(db_firebase, colName, id));
+    await deleteDoc(userDoc(colName, id));
   };
 
   // ── Guardar array completo de una colección (batch) ──
   window.__FB.saveCollection = async function(colName, items) {
     const batch = writeBatch(db_firebase);
-    const snap = await getDocs(collection(db_firebase, colName));
+    const snap = await getDocs(userCol(colName));
     snap.docs.forEach(d => {
       if (!items.find(i => i.id === d.id)) batch.delete(d.ref);
     });
     items.forEach(item => {
       if (!item.id) item.id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-      batch.set(doc(db_firebase, colName, item.id), item);
+      batch.set(userDoc(colName, item.id), item);
     });
     await batch.commit();
+  };
+
+  // ── Gestión de usuarios (solo admin) ──
+  window.__FB.getUsuarios = async function() {
+    try {
+      const snap = await getDocs(collection(db_firebase, 'usuarios'));
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch { return []; }
+  };
+  window.__FB.createUsuario = async function(id, nombre, pinHash) {
+    await setDoc(doc(db_firebase, 'usuarios', id), { nombre, pinHash, isAdmin: false, creadoEn: Date.now() });
+  };
+  window.__FB.deleteUsuario = async function(id) {
+    for (const col of COLLECTIONS) {
+      const snap = await getDocs(collection(db_firebase, 'usuarios', id, col));
+      const batch = writeBatch(db_firebase);
+      snap.docs.forEach(d => batch.delete(d.ref));
+      if (snap.docs.length) await batch.commit();
+    }
+    await deleteDoc(doc(db_firebase, 'usuarios', id));
+  };
+  window.__FB.updateUsuario = async function(id, data) {
+    await setDoc(doc(db_firebase, 'usuarios', id), data, { merge: true });
   };
 
   // ── Señal de que Firebase está listo ──
@@ -635,10 +686,10 @@
             <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-weight:600;">Monto a ingresar</div>
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="font-size:1.6rem;font-weight:700;color:var(--muted);">$</span>
-              <input type="number" id="mi-monto" placeholder="0" oninput="onMiBilleteraChange();fmtMontoDisplay(this,'mi-monto-display')"
+              <input type="text" inputmode="numeric" id="mi-monto" placeholder="0" oninput="fmtMontoInput(this);onMiBilleteraChange()"
                 style="background:none;border:none;outline:none;font-size:2rem;font-weight:800;color:var(--text);width:100%;font-family:var(--font-head);">
             </div>
-            <div id="mi-monto-display" style="font-size:.82rem;color:var(--muted);margin-top:4px;min-height:18px;"></div>
+
           </div>
           <!-- Campos -->
           <div style="padding:20px 24px;display:flex;flex-direction:column;gap:16px;">
@@ -707,10 +758,10 @@
             <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-weight:600;">Monto del gasto</div>
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="font-size:1.6rem;font-weight:700;color:var(--muted);">$</span>
-              <input type="number" id="mg-monto" placeholder="0" oninput="calcularPreview4x1000();onMgBilleteraChange();fmtMontoDisplay(this,'mg-monto-display')"
+              <input type="text" inputmode="numeric" id="mg-monto" placeholder="0" oninput="fmtMontoInput(this);calcularPreview4x1000();onMgBilleteraChange()"
                 style="background:none;border:none;outline:none;font-size:2rem;font-weight:800;color:var(--text);width:100%;font-family:var(--font-head);">
             </div>
-            <div id="mg-monto-display" style="font-size:.82rem;color:var(--muted);margin-top:4px;min-height:18px;"></div>
+
             <div id="mg-4x1000-preview" style="display:none;margin-top:8px;padding:8px 12px;background:var(--yellow-light);border-radius:var(--radius-sm);">
               <span id="mg-4x1000-texto" style="font-size:.78rem;color:var(--yellow);font-weight:600;"></span>
             </div>
@@ -1318,6 +1369,17 @@
             <span style="font-size:.8rem;color:var(--muted);">Sesión activa · expira en <strong id="config-session-timer">—</strong></span>
           </div>
         </div>
+
+        <!-- Gestión de usuarios (solo admin) -->
+        <div id="config-usuarios-section" class="section" style="max-width:520px;margin-top:0;display:none;">
+          <div class="section-header" style="margin-bottom:16px;">
+            <span class="section-title">👥 Usuarios</span>
+            <button onclick="abrirModalNuevoUsuario()" class="btn btn-primary btn-sm">+ Nuevo usuario</button>
+          </div>
+          <div id="config-usuarios-lista">
+            <p style="color:var(--muted);font-size:.85rem;">Cargando...</p>
+          </div>
+        </div>
       </div>
 
   </main>
@@ -1377,20 +1439,6 @@
   </button>
   <button class="drawer-item" data-page="config" onclick="mobileNav('config');closeDrawer()">
     <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> Configuración
-  </button>
-  <div class="drawer-section-label" style="margin-top:8px;">Configuración</div>
-  <button class="drawer-item" onclick="showChangePinModal();closeDrawer()">
-    <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> Cambiar PIN
-  </button>
-  <button class="drawer-item" onclick="exportData();closeDrawer()">
-    <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span> Exportar backup
-  </button>
-  <button class="drawer-item" onclick="importBackup();closeDrawer()">
-    <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span> Importar backup
-  </button>
-
-  <button class="drawer-item" onclick="forceSyncFirebase();closeDrawer()">
-    <span class="di-icon">☁️</span> Sync Firebase
   </button>
   <button class="drawer-item" onclick="lockApp();closeDrawer()">
     <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span> Bloquear app
@@ -1748,10 +1796,10 @@
         <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-weight:600;" id="em-monto-label">Monto</div>
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:1.6rem;font-weight:700;color:var(--muted);">$</span>
-          <input type="number" id="em-monto" placeholder="0" oninput="fmtMontoDisplay(this,'em-monto-display')"
+          <input type="text" inputmode="numeric" id="em-monto" placeholder="0" oninput="fmtMontoInput(this)"
             style="background:none;border:none;outline:none;font-size:2rem;font-weight:800;color:var(--text);width:100%;font-family:var(--font-head);">
         </div>
-        <div id="em-monto-display" style="font-size:.82rem;color:var(--muted);margin-top:4px;min-height:18px;"></div>
+
       </div>
       <!-- Campos -->
       <div style="padding:20px 24px;display:flex;flex-direction:column;gap:16px;">
@@ -1786,6 +1834,90 @@
         <svg id="em-btn-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></svg>
         Guardar cambios
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Editar Usuario -->
+<div class="modal-overlay" id="modal-editar-usuario">
+  <div class="modal" style="max-width:420px;width:100%;">
+    <div class="modal-title" style="display:flex;align-items:center;gap:10px;padding:20px 24px;">
+      <div style="width:36px;height:36px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </div>
+      <div style="font-size:1rem;font-weight:700;color:var(--text);">Editar usuario</div>
+      <button onclick="closeModal('modal-editar-usuario')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+    </div>
+    <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:16px;">
+      <div class="form-group">
+        <label>Nombre *</label>
+        <input type="text" id="eu-nombre" class="form-control" style="height:44px;">
+      </div>
+      <div class="form-group">
+        <label style="display:block;margin-bottom:8px;">Módulos con acceso</label>
+        <div id="eu-modulos" style="display:flex;flex-direction:column;gap:2px;"></div>
+      </div>
+    </div>
+    <div class="modal-actions" style="padding:16px 24px;gap:10px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-editar-usuario')" style="flex:1;">Cancelar</button>
+      <button onclick="guardarEdicionUsuario()" class="btn btn-primary" style="flex:2;">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Desactivar Usuario -->
+<div class="modal-overlay" id="modal-desactivar-usuario">
+  <div class="modal" style="max-width:360px;width:100%;">
+    <div class="modal-title" style="display:flex;align-items:center;gap:10px;padding:20px 24px;">
+      <div style="width:36px;height:36px;background:var(--yellow);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      </div>
+      <div style="font-size:.95rem;font-weight:700;color:var(--text);" id="du-titulo">Desactivar usuario</div>
+      <button onclick="closeModal('modal-desactivar-usuario')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+    </div>
+    <div class="modal-body-wrap" style="padding:20px 24px;">
+      <div class="form-group">
+        <label style="font-size:.78rem;font-weight:600;color:var(--muted);display:block;margin-bottom:6px;">Código de seguridad del administrador</label>
+        <input type="password" inputmode="numeric" maxlength="4" id="du-codigo" class="form-control"
+          style="text-align:center;font-size:1.4rem;letter-spacing:.4em;font-weight:700;height:52px;"
+          placeholder="••••" onkeydown="if(event.key==='Enter') confirmarDesactivarUsuario()">
+        <div id="du-error" style="display:none;color:var(--red);font-size:.78rem;margin-top:6px;text-align:center;font-weight:600;"></div>
+      </div>
+    </div>
+    <div class="modal-actions" style="padding:16px 24px;gap:10px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-desactivar-usuario')" style="flex:1;">Cancelar</button>
+      <button onclick="confirmarDesactivarUsuario()" class="btn btn-primary" style="flex:2;">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Nuevo Usuario -->
+<div class="modal-overlay" id="modal-nuevo-usuario">
+  <div class="modal" style="max-width:400px;width:100%;">
+    <div class="modal-title" style="display:flex;align-items:center;gap:10px;padding:20px 24px;">
+      <div style="width:36px;height:36px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </div>
+      <div>
+        <div style="font-size:1rem;font-weight:700;color:var(--text);">Nuevo usuario</div>
+        <div style="font-size:.75rem;color:var(--muted);">Tendrá sus propios datos en la misma BD</div>
+      </div>
+      <button onclick="closeModal('modal-nuevo-usuario')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+    </div>
+    <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:14px;">
+      <div class="form-group">
+        <label>Nombre *</label>
+        <input type="text" id="nu-nombre" class="form-control" placeholder="Ej: María, Juan..." style="height:44px;">
+      </div>
+      <div class="form-group">
+        <label>PIN de acceso (4 dígitos) *</label>
+        <input type="password" id="nu-pin" class="form-control" maxlength="4" inputmode="numeric" placeholder="••••" style="height:44px;text-align:center;letter-spacing:.3em;font-size:1.2rem;font-weight:700;">
+        <small style="color:var(--muted);font-size:.72rem;">El usuario podrá cambiarlo después desde Configuración</small>
+      </div>
+    </div>
+    <div class="modal-actions" style="padding:16px 24px;gap:10px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-nuevo-usuario')" style="flex:1;">Cancelar</button>
+      <button onclick="guardarNuevoUsuario()" class="btn btn-primary" style="flex:2;">Crear usuario</button>
     </div>
   </div>
 </div>

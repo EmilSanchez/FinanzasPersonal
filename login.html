@@ -2,184 +2,441 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Finanzas PRO — Acceso</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+CiAgPGRlZnM+CiAgICA8cmFkaWFsR3JhZGllbnQgaWQ9ImJnIiBjeD0iNDAlIiBjeT0iMzUlIiByPSI2NSUiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjMzRkMzk5Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iNTUlIiBzdG9wLWNvbG9yPSIjMDU5NjY5Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzA2NWY0NiIvPgogICAgPC9yYWRpYWxHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0ic2giIGN4PSIzNSUiIGN5PSIyOCUiIHI9IjM4JSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IndoaXRlIiBzdG9wLW9wYWNpdHk9IjAuNCIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IndoaXRlIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjE1LjUiIGZpbGw9InVybCgjYmcpIi8+CiAgPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTUuNSIgZmlsbD0idXJsKCNzaCkiLz4KICA8cmVjdCB4PSI2IiAgeT0iMTgiIHdpZHRoPSI0IiBoZWlnaHQ9IjgiICByeD0iMSIgZmlsbD0id2hpdGUiIG9wYWNpdHk9IjAuOTUiLz4KICA8cmVjdCB4PSIxMiIgeT0iMTMiIHdpZHRoPSI0IiBoZWlnaHQ9IjEzIiByeD0iMSIgZmlsbD0id2hpdGUiIG9wYWNpdHk9IjAuOTUiLz4KICA8cmVjdCB4PSIxOCIgeT0iOSIgIHdpZHRoPSI0IiBoZWlnaHQ9IjE3IiByeD0iMSIgZmlsbD0id2hpdGUiIG9wYWNpdHk9IjAuOTUiLz4KPC9zdmc+">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Finanzas PRO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --ink:    #0f1923;
+  --muted:  #6b7a8d;
+  --light:  #d1d8e0;
+  --bg:     #f0eee9;
+  --white:  #ffffff;
+  --navy:   #1a3a5c;
+  --gold:   #c9a84c;
+}
+
+html, body {
+  height: 100%; width: 100%;
+  font-family: 'DM Sans', sans-serif;
+  background: #0d1117;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* ── Full screen layout ── */
+.app {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Top hero ── */
+.hero {
+  background: var(--navy);
+  padding: 32px 32px 28px;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  width: 280px; height: 280px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.04);
+  top: -100px; right: -60px;
+}
+.hero::after {
+  content: '';
+  position: absolute;
+  width: 160px; height: 160px;
+  border-radius: 50%;
+  background: rgba(201,168,76,.07);
+  bottom: -40px; left: -30px;
+}
+.hero-brand {
+  display: flex; align-items: center; gap: 14px;
+  position: relative; z-index: 1;
+}
+.hero-icon {
+  width: 44px; height: 44px;
+  background: rgba(255,255,255,.1);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255,255,255,.12);
+  flex-shrink: 0;
+}
+.hero h1 {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.7rem;
+  color: #fff;
+  line-height: 1;
+  white-space: nowrap;
+}
+.hero h1 span { color: var(--gold); }
+.hero-desc { display: none; }
+.hero-foot { display: none; }
+
+/* ── Body panel ── */
+.body {
+  flex: 1;
+  background: var(--white);
+  border-radius: 24px 24px 0 0;
+  margin-top: -20px;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Screens ── */
+.screen { display: none; flex-direction: column; flex: 1; }
+.screen.active { display: flex; }
+
+/* User list */
+.section-label {
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+.user-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; flex: 1; }
+
+.user-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--light);
+  border-radius: 14px;
+  cursor: pointer;
+  background: var(--white);
+  font-family: inherit;
+  width: 100%; text-align: left;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.user-item:active { transform: scale(.98); }
+.user-item.selected {
+  border-color: var(--navy);
+  background: #f0f4f9;
+  box-shadow: 0 0 0 3px rgba(26,58,92,.08);
+}
+.avatar {
+  width: 42px; height: 42px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: .95rem; color: #fff; flex-shrink: 0;
+}
+.user-info-name { font-size: .9rem; font-weight: 600; color: var(--ink); }
+.user-info-role { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+.check {
+  margin-left: auto;
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1.5px solid var(--light);
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s; flex-shrink: 0;
+}
+.user-item.selected .check { background: var(--navy); border-color: var(--navy); }
+.check svg { opacity: 0; transition: opacity .15s; }
+.user-item.selected .check svg { opacity: 1; }
+
+.btn-main {
+  width: 100%; padding: 16px;
+  background: var(--navy); color: #fff;
+  border: none; border-radius: 14px;
+  font-size: .95rem; font-weight: 600; font-family: inherit;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: background .15s;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-main:active { background: #0f2540; transform: scale(.98); }
+.btn-main:disabled { opacity: .35; pointer-events: none; }
+
+/* ── PIN screen ── */
+.back-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: none; cursor: pointer;
+  font-size: .8rem; color: var(--muted); font-family: inherit;
+  padding: 0; margin-bottom: 24px;
+}
+.pin-who {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 28px;
+}
+.pin-av { width: 46px; height: 46px; border-radius: 50%; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:1.1rem; flex-shrink:0; }
+.pin-nm { font-size: 1rem; font-weight: 700; color: var(--ink); }
+.pin-ht { font-size: .75rem; color: var(--muted); margin-top: 2px; }
+
+.dots { display: flex; gap: 12px; margin-bottom: 28px; justify-content: center; }
+.dot { width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--light); transition: all .18s; }
+.dot.on { background: var(--navy); border-color: var(--navy); transform: scale(1.2); }
+
+.pad {
+  display: grid; grid-template-columns: repeat(3,1fr); gap: 10px;
+  margin-bottom: 14px; flex: 1; align-content: start;
+}
+.num {
+  padding: 0; height: 64px;
+  border: 1.5px solid var(--light);
+  border-radius: 14px;
+  background: var(--white);
+  font-size: 1.2rem; font-weight: 500; color: var(--ink);
+  font-family: inherit; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.num:active { background: #f0f4f9; transform: scale(.94); }
+.num.del { font-size: .9rem; color: var(--muted); }
+.num.ok { background: var(--navy); border-color: var(--navy); color: #fff; }
+.num.ok:active { background: #0f2540; }
+
+.pin-err { font-size: .8rem; color: #dc2626; min-height: 18px; text-align: center; }
+.verifying { display:none; flex-direction:column; align-items:center; gap:10px; padding:16px 0; }
+.spin { width:28px;height:28px;border:2.5px solid rgba(26,58,92,.15);border-top-color:var(--navy);border-radius:50%;animation:spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Loading screen */
+#loading {
+  position: fixed; inset: 0;
+  background: #0d1117;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  z-index: 999;
+}
+#loading .spin { width:36px;height:36px;border-top-color:#fff;border-color:rgba(255,255,255,.2); }
+#loading p { font-size:.85rem;color:rgba(255,255,255,.5);font-family:'DM Sans',sans-serif; }
+
+/* Desktop — layout split 2 columnas */
+@media (min-width: 700px) {
   html, body {
-    height: 100%; font-family: 'Inter', system-ui, sans-serif;
-    background: linear-gradient(135deg, #1a2332 0%, #243049 50%, #1a2332 100%);
+    overflow: auto; height: auto; min-height: 100%;
+    background: #0d1117;
+    background-image:
+      radial-gradient(ellipse at 20% 50%, rgba(26,58,92,.4) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 20%, rgba(201,168,76,.06) 0%, transparent 50%);
     display: flex; align-items: center; justify-content: center;
-    padding: 20px; overflow-y: auto;
   }
-  .lock-card {
-    background: #ffffff; border-radius: 24px;
-    padding: 48px 40px; width: 340px;
-    text-align: center; animation: slideUp .4s ease;
-    box-shadow: 0 20px 60px rgba(0,0,0,.3);
+  .app {
+    height: auto; min-height: 560px;
+    width: 880px; max-width: 95vw;
+    flex-direction: row;
+    border-radius: 28px;
+    box-shadow: 0 40px 100px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.06);
+    overflow: hidden;
   }
-  @keyframes slideUp {
-    from { opacity: 0; transform: translateY(30px); }
-    to   { opacity: 1; transform: translateY(0); }
+  .hero {
+    flex: 1;
+    padding: 56px 48px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    border-radius: 0;
+    margin: 0;
   }
-  .lock-icon { margin-bottom: 16px; display: block; filter: drop-shadow(0 0 20px rgba(59,130,246,0.4)); }
-  h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -.5px; margin-bottom: 6px; color: #1a2332; }
-  p  { color: #64748b; margin-bottom: 28px; font-size: .88rem; }
-  .pin-dots { display: flex; justify-content: center; gap: 12px; margin-bottom: 28px; }
-  .pin-dot {
-    width: 14px; height: 14px; border-radius: 50%;
-    border: 2px solid #dde3ed; transition: all .2s ease;
+  .hero-brand { flex-direction: row; align-items: center; gap: 14px; }
+  .hero-icon { width: 46px; height: 46px; border-radius: 13px; flex-shrink: 0; }
+  .hero h1 { font-size: 1.9rem; white-space: nowrap; }
+  .hero-desc {
+    display: block;
+    font-size: .85rem;
+    color: rgba(255,255,255,.45);
+    line-height: 1.7;
+    margin-top: 16px;
+    padding-left: 2px;
   }
-  .pin-dot.filled { background: #2563eb; border-color: #2563eb; box-shadow: 0 0 8px rgba(59,130,246,.5); }
-  .pin-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
-  .pin-btn {
-    background: #f4f6f9; border: 1px solid #dde3ed;
-    color: #1a2332; font-size: 1.2rem; font-weight: 600;
-    border-radius: 6px; padding: 14px;
-    cursor: pointer; transition: all .2s ease; user-select: none;
-    font-family: inherit;
+  .hero-foot {
+    font-size: .7rem;
+    color: rgba(255,255,255,.22);
+    letter-spacing: .06em;
   }
-  .pin-btn:hover { background: #eef1f6; border-color: #2563eb; transform: scale(1.04); }
-  .pin-btn:active { transform: scale(.96); }
-  .pin-btn.delete { font-size: .9rem; color: #64748b; }
-  .pin-btn.enter { background: #2563eb; border-color: #2563eb; color: #fff; }
-  .pin-btn.enter:hover { background: #1d4ed8; }
-  .pin-error { color: #dc2626; font-size: .82rem; min-height: 20px; transition: all .2s; }
-  .spinner-wrap {
-    display: none; flex-direction: column; align-items: center;
-    gap: 12px; padding: 20px 0;
+  .body {
+    flex: none; width: 400px;
+    border-radius: 0; margin-top: 0;
+    padding: 52px 44px;
+    display: flex; flex-direction: column; justify-content: center;
+    overflow-y: auto;
+    background: #f8f7f5;
   }
-  .spinner {
-    width: 36px; height: 36px;
-    border: 3px solid rgba(37,99,235,.2);
-    border-top-color: #2563eb; border-radius: 50%;
-    animation: spin .7s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @media (max-width: 400px) {
-    .lock-card { width: 96%; padding: 28px 18px; border-radius: 18px; }
-    .pin-btn { padding: 13px; font-size: 1.1rem; }
-    h1 { font-size: 1.3rem; }
-  }
+  .section-label { font-size: .7rem; }
+}
 </style>
 </head>
 <body>
-<div class="lock-card">
-  <span class="lock-icon">
-    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.5"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-  </span>
-  <h1>Finanzas PRO</h1>
-  <p>Ingresa tu PIN para continuar</p>
-  <div class="pin-dots">
-    <div class="pin-dot" id="dot0"></div>
-    <div class="pin-dot" id="dot1"></div>
-    <div class="pin-dot" id="dot2"></div>
-    <div class="pin-dot" id="dot3"></div>
+
+<div id="loading">
+  <div class="spin"></div>
+  <p>Conectando…</p>
+</div>
+
+<div class="app" id="app" style="display:none;">
+
+  <!-- Hero -->
+  <div class="hero">
+    <div>
+      <div class="hero-brand">
+        <div class="hero-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1.8"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        </div>
+        <h1>Finanzas <span>PRO</span></h1>
+      </div>
+      <p class="hero-desc">Gestiona tu dinero con claridad.<br>Todo en un solo lugar.</p>
+    </div>
+    <div class="hero-foot">© 2026 Finanzas PRO</div>
   </div>
-  <div class="pin-pad">
-    <button class="pin-btn" onclick="pinPress('1')">1</button>
-    <button class="pin-btn" onclick="pinPress('2')">2</button>
-    <button class="pin-btn" onclick="pinPress('3')">3</button>
-    <button class="pin-btn" onclick="pinPress('4')">4</button>
-    <button class="pin-btn" onclick="pinPress('5')">5</button>
-    <button class="pin-btn" onclick="pinPress('6')">6</button>
-    <button class="pin-btn" onclick="pinPress('7')">7</button>
-    <button class="pin-btn" onclick="pinPress('8')">8</button>
-    <button class="pin-btn" onclick="pinPress('9')">9</button>
-    <button class="pin-btn delete" onclick="pinDelete()">⌫</button>
-    <button class="pin-btn" onclick="pinPress('0')">0</button>
-    <button class="pin-btn enter" onclick="pinSubmit()">✓</button>
-  </div>
-  <div class="pin-error" id="pin-error"></div>
-  <div class="spinner-wrap" id="spinner-wrap">
-    <div class="spinner"></div>
-    <span style="font-size:.8rem;color:#64748b;">Verificando...</span>
+
+  <!-- Body -->
+  <div class="body">
+
+    <!-- Pantalla: selección -->
+    <div class="screen active" id="screen-users">
+      <div class="section-label">Selecciona tu perfil</div>
+      <div class="user-list" id="user-list"></div>
+      <button class="btn-main" id="btn-next" disabled onclick="irAPin()">
+        Continuar
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
+
+    <!-- Pantalla: PIN -->
+    <div class="screen" id="screen-pin">
+      <button class="back-link" onclick="volverUsuarios()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        Cambiar perfil
+      </button>
+      <div class="pin-who">
+        <div class="pin-av" id="pin-av"></div>
+        <div>
+          <div class="pin-nm" id="pin-nm"></div>
+          <div class="pin-ht">Ingresa tu PIN de acceso</div>
+        </div>
+      </div>
+      <div class="dots">
+        <div class="dot" id="d0"></div><div class="dot" id="d1"></div>
+        <div class="dot" id="d2"></div><div class="dot" id="d3"></div>
+      </div>
+      <div class="verifying" id="verifying"><div class="spin"></div><span style="font-size:.8rem;color:var(--muted);">Verificando…</span></div>
+      <div class="pad" id="pad">
+        <button class="num" onclick="pp('1')">1</button><button class="num" onclick="pp('2')">2</button><button class="num" onclick="pp('3')">3</button>
+        <button class="num" onclick="pp('4')">4</button><button class="num" onclick="pp('5')">5</button><button class="num" onclick="pp('6')">6</button>
+        <button class="num" onclick="pp('7')">7</button><button class="num" onclick="pp('8')">8</button><button class="num" onclick="pp('9')">9</button>
+        <button class="num del" onclick="pd()">⌫</button><button class="num" onclick="pp('0')">0</button><button class="num ok" onclick="psubmit()">✓</button>
+      </div>
+      <div class="pin-err" id="pin-err"></div>
+    </div>
+
   </div>
 </div>
 
-<script>
-const SESSION_KEY = 'fp_session';
-const SESSION_MS  = 30 * 60 * 1000;
-let pinBuffer = '';
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getFirestore, collection, doc, getDocs, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
-// Si ya hay sesión válida, ir directo a la app
-(function() {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (raw) {
-      const { ts } = JSON.parse(raw);
-      if ((Date.now() - ts) < SESSION_MS) {
-        window.location.replace('index.html');
-      }
+const CFG={apiKey:"AIzaSyCMsgSK8tJW4-7OHkB-ZTcjGSOenmPRIog",authDomain:"finanzas-pro-1db2d.firebaseapp.com",projectId:"finanzas-pro-1db2d",storageBucket:"finanzas-pro-1db2d.firebasestorage.app",messagingSenderId:"74142920533",appId:"1:74142920533:web:6aa4b1a9ae82a94125c9dc"};
+const app=initializeApp(CFG),db=getFirestore(app),auth=getAuth(app);
+
+async function sha256(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');}
+
+const SK='fp_session',SM=30*60*1000;
+try{const r=localStorage.getItem(SK);if(r){const s=JSON.parse(r);if(Date.now()-s.ts<SM){window.location.replace('index.html');}}}catch(e){}
+
+let usuarios=[],selected=null,buf='';
+const COLORS=['#1a3a5c','#6b46c1','#065f46','#92400e','#991b1b','#0e7490'];
+
+try{await signInAnonymously(auth);}catch(e){console.warn(e.message);}
+try{const s=await getDocs(collection(db,'usuarios'));usuarios=s.docs.map(d=>({id:d.id,...d.data()})).filter(u=>u.activo!==false);}catch(e){}
+
+function renderUsers(){
+  const list=document.getElementById('user-list');
+  list.innerHTML='';
+  const items=[{user:null,name:'Administrador',role:'Acceso completo',color:'#1a3a5c'},...usuarios.map((u,i)=>({user:u,name:u.nombre,role:u.activo===false?'Desactivado':'Usuario',color:COLORS[(i+1)%COLORS.length]}))];
+  items.forEach(({user,name,role,color})=>{
+    const btn=document.createElement('button');
+    btn.className='user-item';
+    const inactive=user&&user.activo===false;
+    btn.style.opacity=inactive?'0.45':'1';
+    btn.innerHTML=`<div class="avatar" style="background:${color}">${name[0].toUpperCase()}</div><div><div class="user-info-name">${name}</div><div class="user-info-role">${role}</div></div><div class="check"><svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>`;
+    btn.onclick=()=>{
+      document.querySelectorAll('.user-item').forEach(b=>b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selected=user;
+      document.getElementById('btn-next').disabled=false;
+    };
+    list.appendChild(btn);
+  });
+}
+
+window.irAPin=function(){
+  const name=selected?selected.nombre:'Administrador';
+  const color=selected?COLORS[usuarios.indexOf(selected)%COLORS.length]:'#1a3a5c';
+  document.getElementById('pin-av').style.background=color;
+  document.getElementById('pin-av').textContent=name[0].toUpperCase();
+  document.getElementById('pin-nm').textContent=name;
+  document.getElementById('screen-users').classList.remove('active');
+  document.getElementById('screen-pin').classList.add('active');
+  buf=''; updateDots();
+};
+
+window.volverUsuarios=function(){
+  document.getElementById('screen-pin').classList.remove('active');
+  document.getElementById('screen-users').classList.add('active');
+  buf=''; document.getElementById('pin-err').textContent='';
+};
+
+window.pp=function(d){if(buf.length>=4)return;buf+=d;updateDots();if(buf.length===4)setTimeout(psubmit,180);};
+window.pd=function(){buf=buf.slice(0,-1);updateDots();};
+function updateDots(){for(let i=0;i<4;i++)document.getElementById('d'+i).classList.toggle('on',i<buf.length);}
+
+window.psubmit=async function(){
+  const entered=buf;buf='';updateDots();
+  document.getElementById('verifying').style.display='flex';
+  document.getElementById('pad').style.display='none';
+  const eh=await sha256(entered);
+  let ch;
+  if(!selected){
+    const leg=localStorage.getItem('fp_pin');
+    if(leg){localStorage.setItem('fp_pin_hash',await sha256(leg));localStorage.removeItem('fp_pin');}
+    if(!localStorage.getItem('fp_pin_hash'))localStorage.setItem('fp_pin_hash',await sha256('1234'));
+    try{const s=await getDoc(doc(db,'config','app'));const r=s.exists()?s.data().pin:null;if(r&&r.length===64)localStorage.setItem('fp_pin_hash',r);}catch(e){}
+    ch=localStorage.getItem('fp_pin_hash');
+  } else { ch=selected.pinHash; }
+  if(eh===ch){
+    if(selected&&selected.activo===false){
+      document.getElementById('verifying').style.display='none';
+      document.getElementById('pad').style.display='grid';
+      const err=document.getElementById('pin-err');
+      err.textContent='Cuenta desactivada. Contacta al administrador.';
+      setTimeout(()=>{err.textContent='';},4000);
+      return;
     }
-  } catch(e) {}
-})();
-
-async function sha256(text) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
-}
-
-function updateDots() {
-  for (let i = 0; i < 4; i++) {
-    document.getElementById('dot' + i).classList.toggle('filled', i < pinBuffer.length);
-  }
-}
-
-function pinPress(d) {
-  if (pinBuffer.length >= 4) return;
-  pinBuffer += d;
-  updateDots();
-  if (pinBuffer.length === 4) setTimeout(pinSubmit, 200);
-}
-
-function pinDelete() {
-  pinBuffer = pinBuffer.slice(0, -1);
-  updateDots();
-}
-
-async function pinSubmit() {
-  const entered = pinBuffer;
-  pinBuffer = '';
-  updateDots();
-
-  // Mostrar spinner, ocultar pad
-  document.getElementById('spinner-wrap').style.display = 'flex';
-  document.querySelector('.pin-pad').style.display = 'none';
-
-  // Migrar PIN legacy si existe
-  const legacy = localStorage.getItem('fp_pin');
-  if (legacy) {
-    localStorage.setItem('fp_pin_hash', await sha256(legacy));
-    localStorage.removeItem('fp_pin');
-  }
-  if (!localStorage.getItem('fp_pin_hash')) {
-    localStorage.setItem('fp_pin_hash', await sha256('1234'));
-  }
-
-  const enteredHash = await sha256(entered);
-  const correctHash = localStorage.getItem('fp_pin_hash');
-
-  if (enteredHash === correctHash) {
-    // Guardar sesión y redirigir
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ ts: Date.now() }));
+    const su=selected?{id:selected.id,nombre:selected.nombre,isAdmin:false}:{isAdmin:true};
+    localStorage.setItem(SK,JSON.stringify({ts:Date.now(),user:su}));
     window.location.replace('index.html');
   } else {
-    document.getElementById('spinner-wrap').style.display = 'none';
-    document.querySelector('.pin-pad').style.display = 'grid';
-    const err = document.getElementById('pin-error');
-    err.textContent = 'PIN incorrecto. Intenta de nuevo.';
-    setTimeout(() => { err.textContent = ''; }, 2000);
+    document.getElementById('verifying').style.display='none';
+    document.getElementById('pad').style.display='grid';
+    const err=document.getElementById('pin-err');
+    err.textContent='PIN incorrecto. Intenta de nuevo.';
+    setTimeout(()=>{err.textContent='';},2500);
   }
-}
+};
 
-document.addEventListener('keydown', e => {
-  if (e.key === 'Enter') pinSubmit();
-  else if (e.key === 'Backspace') pinDelete();
-  else if (/^[0-9]$/.test(e.key)) pinPress(e.key);
+document.addEventListener('keydown',e=>{
+  if(!document.getElementById('screen-pin').classList.contains('active'))return;
+  if(e.key==='Enter')psubmit();
+  else if(e.key==='Backspace')pd();
+  else if(/^[0-9]$/.test(e.key))pp(e.key);
 });
+
+renderUsers();
+document.getElementById('loading').style.display='none';
+document.getElementById('app').style.display='flex';
 </script>
 </body>
 </html>
