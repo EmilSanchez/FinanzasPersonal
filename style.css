@@ -865,11 +865,15 @@ canvas { max-width: 100%; display: block; }
   .chart-title { font-size: .8rem; margin-bottom: 10px; }
 
   /* Modals — bottom sheet */
-  .modal-overlay { padding: 0; align-items: flex-end; }
+  .modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
   .modal {
     max-width: 100%;
     width: 100%;
-    max-height: 88vh;
+    max-height: calc(88vh - 64px - env(safe-area-inset-bottom, 0px));
     border-radius: 20px 20px 0 0;
     /* Handle drag affordance */
   }
