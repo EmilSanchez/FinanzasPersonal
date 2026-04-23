@@ -116,6 +116,21 @@ async function loadDb() {
 const _dirtyCollections = new Set();
 function markDirty(col) { _dirtyCollections.add(col); }
 
+/* ── Helper: registrar gasto aplicando 4x1000 si la billetera lo cobra ── */
+function registrarGastoConGMF({ id, fecha, hora, monto, desc, cat, billeteraId, ...extra }) {
+  const _ts = Date.now();
+  STATE.db.gastos.push({ id: id || uid(), fecha, hora: hora || horaActual(), monto, desc, cat, billeteraId, ts: _ts, ...extra });
+  const bill = getBilleteras().find(b => b.id === billeteraId);
+  if (bill?.cobra4x1000 && monto > 0) {
+    const gmf = Math.round(monto * 0.004);
+    STATE.db.gastos.push({
+      id: uid(), fecha, hora: hora || horaActual(), monto: gmf,
+      desc: `4x1000 sobre ${fmt(monto)}`, cat: 'Impuestos',
+      billeteraId, ts: _ts + 1, autoGenerado: true
+    });
+  }
+}
+
 /* ── Overlay de carga global ── */
 function showLoading() {
   let ov = document.getElementById('loading-overlay');
@@ -1287,7 +1302,7 @@ async function saveGasto() {
     }
     cancelEditGasto();
   } else {
-    STATE.db.gastos.push({ id: uid(), fecha, hora: horaActual(), monto, desc, cat, billeteraId });
+    registrarGastoConGMF({ id: uid(), fecha, hora: horaActual(), monto, desc, cat, billeteraId });
   }
   clearForm(['g-monto','g-desc']);
   renderAll();           // actualiza UI inmediatamente
@@ -1532,18 +1547,14 @@ async function registrarAbono() {
   d.pagado = (d.pagado || 0) + monto;
   d.pagos.push({ id: abonoId, fecha, monto, nota });
 
-  // AUTO-REGISTRAR como gasto (categoría Crédito / Deuda)
+  // AUTO-REGISTRAR como gasto (categoría Crédito / Deuda) + 4x1000 si aplica
   const billeteraIdAbono = document.getElementById('m-abonar-billetera')?.value || '';
-  STATE.db.gastos.push({
-    id: uid(),
-    fecha,
-    hora: horaActual(),
-    monto,
+  registrarGastoConGMF({
+    id: uid(), fecha, hora: horaActual(), monto,
     desc: 'Abono deuda: ' + d.nombre + (nota ? ' — ' + nota : ''),
     cat: 'Crédito / Deuda',
     billeteraId: billeteraIdAbono,
-    autoGenerado: true,
-    origenAbonoId: abonoId
+    autoGenerado: true, origenAbonoId: abonoId
   });
 
   renderAll();
@@ -1945,7 +1956,7 @@ async function savePrestamo() {
   const billNombre = STATE.db.billeteras.find(b => b.id === billeteraId)?.nombre || '';
 
   // Registrar como gasto para que se descuente de la billetera
-  STATE.db.gastos.push({
+  registrarGastoConGMF({
     id: uid(), fecha, hora: horaActual(), monto,
     desc: 'Préstamo a: ' + nombre + (desc ? ' — ' + desc : ''),
     cat: 'Préstamo otorgado',
@@ -2094,7 +2105,7 @@ async function confirmarAmpliarPrestamo() {
 
   // Registrar como gasto en la billetera
   const billNombre = STATE.db.billeteras.find(b => b.id === billeteraId)?.nombre || '';
-  STATE.db.gastos.push({
+  registrarGastoConGMF({
     id: uid(), fecha, hora: horaActual(), monto,
     desc: 'Préstamo adicional a: ' + p.nombre + ' — ' + desc,
     cat: 'Préstamo otorgado',
@@ -2594,7 +2605,7 @@ async function confirmarPagoFijo(gfId, mesKey, billeteraUsada) {
   const billObj = STATE.db.billeteras?.find(b => b.id === billeteraUsada);
 
   // ── Registrar gasto (descuenta de billetera) ──
-  STATE.db.gastos.push({
+  registrarGastoConGMF({
     id: gastoId, fecha, hora,
     monto: gf.monto,
     desc: 'Gasto fijo: ' + gf.nombre,
