@@ -4878,12 +4878,12 @@ function abrirEditarMov(tipo, id) {
   document.getElementById('em-id').value    = id;
   document.getElementById('em-tipo').value  = tipo;
   const emInput = document.getElementById('em-monto');
-  emInput.value = item.monto ? String(parseInt(item.monto)).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '';
+  emInput.value = item.monto ? String(parseInt(item.monto)) : '';
   document.getElementById('em-desc').value  = item.fuente || item.desc || '';
   document.getElementById('em-fecha').value = item.fecha || '';
 
-  // Actualizar display del monto con formato
-  fmtMontoDisplay(document.getElementById('em-monto'), 'em-monto-display');
+  // Disparar formato visual del monto
+  fmtMontoInput(document.getElementById('em-monto'));
 
   // Poblar billeteras con saldo
   const selBill = document.getElementById('em-billetera');
