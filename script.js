@@ -4881,6 +4881,7 @@ function abrirEditarMov(tipo, id) {
   emInput.value = item.monto ? String(parseInt(item.monto)) : '';
   document.getElementById('em-desc').value  = item.fuente || item.desc || '';
   document.getElementById('em-fecha').value = item.fecha || '';
+  document.getElementById('em-hora').value  = horaToInputTime(item.hora || '');
 
   // Disparar formato visual del monto
   fmtMontoInput(document.getElementById('em-monto'));
@@ -4940,6 +4941,8 @@ async function guardarEdicionMov() {
   const fecha     = document.getElementById('em-fecha').value;
   const cat       = document.getElementById('em-cat').value;
   const billId    = document.getElementById('em-billetera').value;
+  const horaRaw   = document.getElementById('em-hora').value;
+  const hora      = horaRaw ? inputTimeToHora(horaRaw) : null;
 
   if (!monto || monto <= 0) return toast('El monto debe ser mayor a 0', 'error');
   if (!desc)                return toast('La descripción es obligatoria', 'error');
@@ -4950,12 +4953,12 @@ async function guardarEdicionMov() {
   if (tipo === 'ingreso') {
     const idx = STATE.db.ingresos.findIndex(i => i.id === id);
     if (idx === -1) { hideLoading(); return; }
-    STATE.db.ingresos[idx] = { ...STATE.db.ingresos[idx], monto, fuente: desc, fecha, cat, billeteraId: billId };
+    STATE.db.ingresos[idx] = { ...STATE.db.ingresos[idx], monto, fuente: desc, fecha, cat, billeteraId: billId, ...(hora && { hora }) };
     await saveDb(['ingresos']);
   } else {
     const idx = STATE.db.gastos.findIndex(g => g.id === id);
     if (idx === -1) { hideLoading(); return; }
-    STATE.db.gastos[idx] = { ...STATE.db.gastos[idx], monto, desc, fecha, cat, billeteraId: billId };
+    STATE.db.gastos[idx] = { ...STATE.db.gastos[idx], monto, desc, fecha, cat, billeteraId: billId, ...(hora && { hora }) };
     await saveDb(['gastos']);
   }
 
