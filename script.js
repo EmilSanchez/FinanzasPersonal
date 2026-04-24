@@ -82,7 +82,7 @@ async function loadDb(silent = false) {
       };
       localStorage.setItem('finanzas_pro_v2', JSON.stringify(STATE.db));
       if (!silent) hideLoadingOverlay();
-      console.log('✅ Datos cargados desde Firestore');
+      console.log('Datos cargados desde Firestore');
 
       // Sincronizar hash del PIN
       try {
@@ -203,7 +203,7 @@ window.addEventListener('firebase-auth-ready', async () => {
       const cols = ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras','transferencias'];
       await Promise.all(cols.map(col => window.__FB.saveCollection(col, STATE.db[col] || [])));
       _pendingSync = false;
-      toast('✅ Datos sincronizados correctamente', 'success');
+      toast('Datos sincronizados correctamente', 'success');
     } catch(e) {
       console.error('Error en sync pendiente:', e);
     }
@@ -328,7 +328,7 @@ async function intentarReconectar() {
   await new Promise(r => setTimeout(r, 1500));
   if (estaConectado()) {
     if (modal) modal.remove();
-    toast('✅ Conexión restablecida', 'success');
+    toast('Conexión restablecida', 'success');
     updateFbStatus(true);
   } else {
     if (modal) {
@@ -531,6 +531,13 @@ async function cargarPerfil() {
   const nameEl = document.getElementById('sidebar-user-name');
   if (nameEl) nameEl.textContent = nombreMostrar;
 
+  // Actualizar rol en sidebar
+  const roleEl = document.getElementById('sidebar-user-role');
+  if (roleEl) {
+    const u = window.__CURRENT_USER;
+    roleEl.textContent = (!u || u.isAdmin) ? 'Administrador' : 'Usuario';
+  }
+
   const inp = document.getElementById('config-nombre-input');
   if (inp) inp.value = nombre;
 
@@ -573,7 +580,7 @@ async function guardarNombrePerfil() {
   await cargarPerfil();
 
   if (btn) { btn.textContent = '✓ Guardado'; setTimeout(() => { btn.textContent = 'Guardar'; btn.disabled = false; }, 1500); }
-  toast('Nombre actualizado ✅', 'success');
+  toast('Nombre actualizado', 'success');
 }
 
 async function subirFotoPerfil(input) {
@@ -620,7 +627,7 @@ async function subirFotoPerfil(input) {
         void avatarEl.offsetWidth;
         avatarEl.style.animation = 'pageEnter .4s cubic-bezier(.22,.68,0,1.2)';
       }
-      toast('Foto actualizada ✅', 'success');
+      toast('Foto actualizada', 'success');
     };
     img.src = e.target.result;
   };
@@ -761,7 +768,7 @@ async function recargarApp() {
     const pageEl2 = document.getElementById('page-' + page);
     if (pageEl2) { pageEl2.classList.remove('page-enter'); void pageEl2.offsetWidth; pageEl2.classList.add('page-enter'); pageEl2.addEventListener('animationend', () => pageEl2.classList.remove('page-enter'), { once: true }); }
     navigate(page, param);
-    toast('Datos actualizados ✅', 'success');
+    toast('Datos actualizados', 'success');
   } catch(e) {
     toast('Error al actualizar', 'error');
   } finally {
@@ -815,7 +822,7 @@ async function changePin() {
   if (window.__FB?.ready && window.__FB.savePin) {
     try {
       await window.__FB.savePin(newHash);
-      toast('PIN actualizado ✅', 'success');
+      toast('PIN actualizado', 'success');
     } catch(e) {
       if (esAdmin) toast('PIN actualizado localmente', 'info');
       else toast('Error actualizando PIN', 'error');
@@ -1389,7 +1396,7 @@ async function saveIngreso() {
   clearForm(['i-monto','i-fuente']);
   renderAll();
   await saveDb(['ingresos']);
-  toast(editId ? 'Ingreso actualizado ✅' : 'Ingreso registrado', 'success');
+  toast(editId ? 'Ingreso actualizado' : 'Ingreso registrado', 'success');
 }
 
 function editIngreso(id) {
@@ -1540,7 +1547,7 @@ async function saveGasto() {
   clearForm(['g-monto','g-desc']);
   renderAll();           // actualiza UI inmediatamente
   await saveDb();        // guarda en Firebase en background
-  toast(editId ? 'Gasto actualizado ✅' : 'Gasto registrado', 'success');
+  toast(editId ? 'Gasto actualizado' : 'Gasto registrado', 'success');
 }
 
 function editGasto(id) {
@@ -1737,7 +1744,7 @@ async function saveDeuda() {
       autoGenerado: true
     });
     const billNombre = bill ? ` → ${bill.nombre}` : '';
-    toast(`Deuda creada${billNombre}. Dinero sumado como ingreso ✅`, 'success');
+    toast(`Deuda creada${billNombre}. Dinero sumado como ingreso`, 'success');
   } else {
     toast('Deuda de compra creada', 'success');
   }
@@ -1922,11 +1929,11 @@ async function confirmarSumarDeuda() {
       origenDesembolsoId: desembolsoId
     });
     const bn = bill ? ` → ${bill.nombre}` : '';
-    toast(`${fmt(monto)} sumados a la deuda${bn} ✅`, 'success');
+    toast(`${fmt(monto)} sumados a la deuda${bn}`, 'success');
   } else if (tipoMsd === 'compra') {
-    toast(`Compra a crédito de ${fmt(monto)} registrada — deuda aumentada ✅`, 'success');
+    toast(`Compra a crédito de ${fmt(monto)} registrada — deuda aumentada`, 'success');
   } else {
-    toast(`${fmt(monto)} sumados a la deuda ✅`, 'success');
+    toast(`${fmt(monto)} sumados a la deuda`, 'success');
   }
 
   closeModal('modal-sumar-deuda');
@@ -2304,7 +2311,7 @@ async function registrarCobro() {
   closeModal('modal-cobro');
   await saveDb(['prestamos', 'ingresos']);
   const destino = billNombre ? ` → ${billNombre}` : '';
-  toast(`Cobro registrado${destino} e ingreso generado ✅`, 'success');
+  toast(`Cobro registrado${destino} e ingreso generado`, 'success');
 }
 
 async function deleteCobro(pIdx, cId) {
@@ -2400,7 +2407,7 @@ async function confirmarAmpliarPrestamo() {
   closeModal('modal-ampliar-prestamo');
   renderAll();
   await saveDb(['prestamos', 'gastos']);
-  toast(`${fmt(monto)} desembolsados a ${p.nombre} y descontados de ${billNombre} ✅`, 'success');
+  toast(`${fmt(monto)} desembolsados a ${p.nombre} y descontados de ${billNombre}`, 'success');
 }
 
 function diasParaVencer(fechaStr) {
@@ -2725,7 +2732,7 @@ async function saveEditGastoFijo() {
   renderGastosFijos();
   await saveDb(['gastosFijos']);
   const vincMsg = deudaId ? ' — deuda vinculada →' : '';
-  toast('Gasto fijo actualizado ✅' + vincMsg, 'success');
+  toast('Gasto fijo actualizado' + vincMsg, 'success');
 }
 
 async function togglePagoGF(id) {
@@ -3749,7 +3756,7 @@ async function guardarInversion(id=null) {
         autoGenerado: true
       });
       const bn = bill ? ` (de ${bill.nombre})` : '';
-      toast(`Inversión creada${bn} · ${fmtCOP(invTotal)} descontado ✅`, 'success');
+      toast(`Inversión creada${bn} · ${fmtCOP(invTotal)} descontado`, 'success');
     } else {
       toast('Inversión creada', 'success');
     }
@@ -3891,7 +3898,7 @@ async function guardarVentaInv(invId, stockDisp) {
   closeInvModal();
   await saveDb(['ventasInv','ingresos']);
   const destino = billNombre ? ` → ${billNombre}` : '';
-  toast('Venta registrada' + destino + (gananciaVenta > 0 ? ' — ganancia: ' + fmtCOP(Math.round(gananciaVenta)) : '') + ' ✅','success');
+  toast('Venta registrada' + destino + (gananciaVenta > 0 ? ' — ganancia: ' + fmtCOP(Math.round(gananciaVenta)) : '') + ' ','success');
 }
 
 // ─── Detalle inversión (vista completa) ───────────────────────
@@ -4136,7 +4143,7 @@ async function cambiarEstadoInv(idx, estado) {
         cat: 'Inversión',
         autoGenerado: true
       });
-      toast(`Inversión cerrada — ganancia ${fmtCOP(Math.round(p.ganancia))} registrada ✅`, 'success');
+      toast(`Inversión cerrada — ganancia ${fmtCOP(Math.round(p.ganancia))} registrada`, 'success');
     } else {
       toast('Inversión cerrada', 'success');
     }
@@ -4315,7 +4322,7 @@ async function confirmarRenovarStock(invId, stockActual) {
   renderAll();
   await saveDb(['inversiones','gastos']);
   const bn = bill ? ` (de ${bill.nombre})` : '';
-  toast(`Stock renovado: +${nuevas} uds · ${fmtCOP(inversionNueva)} descontado${bn} ✅`, 'success');
+  toast(`Stock renovado: +${nuevas} uds · ${fmtCOP(inversionNueva)} descontado${bn}`, 'success');
 }
 
 // ─── These old single-file functions kept for backward compat ──
@@ -4446,7 +4453,7 @@ async function confirmarGastoAdicionalInv(invId) {
   renderDetalleInv(invId);
   await saveDb(['inversiones','gastos']);
   const bn = bill ? ` (de ${bill.nombre})` : '';
-  toast(`Gasto registrado${bn}: ${fmt(monto)} ✅`, 'success');
+  toast(`Gasto registrado${bn}: ${fmt(monto)}`, 'success');
 }
 
 async function eliminarGastoAdicionalInv(gastoId, invId) {
@@ -4826,7 +4833,7 @@ async function saveIngresoModal() {
   await saveDb(['ingresos']);
   hideLoading();
   renderAll();
-  toast('Ingreso registrado ✅', 'success');
+  toast('Ingreso registrado', 'success');
 }
 
 function openModalNuevoGasto() {
@@ -5263,7 +5270,7 @@ async function guardarEdicionMov() {
 
   hideLoading();
   renderAll();
-  toast('Movimiento actualizado ✅', 'success');
+  toast('Movimiento actualizado', 'success');
 }
 
 function pedirCodigoEliminarMov(tipo, id) {
@@ -5394,7 +5401,7 @@ async function guardarNuevoUsuario() {
     await window.__FB.createUsuario(id, nombre, pinHash);
     hideLoading();
     closeModal('modal-nuevo-usuario');
-    toast(`Usuario "${nombre}" creado ✅`, 'success');
+    toast(`Usuario "${nombre}" creado`, 'success');
     renderConfigUsuarios();
   } catch(e) {
     hideLoading();
@@ -5433,7 +5440,7 @@ async function guardarEdicionUsuario() {
     await window.__FB.updateUsuario(_editUserId, { nombre, modulos: modulosChecked });
     hideLoading();
     closeModal('modal-editar-usuario');
-    toast('Usuario actualizado ✅', 'success');
+    toast('Usuario actualizado', 'success');
     renderConfigUsuarios();
   } catch(e) {
     hideLoading();
@@ -5541,7 +5548,7 @@ async function saveGastoModal() {
   await saveDb(['gastos']);
   hideLoading();
   renderAll();
-  toast(gmf > 0 ? `Retiro registrado + 4x1000 (${fmt(gmf)}) ✅` : 'Retiro registrado ✅', 'success');
+  toast(gmf > 0 ? `Retiro registrado + 4x1000 (${fmt(gmf)})` : 'Retiro registrado', 'success');
 }
 
 function verMovimientosBilletera(id) {
