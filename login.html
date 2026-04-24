@@ -336,6 +336,16 @@ const COLORS=['#1a3a5c','#6b46c1','#065f46','#92400e','#991b1b','#0e7490'];
 try{await signInAnonymously(auth);}catch(e){console.warn(e.message);}
 try{const s=await getDocs(collection(db,'usuarios'));usuarios=s.docs.map(d=>({id:d.id,...d.data()})).filter(u=>u.activo!==false);}catch(e){}
 
+// Cargar perfil del admin desde Firebase (foto y nombre)
+try {
+  const cfgSnap = await getDoc(doc(db,'config','app'));
+  if (cfgSnap.exists()) {
+    const d = cfgSnap.data();
+    if (d.perfilNombre) localStorage.setItem('fp_perfil_nombre', d.perfilNombre);
+    if (d.perfilFoto)   localStorage.setItem('fp_perfil_foto',   d.perfilFoto);
+  }
+} catch(e) { console.warn('Perfil load error:', e); }
+
 function getAdminFoto(){ return localStorage.getItem('fp_perfil_foto')||''; }
 function getAdminNombre(){ return localStorage.getItem('fp_perfil_nombre')||'Administrador'; }
 

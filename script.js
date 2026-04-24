@@ -506,22 +506,28 @@ function updateFbStatus(connected) {
    ============================================================ */
 
 /* ── Perfil de usuario ── */
-function cargarPerfil() {
-  const nombre = localStorage.getItem('fp_perfil_nombre') || '';
-  const foto   = localStorage.getItem('fp_perfil_foto')   || '';
-  const u      = window.__CURRENT_USER;
+async function cargarPerfil() {
+  let nombre = localStorage.getItem('fp_perfil_nombre') || '';
+  let foto   = localStorage.getItem('fp_perfil_foto')   || '';
 
-  // Nombre a mostrar: perfil guardado o nombre del usuario
+  // Cargar desde Firebase si está disponible
+  if (window.__FB?.ready && window.__FB.loadPerfil) {
+    try {
+      const remote = await window.__FB.loadPerfil();
+      if (remote.nombre) { nombre = remote.nombre; localStorage.setItem('fp_perfil_nombre', nombre); }
+      if (remote.foto)   { foto   = remote.foto;   localStorage.setItem('fp_perfil_foto',   foto);   }
+    } catch(e) { console.warn('Perfil sync error:', e); }
+  }
+
+  const u = window.__CURRENT_USER;
   const nombreMostrar = nombre || (u && !u.isAdmin ? u.nombre : '') || 'Mi perfil';
 
-  // Sidebar
   const nameEl = document.getElementById('sidebar-user-name');
   if (nameEl) nameEl.textContent = nombreMostrar;
 
   const inp = document.getElementById('config-nombre-input');
   if (inp) inp.value = nombre;
 
-  // Foto
   _actualizarAvatarUI(foto);
 }
 
@@ -546,23 +552,40 @@ function _actualizarAvatarUI(fotoB64) {
   });
 }
 
-function guardarNombrePerfil() {
+async function guardarNombrePerfil() {
   const val = (document.getElementById('config-nombre-input')?.value || '').trim();
   if (!val) return toast('Escribe un nombre', 'error');
+
+  // Animación en el botón
+  const btn = document.querySelector('[onclick="guardarNombrePerfil()"]');
+  if (btn) { btn.textContent = '...'; btn.disabled = true; }
+
   localStorage.setItem('fp_perfil_nombre', val);
-  cargarPerfil();
+  if (window.__FB?.ready && window.__FB.savePerfil) {
+    try { await window.__FB.savePerfil(val, undefined); } catch(e) {}
+  }
+  await cargarPerfil();
+
+  if (btn) { btn.textContent = '✓ Guardado'; setTimeout(() => { btn.textContent = 'Guardar'; btn.disabled = false; }, 1500); }
   toast('Nombre actualizado ✅', 'success');
 }
 
-function subirFotoPerfil(input) {
+async function subirFotoPerfil(input) {
   const file = input.files[0];
   if (!file) return;
   if (file.size > 2 * 1024 * 1024) return toast('La imagen debe pesar menos de 2MB', 'error');
+
+  // Mostrar spinner en el avatar mientras sube
+  const avatarEl = document.getElementById('config-avatar');
+  const origContent = avatarEl?.innerHTML;
+  if (avatarEl) {
+    avatarEl.innerHTML = '<div class="loading-spinner" style="width:36px;height:36px;border-width:3px;border-color:rgba(37,99,235,.2);border-top-color:var(--accent);"></div>';
+  }
+
   const reader = new FileReader();
-  reader.onload = e => {
-    // Redimensionar a max 200px para no sobrecargar localStorage
+  reader.onload = async e => {
     const img = new Image();
-    img.onload = () => {
+    img.onload = async () => {
       const canvas = document.createElement('canvas');
       const MAX = 200;
       let w = img.width, h = img.height;
@@ -572,7 +595,25 @@ function subirFotoPerfil(input) {
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
       const b64 = canvas.toDataURL('image/jpeg', 0.8);
       localStorage.setItem('fp_perfil_foto', b64);
+
+      // Guardar en Firebase
+      if (window.__FB?.ready && window.__FB.savePerfil) {
+        try { await window.__FB.savePerfil(undefined, b64); } catch(e) {}
+      }
+
       _actualizarAvatarUI(b64);
+      // Restaurar el botón de cámara en el avatar
+      if (avatarEl) {
+        avatarEl.innerHTML = `
+          <svg id="config-avatar-icon" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <img id="config-avatar-img" src="${b64}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+        document.getElementById('config-avatar-icon').style.display = 'none';
+        document.getElementById('config-avatar-img').style.display = 'block';
+        // Animación de entrada
+        avatarEl.style.animation = 'none';
+        void avatarEl.offsetWidth;
+        avatarEl.style.animation = 'pageEnter .4s cubic-bezier(.22,.68,0,1.2)';
+      }
       toast('Foto actualizada ✅', 'success');
     };
     img.src = e.target.result;
@@ -790,6 +831,7 @@ window.addEventListener('DOMContentLoaded', () => {
   cargarPerfil();
   initApp().then(async () => {
     updateFbStatus(window.__FB && window.__FB.ready);
+    cargarPerfil(); // recargar perfil desde Firebase una vez conectado
     // Si es usuario no-admin, cargar sus módulos y verificar que sigue activo
     const cu = window.__CURRENT_USER;
     if (cu && !cu.isAdmin && window.__FB?.ready) {
