@@ -77,7 +77,7 @@
   const auth = getAuth(firebaseApp);
   try {
     await signInAnonymously(auth);
-    console.log('✅ Autenticación anónima exitosa');
+    console.log(' Autenticación anónima exitosa');
     // Notificar a la app que Firebase está conectado de verdad
     window.__fbAuthReady = true;
     window.dispatchEvent(new Event('firebase-auth-ready'));
@@ -220,7 +220,7 @@
   // ── Señal de que Firebase está listo ──
   window.__FB.ready = true;
   window.dispatchEvent(new Event('firebase-ready'));
-  console.log('✅ Firebase Firestore listo');
+  console.log(' Firebase Firestore listo');
 </script>
 
 
@@ -1607,7 +1607,7 @@
     <input type="hidden" id="m-inv-idx">
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modal-inv-actualizar')">Cancelar</button>
-      <button class="btn btn-success" onclick="actualizarInversion()">✅ Guardar actualización</button>
+      <button class="btn btn-success" onclick="actualizarInversion()"> Guardar actualización</button>
     </div>
   </div>
 </div>
