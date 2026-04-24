@@ -505,17 +505,23 @@ function updateFbStatus(connected) {
    SESIÓN & SEGURIDAD
    ============================================================ */
 
-/* ── Perfil de usuario ── */
-async function cargarPerfil() {
-  let nombre = localStorage.getItem('fp_perfil_nombre') || '';
-  let foto   = localStorage.getItem('fp_perfil_foto')   || '';
+/* ── Perfil de usuario — clave única por usuario ── */
+function _perfilKey(suffix) {
+  const u = window.__CURRENT_USER;
+  const uid = (!u || u.isAdmin) ? 'admin' : u.id;
+  return `fp_perfil_${uid}_${suffix}`;
+}
 
-  // Cargar desde Firebase si está disponible
+async function cargarPerfil() {
+  let nombre = localStorage.getItem(_perfilKey('nombre')) || '';
+  let foto   = localStorage.getItem(_perfilKey('foto'))   || '';
+
+  // Sincronizar desde Firebase
   if (window.__FB?.ready && window.__FB.loadPerfil) {
     try {
       const remote = await window.__FB.loadPerfil();
-      if (remote.nombre) { nombre = remote.nombre; localStorage.setItem('fp_perfil_nombre', nombre); }
-      if (remote.foto)   { foto   = remote.foto;   localStorage.setItem('fp_perfil_foto',   foto);   }
+      if (remote.nombre) { nombre = remote.nombre; localStorage.setItem(_perfilKey('nombre'), nombre); }
+      if (remote.foto)   { foto   = remote.foto;   localStorage.setItem(_perfilKey('foto'),   foto);   }
     } catch(e) { console.warn('Perfil sync error:', e); }
   }
 
@@ -560,7 +566,7 @@ async function guardarNombrePerfil() {
   const btn = document.querySelector('[onclick="guardarNombrePerfil()"]');
   if (btn) { btn.textContent = '...'; btn.disabled = true; }
 
-  localStorage.setItem('fp_perfil_nombre', val);
+  localStorage.setItem(_perfilKey('nombre'), val);
   if (window.__FB?.ready && window.__FB.savePerfil) {
     try { await window.__FB.savePerfil(val, undefined); } catch(e) {}
   }
@@ -594,7 +600,7 @@ async function subirFotoPerfil(input) {
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
       const b64 = canvas.toDataURL('image/jpeg', 0.8);
-      localStorage.setItem('fp_perfil_foto', b64);
+      localStorage.setItem(_perfilKey('foto'), b64);
 
       // Guardar en Firebase
       if (window.__FB?.ready && window.__FB.savePerfil) {

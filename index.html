@@ -192,14 +192,27 @@
     await setDoc(doc(db_firebase, 'usuarios', id), data, { merge: true });
   };
   window.__FB.savePerfil = async function(nombre, foto) {
+    const u = window.__CURRENT_USER;
     const data = {};
     if (nombre !== undefined) data.perfilNombre = nombre;
     if (foto    !== undefined) data.perfilFoto   = foto;
-    await setDoc(doc(db_firebase, 'config', 'app'), data, { merge: true });
+    if (!u || u.isAdmin) {
+      // Admin: guardar en config/app
+      await setDoc(doc(db_firebase, 'config', 'app'), data, { merge: true });
+    } else {
+      // Usuario: guardar en su propio documento
+      await setDoc(doc(db_firebase, 'usuarios', u.id), data, { merge: true });
+    }
   };
   window.__FB.loadPerfil = async function() {
+    const u = window.__CURRENT_USER;
     try {
-      const snap = await getDoc(doc(db_firebase, 'config', 'app'));
+      let snap;
+      if (!u || u.isAdmin) {
+        snap = await getDoc(doc(db_firebase, 'config', 'app'));
+      } else {
+        snap = await getDoc(doc(db_firebase, 'usuarios', u.id));
+      }
       return snap.exists() ? { nombre: snap.data().perfilNombre || '', foto: snap.data().perfilFoto || '' } : { nombre: '', foto: '' };
     } catch { return { nombre: '', foto: '' }; }
   };

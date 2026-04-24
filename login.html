@@ -336,18 +336,32 @@ const COLORS=['#1a3a5c','#6b46c1','#065f46','#92400e','#991b1b','#0e7490'];
 try{await signInAnonymously(auth);}catch(e){console.warn(e.message);}
 try{const s=await getDocs(collection(db,'usuarios'));usuarios=s.docs.map(d=>({id:d.id,...d.data()})).filter(u=>u.activo!==false);}catch(e){}
 
-// Cargar perfil del admin desde Firebase (foto y nombre)
+// Cargar perfil del admin desde Firebase
+let adminPerfilNombre = 'Administrador', adminPerfilFoto = '';
 try {
   const cfgSnap = await getDoc(doc(db,'config','app'));
   if (cfgSnap.exists()) {
     const d = cfgSnap.data();
-    if (d.perfilNombre) localStorage.setItem('fp_perfil_nombre', d.perfilNombre);
-    if (d.perfilFoto)   localStorage.setItem('fp_perfil_foto',   d.perfilFoto);
+    if (d.perfilNombre) adminPerfilNombre = d.perfilNombre;
+    if (d.perfilFoto)   adminPerfilFoto   = d.perfilFoto;
   }
 } catch(e) { console.warn('Perfil load error:', e); }
 
-function getAdminFoto(){ return localStorage.getItem('fp_perfil_foto')||''; }
-function getAdminNombre(){ return localStorage.getItem('fp_perfil_nombre')||'Administrador'; }
+// Cargar perfiles de usuarios desde sus documentos
+const usuariosConPerfil = await Promise.all(usuarios.map(async u => {
+  try {
+    const snap = await getDoc(doc(db,'usuarios',u.id));
+    if (snap.exists()) {
+      const d = snap.data();
+      return { ...u, perfilNombre: d.perfilNombre || '', perfilFoto: d.perfilFoto || '' };
+    }
+  } catch(e) {}
+  return { ...u, perfilNombre: '', perfilFoto: '' };
+}));
+usuarios = usuariosConPerfil;
+
+function getAdminFoto(){ return adminPerfilFoto; }
+function getAdminNombre(){ return adminPerfilNombre; }
 
 function avatarHTML(color, name, foto){
   if(foto) return `<img src="${foto}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
@@ -361,7 +375,7 @@ function renderUsers(){
   const adminFoto   = getAdminFoto();
   const items=[
     {user:null, name:adminNombre, role:'Administrador', color:'#1a3a5c', foto:adminFoto},
-    ...usuarios.map((u,i)=>({user:u, name:u.nombre, role:'Usuario', color:COLORS[(i+1)%COLORS.length], foto:''}))
+    ...usuarios.map((u,i)=>({user:u, name:u.perfilNombre||u.nombre, role:'Usuario', color:COLORS[(i+1)%COLORS.length], foto:u.perfilFoto||''}))
   ];
   items.forEach(({user,name,role,color,foto})=>{
     const btn=document.createElement('button');
