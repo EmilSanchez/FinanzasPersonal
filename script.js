@@ -52,8 +52,8 @@ function loadDbLocal() {
 }
 
 // ── Cargar datos (espera Firebase hasta 10s, fallback a localStorage) ──
-async function loadDb() {
-  showLoadingOverlay('Cargando datos...');
+async function loadDb(silent = false) {
+  if (!silent) showLoadingOverlay('Cargando datos...');
 
   // Si Firebase no está listo, esperar hasta 10 segundos
   if (!window.__FB?.ready) {
@@ -81,7 +81,7 @@ async function loadDb() {
         transferencias: data.transferencias || [],
       };
       localStorage.setItem('finanzas_pro_v2', JSON.stringify(STATE.db));
-      hideLoadingOverlay();
+      if (!silent) hideLoadingOverlay();
       console.log('✅ Datos cargados desde Firestore');
 
       // Sincronizar hash del PIN
@@ -99,14 +99,14 @@ async function loadDb() {
     } catch (err) {
       console.error('Error cargando Firebase, usando localStorage:', err);
       loadDbLocal();
-      hideLoadingOverlay();
+      if (!silent) hideLoadingOverlay();
       toast('Modo offline: usando datos locales', 'info');
     }
   } else {
     // Firebase no respondió en 10s — usar localStorage como fallback
     console.warn('Firebase no disponible, cargando desde localStorage');
     loadDbLocal();
-    hideLoadingOverlay();
+    if (!silent) hideLoadingOverlay();
     toast('Sin conexión: usando datos locales', 'info');
   }
 }
@@ -451,6 +451,16 @@ function horaActual() {
   });
 }
 
+function formatFechaLarga(fechaStr) {
+  if (!fechaStr) return '—';
+  try {
+    const [y, m, d] = fechaStr.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    return date.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+      .replace(/^\w/, c => c.toUpperCase());
+  } catch { return fechaStr; }
+}
+
 /* ── Firebase UI helpers ── */
 function showLoadingOverlay(msg = 'Cargando...') {
   const el = document.getElementById('fb-loading');
@@ -494,6 +504,123 @@ function updateFbStatus(connected) {
 /* ============================================================
    SESIÓN & SEGURIDAD
    ============================================================ */
+
+/* ── Perfil de usuario ── */
+function cargarPerfil() {
+  const nombre = localStorage.getItem('fp_perfil_nombre') || '';
+  const foto   = localStorage.getItem('fp_perfil_foto')   || '';
+  const u      = window.__CURRENT_USER;
+
+  // Nombre a mostrar: perfil guardado o nombre del usuario
+  const nombreMostrar = nombre || (u && !u.isAdmin ? u.nombre : '') || 'Mi perfil';
+
+  // Sidebar
+  const nameEl = document.getElementById('sidebar-user-name');
+  if (nameEl) nameEl.textContent = nombreMostrar;
+
+  const inp = document.getElementById('config-nombre-input');
+  if (inp) inp.value = nombre;
+
+  // Foto
+  _actualizarAvatarUI(foto);
+}
+
+function _actualizarAvatarUI(fotoB64) {
+  const ids = [
+    { img: 'sidebar-avatar-img', icon: 'sidebar-avatar-icon' },
+    { img: 'config-avatar-img',  icon: 'config-avatar-icon'  },
+  ];
+  ids.forEach(({ img, icon }) => {
+    const imgEl  = document.getElementById(img);
+    const iconEl = document.getElementById(icon);
+    if (imgEl && iconEl) {
+      if (fotoB64) {
+        imgEl.src = fotoB64;
+        imgEl.style.display = 'block';
+        iconEl.style.display = 'none';
+      } else {
+        imgEl.style.display = 'none';
+        iconEl.style.display = '';
+      }
+    }
+  });
+}
+
+function guardarNombrePerfil() {
+  const val = (document.getElementById('config-nombre-input')?.value || '').trim();
+  if (!val) return toast('Escribe un nombre', 'error');
+  localStorage.setItem('fp_perfil_nombre', val);
+  cargarPerfil();
+  toast('Nombre actualizado ✅', 'success');
+}
+
+function subirFotoPerfil(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) return toast('La imagen debe pesar menos de 2MB', 'error');
+  const reader = new FileReader();
+  reader.onload = e => {
+    // Redimensionar a max 200px para no sobrecargar localStorage
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const MAX = 200;
+      let w = img.width, h = img.height;
+      if (w > h) { if (w > MAX) { h = h * MAX / w; w = MAX; } }
+      else        { if (h > MAX) { w = w * MAX / h; h = MAX; } }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const b64 = canvas.toDataURL('image/jpeg', 0.8);
+      localStorage.setItem('fp_perfil_foto', b64);
+      _actualizarAvatarUI(b64);
+      toast('Foto actualizada ✅', 'success');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+
+/* ── Sistema universal de confirmación con PIN del usuario ── */
+let _confirmPinCallback = null;
+
+function pedirPinParaAccion(titulo, callback) {
+  _confirmPinCallback = callback;
+  const t = document.getElementById('confirm-pin-titulo');
+  const inp = document.getElementById('confirm-pin-input');
+  const err = document.getElementById('confirm-pin-error');
+  if (t) t.textContent = titulo;
+  if (inp) inp.value = '';
+  if (err) { err.style.display = 'none'; err.textContent = ''; }
+  openModal('modal-confirm-pin');
+  setTimeout(() => { if (inp) inp.focus(); }, 150);
+}
+
+async function confirmarAccionConPin() {
+  const inp = document.getElementById('confirm-pin-input');
+  const err = document.getElementById('confirm-pin-error');
+  const entered = inp?.value?.trim() || '';
+  if (!entered) return;
+
+  const enteredHash = await sha256(entered);
+  const u = window.__CURRENT_USER;
+
+  let correctHash;
+  if (!u || u.isAdmin) {
+    correctHash = localStorage.getItem('fp_pin_hash');
+  } else {
+    // Usuario: leer de Firebase
+    try { correctHash = await window.__FB.loadPin(); } catch(e) { correctHash = null; }
+  }
+
+  if (enteredHash === correctHash) {
+    closeModal('modal-confirm-pin');
+    if (_confirmPinCallback) { _confirmPinCallback(); _confirmPinCallback = null; }
+  } else {
+    if (err) { err.textContent = 'PIN incorrecto.'; err.style.display = 'block'; }
+    if (inp) { inp.value = ''; inp.classList.add('mov-del-shake'); setTimeout(() => inp.classList.remove('mov-del-shake'), 500); }
+  }
+}
 
 /* ── Formateador de monto en tiempo real (ej: 1,000,000) ── */
 function fmtMontoInput(input) {
@@ -563,6 +690,42 @@ function sessionUpdateTimer() {
 
 
 
+async function recargarApp() {
+  const page  = STATE.currentPage || 'dashboard';
+  const param = STATE.navParam    || null;
+  const btn   = document.querySelector('[onclick="recargarApp()"]');
+
+  // Mostrar 3 puntitos saltando
+  let dotsEl = null;
+  if (btn) {
+    const svg = btn.querySelector('svg');
+    if (svg) svg.style.display = 'none';
+    dotsEl = document.createElement('span');
+    dotsEl.id = 'reload-dots';
+    dotsEl.innerHTML = `<span class="rdot"></span><span class="rdot"></span><span class="rdot"></span>`;
+    dotsEl.style.cssText = 'display:flex;align-items:center;gap:3px;';
+    btn.appendChild(dotsEl);
+  }
+
+  try {
+    await loadDb(true);
+    renderAll();
+    // Forzar animación de entrada al actualizar
+    const pageEl2 = document.getElementById('page-' + page);
+    if (pageEl2) { pageEl2.classList.remove('page-enter'); void pageEl2.offsetWidth; pageEl2.classList.add('page-enter'); pageEl2.addEventListener('animationend', () => pageEl2.classList.remove('page-enter'), { once: true }); }
+    navigate(page, param);
+    toast('Datos actualizados ✅', 'success');
+  } catch(e) {
+    toast('Error al actualizar', 'error');
+  } finally {
+    if (btn) {
+      const svg = btn.querySelector('svg');
+      if (svg) svg.style.display = '';
+      if (dotsEl) dotsEl.remove();
+    }
+  }
+}
+
 function lockApp() {
   sessionClear();
   window.location.replace('login.html');
@@ -624,6 +787,7 @@ async function changePin() {
 window.addEventListener('DOMContentLoaded', () => {
   _scheduleSessionExpiry();
   setInterval(sessionUpdateTimer, 1000);
+  cargarPerfil();
   initApp().then(async () => {
     updateFbStatus(window.__FB && window.__FB.ready);
     // Si es usuario no-admin, cargar sus módulos y verificar que sigue activo
@@ -684,6 +848,14 @@ async function initApp() {
   populateCatFilters();
   populateGFMesSel();
   renderAll();
+
+  // Restaurar última página visitada
+  try {
+    const sess = JSON.parse(localStorage.getItem('fp_session') || '{}');
+    if (sess.lastPage && sess.lastPage !== 'dashboard') {
+      navigate(sess.lastPage, sess.lastParam || null);
+    }
+  } catch(e) {}
 }
 
 function setDateLabels() {
@@ -718,9 +890,22 @@ const PAGE_TITLES = {
 function navigate(page, param=null) {
   STATE.currentPage = page;
   STATE.navParam = param;
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  // Persistir página actual en sessionStorage
+  try {
+    const sess = JSON.parse(localStorage.getItem('fp_session') || '{}');
+    sess.lastPage = page;
+    sess.lastParam = param || null;
+    localStorage.setItem('fp_session', JSON.stringify(sess));
+  } catch(e) {}
+  document.querySelectorAll('.page').forEach(p => { p.classList.remove('active'); p.classList.remove('page-enter'); });
   const pageEl = document.getElementById('page-' + page);
-  if(pageEl) pageEl.classList.add('active');
+  if (pageEl) {
+    pageEl.classList.add('active');
+    // Forzar reflow para que la animación se dispare siempre
+    void pageEl.offsetWidth;
+    pageEl.classList.add('page-enter');
+    pageEl.addEventListener('animationend', () => pageEl.classList.remove('page-enter'), { once: true });
+  }
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   const basePage = page.split('-')[0];
   const navBtn = document.querySelector(`.nav-btn[data-page="${page}"]`) ||
@@ -1512,6 +1697,7 @@ async function saveDeuda() {
   clearForm(['d-nombre','d-total','d-cuota','d-interes']);
   document.getElementById('d-tipo').value = 'compra';
   onDeudaTipoChange();
+  closeModal('modal-nueva-deuda');
   renderAll();
   await saveDb(['deudas','ingresos']);
 }
@@ -1564,23 +1750,25 @@ async function registrarAbono() {
 }
 
 async function deleteDeuda(idx) {
-  if (!confirm('¿Eliminar esta deuda y su historial de pagos?')) return;
-  STATE.db.deudas.splice(idx, 1);
-  renderAll();
-  await saveDb(['deudas']);
-  toast('Deuda eliminada', 'info');
+  pedirPinParaAccion('Eliminar deuda', async () => {
+    STATE.db.deudas.splice(idx, 1);
+    renderAll();
+    await saveDb(['deudas']);
+    toast('Deuda eliminada', 'info');
+  });
 }
 
 async function deleteAbono(dIdx, pId) {
-  if (!confirm('¿Eliminar este abono?')) return;
-  const d = STATE.db.deudas[dIdx];
-  const p = d.pagos.find(p => p.id === pId);
-  if (!p) return;
-  d.pagado -= p.monto;
-  d.pagos   = d.pagos.filter(p2 => p2.id !== pId);
-  renderAll();
-  await saveDb(['deudas','gastos']);
-  toast('Abono eliminado', 'info');
+  pedirPinParaAccion('Eliminar abono', async () => {
+    const d = STATE.db.deudas[dIdx];
+    const p = d.pagos.find(p => p.id === pId);
+    if (!p) return;
+    d.pagado -= p.monto;
+    d.pagos   = d.pagos.filter(p2 => p2.id !== pId);
+    renderAll();
+    await saveDb(['deudas','gastos']);
+    toast('Abono eliminado', 'info');
+  });
 }
 
 // ══ Editar deuda básica ══
@@ -1699,17 +1887,17 @@ async function confirmarSumarDeuda() {
 }
 
 async function deleteDesembolso(dIdx, desId) {
-  if (!confirm('¿Eliminar este desembolso adicional? El monto se restará de la deuda.')) return;
-  const d = STATE.db.deudas[dIdx];
-  if (!d || !d.desembolsos) return;
-  const des = d.desembolsos.find(x => x.id === desId);
-  if (!des) return;
-  // Reducir el total de la deuda
-  d.total = Math.max(0, (d.total || 0) - des.monto);
-  d.desembolsos = d.desembolsos.filter(x => x.id !== desId);
-  renderAll();
-  await saveDb(['deudas']);
-  toast('Desembolso eliminado', 'info');
+  pedirPinParaAccion('Eliminar saldo adicional', async () => {
+    const d = STATE.db.deudas[dIdx];
+    if (!d || !d.desembolsos) return;
+    const des = d.desembolsos.find(x => x.id === desId);
+    if (!des) return;
+    d.total = Math.max(0, (d.total || 0) - des.monto);
+    d.desembolsos = d.desembolsos.filter(x => x.id !== desId);
+    renderAll();
+    await saveDb(['deudas']);
+    toast('Saldo adicional eliminado', 'info');
+  });
 }
 
 function renderDeudas() {
@@ -1730,10 +1918,12 @@ function renderDeudas() {
   }
 
   const tab = window._deudasTab || 'pendientes';
+  const q = (document.getElementById('deudas-search')?.value || '').toLowerCase().trim();
   const todosDeudas = STATE.db.deudas;
   const pendientes = todosDeudas.filter(d => Math.max(0, d.total - (d.pagado||0)) > 0);
   const pagadas    = todosDeudas.filter(d => Math.max(0, d.total - (d.pagado||0)) === 0);
-  const lista = tab === 'pagadas' ? pagadas : pendientes;
+  const listaBase  = tab === 'pagadas' ? pagadas : pendientes;
+  const lista = q ? listaBase.filter(d => d.nombre?.toLowerCase().includes(q)) : listaBase;
 
   // Update tab buttons
   const tPend = document.getElementById('deudas-tab-pend');
@@ -1753,95 +1943,126 @@ function renderDeudas() {
   empty.style.display = 'none';
 
   container.innerHTML = lista.map((d, i) => {
-    const realIdx = STATE.db.deudas.indexOf(d);
+    const realIdx  = STATE.db.deudas.indexOf(d);
     const falta    = Math.max(0, d.total - (d.pagado || 0));
     const pct      = Math.min(100, Math.round((d.pagado || 0) / d.total * 100));
     const terminada = falta === 0;
-    const cuotasRest = d.cuota ? Math.ceil(falta / d.cuota) : '—';
+    const cuotasRest = d.cuota ? Math.ceil(falta / d.cuota) : null;
+    const expandId = `debt-expand-${realIdx}`;
 
     return `
-    <div class="debt-card">
-      <div class="debt-header">
-        <div>
-          <div class="debt-name">${d.nombre}</div>
-          <div style="font-size:.8rem;color:var(--muted);margin-top:2px;">Desde ${d.fecha}</div>
+    <div class="debt-card" style="padding:0;overflow:hidden;">
+      <!-- Cabecera siempre visible: click para expandir -->
+      <div onclick="toggleDeudaExpand('${expandId}')" style="display:flex;align-items:center;gap:14px;padding:16px 18px;cursor:pointer;user-select:none;">
+        <!-- Indicador progreso circular mini -->
+        <div style="position:relative;width:44px;height:44px;flex-shrink:0;">
+          <svg width="44" height="44" viewBox="0 0 44 44">
+            <circle cx="22" cy="22" r="18" fill="none" stroke="var(--border)" stroke-width="3"/>
+            <circle cx="22" cy="22" r="18" fill="none"
+              stroke="${terminada ? 'var(--green)' : pct > 60 ? 'var(--yellow)' : 'var(--red)'}"
+              stroke-width="3" stroke-linecap="round"
+              stroke-dasharray="${(2*Math.PI*18).toFixed(1)}"
+              stroke-dashoffset="${((1 - pct/100) * 2*Math.PI*18).toFixed(1)}"
+              transform="rotate(-90 22 22)"/>
+          </svg>
+          <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;color:var(--text);">${pct}%</span>
         </div>
-        <span class="badge ${terminada ? 'badge-green' : 'badge-red'}">${terminada ? 'Cancelada' : 'Pendiente'}</span>
-      </div>
-      <div class="debt-meta">
-        <div class="debt-meta-item">
-          <div class="debt-meta-label">Total deuda</div>
-          <div class="debt-meta-value">${fmt(d.total)}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:.95rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.nombre}</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:2px;">Desde ${formatFechaLarga(d.fecha)}</div>
         </div>
-        <div class="debt-meta-item">
-          <div class="debt-meta-label">Pagado</div>
-          <div class="debt-meta-value" style="color:var(--green)">${fmt(d.pagado||0)}</div>
+        <div style="text-align:right;flex-shrink:0;">
+          <div style="font-weight:700;font-size:1rem;color:${terminada?'var(--green)':'var(--red)'};">${fmt(falta)}</div>
+          <div style="font-size:.7rem;color:var(--muted);">falta pagar</div>
         </div>
-        <div class="debt-meta-item">
-          <div class="debt-meta-label">Falta</div>
-          <div class="debt-meta-value" style="color:${terminada?'var(--green)':'var(--red)'}">${fmt(falta)}</div>
-        </div>
-        <div class="debt-meta-item">
-          <div class="debt-meta-label">Cuota sugerida</div>
-          <div class="debt-meta-value">${d.cuota ? fmt(d.cuota) : '—'}</div>
-        </div>
-        <div class="debt-meta-item">
-          <div class="debt-meta-label">Próximo pago</div>
-          <div class="debt-meta-value">${d.prox || '—'}</div>
-        </div>
-        <div class="debt-meta-item">
-          <div class="debt-meta-label">Cuotas restantes</div>
-          <div class="debt-meta-value">${cuotasRest}</div>
-        </div>
-      </div>
-      <div class="progress-wrap">
-        <div style="display:flex;justify-content:space-between;font-size:.78rem;color:var(--muted);margin-bottom:4px;">
-          <span>Progreso de pago</span><span>${pct}%</span>
-        </div>
-        <div class="progress-bar">
-          <div class="progress-fill" style="width:${pct}%;background:${terminada ? 'var(--green)' : pct > 60 ? 'var(--yellow)' : 'var(--red)'}"></div>
-        </div>
-      </div>
-      <div class="debt-actions">
-        ${!terminada ? `<button class="btn btn-success btn-sm" onclick="openAbonar(${realIdx})">Registrar abono</button>` : ''}
-        <button class="btn btn-ghost btn-sm" onclick="openSumarDeuda(${realIdx})" title="Agregar más saldo">Agregar saldo</button>
-        <button class="btn btn-ghost btn-sm" onclick="openEditDeuda(${realIdx})">Editar</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteDeuda(${realIdx})">Eliminar</button>
+        <span class="badge ${terminada ? 'badge-green' : 'badge-red'}" style="flex-shrink:0;">${terminada ? '✓' : 'Pendiente'}</span>
+        <svg id="${expandId}-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2.5" style="flex-shrink:0;transition:transform .25s;"><polyline points="6 9 12 15 18 9"/></svg>
       </div>
 
-      ${(d.desembolsos && d.desembolsos.length) ? `
-        <div class="payment-history" style="border-top:2px dashed var(--accent-light);padding-top:10px;margin-top:10px;">
-          <div class="payment-history-title" style="color:var(--accent);">Desembolsos adicionales (${d.desembolsos.length})</div>
-          ${d.desembolsos.slice().reverse().map(des => `
-            <div class="payment-item">
-              <span style="display:flex;flex-direction:column;gap:2px;">
-                <span>${des.fecha}</span>
-                <span style="color:var(--muted);font-size:.8rem;">${des.desc}</span>
-              </span>
-              <span style="display:flex;align-items:center;gap:8px;">
-                <span style="color:var(--accent);font-weight:600;">+${fmt(des.monto)}</span>
-                <button class="btn btn-danger btn-sm" style="padding:2px 7px;font-size:.72rem" onclick="deleteDesembolso(${realIdx},'${des.id}')">&#x2715;</button>
-              </span>
-            </div>`).join('')}
-        </div>` : ''}
+      <!-- Contenido expandible -->
+      <div id="${expandId}" style="display:none;border-top:1px solid var(--border);">
+        <!-- Stats -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-bottom:1px solid var(--border);">
+          <div style="padding:12px 16px;border-right:1px solid var(--border);">
+            <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px;">Total deuda</div>
+            <div style="font-weight:700;font-size:.95rem;color:var(--text);">${fmt(d.total)}</div>
+          </div>
+          <div style="padding:12px 16px;border-right:1px solid var(--border);">
+            <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px;">Pagado</div>
+            <div style="font-weight:700;font-size:.95rem;color:var(--green);">${fmt(d.pagado||0)}</div>
+          </div>
+          <div style="padding:12px 16px;">
+            <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px;">Cuota sugerida</div>
+            <div style="font-weight:700;font-size:.95rem;color:var(--text);">${d.cuota ? fmt(d.cuota) : '—'}</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-bottom:1px solid var(--border);">
+          <div style="padding:12px 16px;border-right:1px solid var(--border);">
+            <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px;">Próximo pago</div>
+            <div style="font-weight:600;font-size:.85rem;color:var(--text);">${d.prox ? formatFechaLarga(d.prox) : '—'}</div>
+          </div>
+          <div style="padding:12px 16px;border-right:1px solid var(--border);">
+            <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px;">Cuotas restantes</div>
+            <div style="font-weight:700;font-size:.95rem;color:var(--text);">${cuotasRest ?? '—'}</div>
+          </div>
+          <div style="padding:12px 16px;">
+            <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px;">Interés anual</div>
+            <div style="font-weight:700;font-size:.95rem;color:var(--text);">${d.interes ? d.interes + '%' : '—'}</div>
+          </div>
+        </div>
 
-      ${d.pagos.length ? `
-        <div class="payment-history">
-          <div class="payment-history-title">Historial de pagos (${d.pagos.length})</div>
+        <!-- Acciones -->
+        <div style="display:flex;gap:8px;padding:14px 16px;flex-wrap:wrap;border-bottom:1px solid var(--border);">
+          ${!terminada ? `<button class="btn btn-success btn-sm" onclick="openAbonar(${realIdx})">+ Registrar abono</button>` : ''}
+          <button class="btn btn-ghost btn-sm" onclick="openSumarDeuda(${realIdx})">Agregar saldo</button>
+          <button class="btn btn-ghost btn-sm" onclick="openEditDeuda(${realIdx})">Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteDeuda(${realIdx})">Eliminar</button>
+        </div>
+
+        <!-- Historial de pagos -->
+        ${d.pagos.length ? `
+        <div style="padding:14px 16px;">
+          <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:10px;">Historial de abonos (${d.pagos.length})</div>
           ${d.pagos.slice().reverse().map(p => `
-            <div class="payment-item">
-              <span style="display:flex;flex-direction:column;gap:2px;">
-                <span>${p.fecha}${p.nota ? ' — ' + p.nota : ''}</span>
-                ${p.autoGastoFijoId ? `<span style="font-size:.7rem;color:var(--accent);">Abono automático desde gasto fijo</span>` : ''}
-              </span>
-              <span style="display:flex;align-items:center;gap:8px;">
-                <span style="color:var(--green)">${fmt(p.monto)}</span>
-                ${!p.autoGastoFijoId ? `<button class="btn btn-danger btn-sm" style="padding:2px 7px;font-size:.72rem" onclick="deleteAbono(${realIdx},'${p.id}')">&#x2715;</button>` : ''}
-              </span>
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-light);">
+              <div style="width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;"></div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:.83rem;font-weight:600;color:var(--text);">${formatFechaLarga(p.fecha)}</div>
+                ${p.nota ? `<div style="font-size:.73rem;color:var(--muted);">${p.nota}</div>` : ''}
+                ${p.autoGastoFijoId ? `<div style="font-size:.7rem;color:var(--accent);">Abono automático desde gasto fijo</div>` : ''}
+              </div>
+              <span style="font-weight:700;color:var(--green);font-size:.9rem;flex-shrink:0;">${fmt(p.monto)}</span>
+              ${!p.autoGastoFijoId ? `<button onclick="deleteAbono(${realIdx},'${p.id}')" style="background:none;border:none;cursor:pointer;color:var(--light);padding:2px 5px;border-radius:4px;font-size:.8rem;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--light)'">✕</button>` : ''}
             </div>`).join('')}
         </div>` : ''}
+
+        <!-- Desembolsos adicionales -->
+        ${(d.desembolsos && d.desembolsos.length) ? `
+        <div style="padding:14px 16px;border-top:1px solid var(--border);">
+          <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-bottom:10px;">Saldo adicional agregado (${d.desembolsos.length})</div>
+          ${d.desembolsos.slice().reverse().map(des => `
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-light);">
+              <div style="width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;"></div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:.83rem;font-weight:600;color:var(--text);">${formatFechaLarga(des.fecha)}</div>
+                ${des.desc ? `<div style="font-size:.73rem;color:var(--muted);">${des.desc}</div>` : ''}
+              </div>
+              <span style="font-weight:700;color:var(--accent);font-size:.9rem;flex-shrink:0;">+${fmt(des.monto)}</span>
+              <button onclick="deleteDesembolso(${realIdx},'${des.id}')" style="background:none;border:none;cursor:pointer;color:var(--light);padding:2px 5px;border-radius:4px;font-size:.8rem;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--light)'">✕</button>
+            </div>`).join('')}
+        </div>` : ''}
+      </div>
     </div>`;
   }).join('');
+}
+
+function toggleDeudaExpand(id) {
+  const el   = document.getElementById(id);
+  const icon = document.getElementById(id + '-icon');
+  if (!el) return;
+  const open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : 'block';
+  if (icon) icon.style.transform = open ? '' : 'rotate(180deg)';
 }
 
 function setDeudasTab(tab) {
@@ -1930,6 +2151,17 @@ function renderPass(search = '') {
 /* ============================================================
    PRÉSTAMOS A TERCEROS
    ============================================================ */
+function openModalNuevoPrestamo() {
+  ['pr-nombre','pr-contacto','pr-monto','pr-interes','pr-desc'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('pr-fecha').value = today;
+  document.getElementById('pr-vence').value = '';
+  populateBilleteraSelects();
+  openModal('modal-nuevo-prestamo');
+}
+
 async function savePrestamo() {
   const nombre      = document.getElementById('pr-nombre').value.trim();
   const contacto    = document.getElementById('pr-contacto').value.trim();
@@ -1970,6 +2202,7 @@ async function savePrestamo() {
   });
 
   clearForm(['pr-nombre','pr-contacto','pr-monto','pr-vence','pr-interes','pr-desc']);
+  closeModal('modal-nuevo-prestamo');
   renderAll();
   await saveDb(['prestamos', 'gastos']);
   toast(`Préstamo registrado — descontado de ${billNombre}`, 'success');
@@ -2027,23 +2260,25 @@ async function registrarCobro() {
 }
 
 async function deleteCobro(pIdx, cId) {
-  if (!confirm('¿Eliminar este cobro?')) return;
-  const p = STATE.db.prestamos[pIdx];
-  const c = p.cobros.find(c => c.id === cId);
-  if (!c) return;
-  p.cobrado -= c.monto;
-  p.cobros   = p.cobros.filter(c2 => c2.id !== cId);
-  renderAll();
-  await saveDb(['prestamos']);
-  toast('Cobro eliminado', 'info');
+  pedirPinParaAccion('Eliminar cobro', async () => {
+    const p = STATE.db.prestamos[pIdx];
+    const c = p.cobros.find(c => c.id === cId);
+    if (!c) return;
+    p.cobrado -= c.monto;
+    p.cobros   = p.cobros.filter(c2 => c2.id !== cId);
+    renderAll();
+    await saveDb(['prestamos']);
+    toast('Cobro eliminado', 'info');
+  });
 }
 
 async function deletePrestamo(idx) {
-  if (!confirm('¿Eliminar este préstamo y su historial de cobros?')) return;
-  STATE.db.prestamos.splice(idx, 1);
-  renderAll();
-  await saveDb(['prestamos']);
-  toast('Préstamo eliminado', 'info');
+  pedirPinParaAccion('Eliminar préstamo', async () => {
+    STATE.db.prestamos.splice(idx, 1);
+    renderAll();
+    await saveDb(['prestamos']);
+    toast('Préstamo eliminado', 'info');
+  });
 }
 
 // ══ Ampliar préstamo existente (prestar más a la misma persona) ══
@@ -2177,97 +2412,113 @@ function renderPrestamos() {
   }
   empty.style.display = 'none';
 
-  container.innerHTML = lista.map((p) => {
-    const i        = STATE.db.prestamos.indexOf(p);
-    const falta    = Math.max(0, p.totalConInteres - (p.cobrado || 0));
-    const pct      = Math.min(100, Math.round((p.cobrado || 0) / p.totalConInteres * 100));
-    const saldado  = falta === 0;
-    const dias     = diasParaVencer(p.vence);
-    let diasBadge  = '';
+  // Search filter
+  const qp = (document.getElementById('prestamos-search')?.value || '').toLowerCase().trim();
+  const listaFiltrada = qp ? lista.filter(p => p.nombre?.toLowerCase().includes(qp)) : lista;
+
+  if (!listaFiltrada.length) {
+    container.innerHTML = '<p style="color:var(--muted);font-size:.85rem;padding:16px 0;">No se encontraron préstamos.</p>';
+    return;
+  }
+
+  container.innerHTML = listaFiltrada.map((p) => {
+    const i       = STATE.db.prestamos.indexOf(p);
+    const falta   = Math.max(0, p.totalConInteres - (p.cobrado || 0));
+    const pct     = Math.min(100, Math.round((p.cobrado || 0) / p.totalConInteres * 100));
+    const saldado = falta === 0;
+    const dias    = diasParaVencer(p.vence);
+    const expandId = `prest-expand-${i}`;
+
+    let diasBadge = '';
     if (p.vence && !saldado) {
-      if (dias < 0)       diasBadge = `<span class="dias-badge dias-venc vencido-badge">Vencido hace ${Math.abs(dias)}d</span>`;
-      else if (dias <= 7) diasBadge = `<span class="dias-badge dias-soon">Vence en ${dias}d</span>`;
-      else                diasBadge = `<span class="dias-badge dias-ok">Vence en ${dias}d</span>`;
+      if (dias < 0)       diasBadge = `<span class="badge badge-red" style="font-size:.7rem;">Vencido hace ${Math.abs(dias)}d</span>`;
+      else if (dias <= 7) diasBadge = `<span class="badge" style="background:var(--yellow-light);color:var(--yellow);font-size:.7rem;">Vence en ${dias}d</span>`;
     }
 
     return `
-    <div class="prestamo-card">
-      <div class="prestamo-header">
-        <div>
-          <div class="prestamo-nombre">${p.nombre}</div>
-          ${p.contacto ? `<div class="prestamo-contact">${p.contacto}</div>` : ''}
-          ${p.desc     ? `<div class="prestamo-contact">${p.desc}</div>`     : ''}
+    <div class="debt-card" style="padding:0;overflow:hidden;">
+      <div onclick="toggleDeudaExpand('${expandId}')" style="display:flex;align-items:center;gap:14px;padding:16px 18px;cursor:pointer;user-select:none;">
+        <div style="position:relative;width:44px;height:44px;flex-shrink:0;">
+          <svg width="44" height="44" viewBox="0 0 44 44">
+            <circle cx="22" cy="22" r="18" fill="none" stroke="var(--border)" stroke-width="3"/>
+            <circle cx="22" cy="22" r="18" fill="none"
+              stroke="${saldado ? 'var(--green)' : pct > 60 ? 'var(--yellow)' : 'var(--accent)'}"
+              stroke-width="3" stroke-linecap="round"
+              stroke-dasharray="${(2*Math.PI*18).toFixed(1)}"
+              stroke-dashoffset="${((1 - pct/100) * 2*Math.PI*18).toFixed(1)}"
+              transform="rotate(-90 22 22)"/>
+          </svg>
+          <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;color:var(--text);">${pct}%</span>
         </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-          <span class="badge ${saldado ? 'badge-green' : 'badge-red'}">${saldado ? 'Saldado' : 'Pendiente'}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:.95rem;color:var(--text);">${p.nombre}</div>
+          <div style="font-size:.75rem;color:var(--muted);margin-top:2px;">${formatFechaLarga(p.fecha)}${p.contacto ? ' · ' + p.contacto : ''}</div>
           ${diasBadge}
         </div>
+        <div style="text-align:right;flex-shrink:0;">
+          <div style="font-weight:700;font-size:1rem;color:${saldado?'var(--green)':'var(--red)'};">${fmt(falta)}</div>
+          <div style="font-size:.7rem;color:var(--muted);">por cobrar</div>
+        </div>
+        <span class="badge ${saldado ? 'badge-green' : 'badge-red'}" style="flex-shrink:0;">${saldado ? '✓' : 'Pendiente'}</span>
+        <svg id="${expandId}-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2.5" style="flex-shrink:0;transition:transform .25s;"><polyline points="6 9 12 15 18 9"/></svg>
       </div>
-      <div class="prestamo-meta">
-        <div class="debt-meta-item">
-          <div class="debt-meta-label">Prestado</div>
-          <div class="debt-meta-value">${fmt(p.monto)}</div>
-        </div>
-        ${p.interes > 0 ? `
-        <div class="debt-meta-item">
-          <div class="debt-meta-label">Con interés (${p.interes}%)</div>
-          <div class="debt-meta-value" style="color:var(--yellow)">${fmt(p.totalConInteres)}</div>
-        </div>` : ''}
-        <div class="debt-meta-item">
-          <div class="debt-meta-label">Cobrado</div>
-          <div class="debt-meta-value" style="color:var(--green)">${fmt(p.cobrado||0)}</div>
-        </div>
-        <div class="debt-meta-item">
-          <div class="debt-meta-label">Por cobrar</div>
-          <div class="debt-meta-value" style="color:${saldado?'var(--green)':'var(--red)'}">${fmt(falta)}</div>
-        </div>
-        <div class="debt-meta-item">
-          <div class="debt-meta-label">Fecha préstamo</div>
-          <div class="debt-meta-value">${p.fecha}</div>
+
+      <div id="${expandId}" style="display:none;border-top:1px solid var(--border);">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-bottom:1px solid var(--border);">
+          <div style="padding:12px 16px;border-right:1px solid var(--border);">
+            <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px;">Prestado</div>
+            <div style="font-weight:700;font-size:.95rem;">${fmt(p.monto)}</div>
+          </div>
+          <div style="padding:12px 16px;border-right:1px solid var(--border);">
+            <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px;">Cobrado</div>
+            <div style="font-weight:700;font-size:.95rem;color:var(--green);">${fmt(p.cobrado||0)}</div>
+          </div>
+          <div style="padding:12px 16px;">
+            <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px;">${p.interes>0?'Con interés ('+p.interes+'%)':'Interés'}</div>
+            <div style="font-weight:700;font-size:.95rem;color:${p.interes>0?'var(--yellow)':'var(--text)'};">${p.interes>0?fmt(p.totalConInteres):'—'}</div>
+          </div>
         </div>
         ${p.vence ? `
-        <div class="debt-meta-item">
-          <div class="debt-meta-label">Fecha cobro</div>
-          <div class="debt-meta-value" style="color:${dias !== null && dias < 0 && !saldado ? 'var(--red)' : 'inherit'}">${p.vence}</div>
+        <div style="padding:10px 16px;border-bottom:1px solid var(--border);font-size:.82rem;color:var(--muted);">
+          <span>Fecha de cobro: </span><strong style="color:${dias!==null&&dias<0&&!saldado?'var(--red)':'var(--text)'};">${formatFechaLarga(p.vence)}</strong>
         </div>` : ''}
-      </div>
-      <div class="progress-wrap">
-        <div style="display:flex;justify-content:space-between;font-size:.78rem;color:var(--muted);margin-bottom:4px;">
-          <span>Progreso de cobro</span><span>${pct}%</span>
+        ${p.desc ? `<div style="padding:10px 16px;border-bottom:1px solid var(--border);font-size:.82rem;color:var(--muted);">${p.desc}</div>` : ''}
+
+        <div style="display:flex;gap:8px;padding:14px 16px;flex-wrap:wrap;border-bottom:1px solid var(--border);">
+          ${!saldado ? `<button class="btn btn-success btn-sm" onclick="openCobro(${i})">+ Registrar cobro</button>` : ''}
+          <button class="btn btn-ghost btn-sm" onclick="openAmpliarPrestamo(${i})">Prestar más</button>
+          <button class="btn btn-danger btn-sm" onclick="deletePrestamo(${i})">Eliminar</button>
         </div>
-        <div class="progress-bar">
-          <div class="progress-fill" style="width:${pct}%;background:${saldado?'var(--green)':pct>60?'var(--yellow)':'var(--accent)'}"></div>
-        </div>
-      </div>
-      <div class="debt-actions">
-        ${!saldado ? `<button class="btn btn-success btn-sm" onclick="openCobro(${i})">Registrar cobro</button>` : ''}
-        <button class="btn btn-ghost btn-sm" onclick="openAmpliarPrestamo(${i})" title="Prestar más dinero">Prestar más</button>
-        <button class="btn btn-danger btn-sm" onclick="deletePrestamo(${i})">Eliminar</button>
-      </div>
-      ${(p.desembolsos && p.desembolsos.length) ? `
-        <div class="payment-history" style="border-top:2px dashed var(--accent-light);padding-top:10px;margin-top:10px;">
-          <div class="payment-history-title" style="color:var(--accent);">Desembolsos adicionales (${p.desembolsos.length})</div>
-          ${p.desembolsos.slice().reverse().map(des => `
-            <div class="payment-item">
-              <span style="display:flex;flex-direction:column;gap:2px;">
-                <span>${des.fecha}</span>
-                <span style="color:var(--muted);font-size:.8rem;">${des.desc}</span>
-              </span>
-              <span style="color:var(--accent);font-weight:600;">+${fmt(des.monto)}</span>
-            </div>`).join('')}
-        </div>` : ''}
-      ${p.cobros.length ? `
-        <div class="payment-history">
-          <div class="payment-history-title">Historial de cobros (${p.cobros.length})</div>
+
+        ${p.cobros.length ? `
+        <div style="padding:14px 16px;">
+          <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:10px;">Historial de cobros (${p.cobros.length})</div>
           ${p.cobros.slice().reverse().map(c => `
-            <div class="cobro-item">
-              <span>${c.fecha}${c.nota ? ' — ' + c.nota : ''}</span>
-              <span style="display:flex;align-items:center;gap:8px;">
-                <span style="color:var(--green)">${fmt(c.monto)}</span>
-                <button class="btn btn-danger btn-sm" style="padding:2px 7px;font-size:.72rem" onclick="deleteCobro(${i},'${c.id}')">&#x2715;</button>
-              </span>
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-light);">
+              <div style="width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;"></div>
+              <div style="flex:1;">
+                <div style="font-size:.83rem;font-weight:600;">${formatFechaLarga(c.fecha)}</div>
+                ${c.nota?`<div style="font-size:.73rem;color:var(--muted);">${c.nota}</div>`:''}
+              </div>
+              <span style="font-weight:700;color:var(--green);font-size:.9rem;">${fmt(c.monto)}</span>
+              <button onclick="deleteCobro(${i},'${c.id}')" style="background:none;border:none;cursor:pointer;color:var(--light);padding:2px 5px;font-size:.8rem;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--light)'">✕</button>
             </div>`).join('')}
         </div>` : ''}
+
+        ${(p.desembolsos&&p.desembolsos.length) ? `
+        <div style="padding:14px 16px;border-top:1px solid var(--border);">
+          <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-bottom:10px;">Desembolsos adicionales (${p.desembolsos.length})</div>
+          ${p.desembolsos.slice().reverse().map(des => `
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-light);">
+              <div style="width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;"></div>
+              <div style="flex:1;">
+                <div style="font-size:.83rem;font-weight:600;">${formatFechaLarga(des.fecha)}</div>
+                ${des.desc?`<div style="font-size:.73rem;color:var(--muted);">${des.desc}</div>`:''}
+              </div>
+              <span style="font-weight:700;color:var(--accent);font-size:.9rem;">+${fmt(des.monto)}</span>
+            </div>`).join('')}
+        </div>` : ''}
+      </div>
     </div>`;
   }).join('');
   populateBilleteraSelects();
@@ -4988,15 +5239,19 @@ async function confirmarEliminarMov() {
   const err   = document.getElementById('mov-del-error');
   if (!modal || !inp) return;
 
-  const codigo = inp.value.trim();
-  if (codigo !== '2356') {
-    if (err) {
-      err.textContent = 'Código incorrecto. Inténtalo de nuevo.';
-      err.style.display = 'block';
-    }
+  const entered = inp.value.trim();
+  const enteredHash = await sha256(entered);
+  const u = window.__CURRENT_USER;
+  let correctHash;
+  if (!u || u.isAdmin) {
+    correctHash = localStorage.getItem('fp_pin_hash');
+  } else {
+    try { correctHash = await window.__FB.loadPin(); } catch(e) { correctHash = null; }
+  }
+  if (enteredHash !== correctHash) {
+    if (err) { err.textContent = 'PIN incorrecto.'; err.style.display = 'block'; }
     inp.value = '';
     inp.focus();
-    // Sacudir el input
     inp.classList.add('mov-del-shake');
     setTimeout(() => inp.classList.remove('mov-del-shake'), 500);
     return;
@@ -5039,6 +5294,7 @@ const MODULOS_DISPONIBLES = [
 ];
 
 function renderConfigUsuarios() {
+  cargarPerfil(); // refrescar nombre/foto al entrar a config
   const section = document.getElementById('config-usuarios-section');
   const lista   = document.getElementById('config-usuarios-lista');
   if (!section) return;
@@ -5153,10 +5409,12 @@ function pedirCodigoDesactivar(id, nombre, activo) {
 }
 
 async function confirmarDesactivarUsuario() {
-  const codigo = document.getElementById('du-codigo').value.trim();
+  const entered2 = document.getElementById('du-codigo').value.trim();
   const err    = document.getElementById('du-error');
-  if (codigo !== '2356') {
-    if (err) { err.textContent='Código incorrecto.'; err.style.display='block'; }
+  const enteredHash2 = await sha256(entered2);
+  const correctHash2 = localStorage.getItem('fp_pin_hash'); // solo admin puede desactivar
+  if (enteredHash2 !== correctHash2) {
+    if (err) { err.textContent='PIN incorrecto.'; err.style.display='block'; }
     document.getElementById('du-codigo').value = '';
     document.getElementById('du-codigo').classList.add('mov-del-shake');
     setTimeout(() => document.getElementById('du-codigo').classList.remove('mov-del-shake'), 500);
@@ -5173,6 +5431,20 @@ async function confirmarDesactivarUsuario() {
     hideLoading();
     toast('Error actualizando usuario', 'error');
   }
+}
+
+function openModalNuevaDeuda() {
+  // Limpiar campos
+  ['d-nombre','d-total','d-cuota','d-interes'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('d-fecha').value = today;
+  document.getElementById('d-prox').value  = today;
+  document.getElementById('d-tipo').value  = 'compra';
+  onDeudaTipoChange();
+  openModal('modal-nueva-deuda');
 }
 
 function clearMovFilters() {

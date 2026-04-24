@@ -232,9 +232,19 @@
   <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">
-      <h2><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M9 9h6a1 1 0 0 1 0 3H9a1 1 0 0 0 0 3h6"/></svg>Finanzas PRO</h2>
-      <span id="sidebar-date"></span>
+    <div class="sidebar-brand" style="display:flex;flex-direction:column;gap:12px;padding-bottom:16px;">
+      <span id="sidebar-date" style="font-size:.72rem;"></span>
+      <!-- Perfil -->
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div id="sidebar-avatar" style="width:42px;height:42px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;border:2px solid rgba(255,255,255,.15);">
+          <svg id="sidebar-avatar-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.8)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <img id="sidebar-avatar-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%;">
+        </div>
+        <div style="min-width:0;">
+          <div id="sidebar-user-name" style="font-weight:700;font-size:.9rem;color:var(--sidebar-text, rgba(255,255,255,.95));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Mi perfil</div>
+          <div style="font-size:.7rem;color:rgba(255,255,255,.45);">Administrador</div>
+        </div>
+      </div>
     </div>
     <ul class="nav-list">
       <li class="nav-item">
@@ -307,14 +317,18 @@
           <span id="fb-badge-dot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;"></span>
           <span id="fb-badge-txt">Firebase</span>
         </div>
-        <button class="btn btn-ghost btn-sm" onclick="lockApp()"><span class="topbar-lock-text">Bloquear</span></button>
+        <button title="Actualizar datos" onclick="recargarApp()" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:4px 6px;border-radius:6px;transition:color .15s;display:flex;align-items:center;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
+          <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        </button>
+        <button title="Bloquear" onclick="lockApp()" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:4px 6px;border-radius:6px;transition:color .15s;display:flex;align-items:center;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
+          <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </button>
       </div>
     </div>
 
     <!-- ====== DASHBOARD ====== -->
     <div class="page active" id="page-dashboard">
-      <p class="page-title">Resumen financiero</p>
-      <p class="page-sub" id="dash-month-label">Cargando...</p>
+      <p class="page-sub" id="dash-month-label" style="color:var(--muted);font-size:.82rem;margin-bottom:8px;">Cargando...</p>
 
       <!-- ═══ BALANCE PRINCIPAL — Siempre visible ═══ -->
       <div class="dash-balance-hero">
@@ -374,8 +388,7 @@
 
     <!-- ====== INGRESOS ====== -->
     <div class="page" id="page-ingresos">
-      <p class="page-title">Ingresos</p>
-      <p class="page-sub">Registra y controla tus fuentes de ingreso</p>
+      
 
       <div class="section">
         <div class="section-title" style="margin-bottom:16px;" id="ing-form-title">Nuevo ingreso</div>
@@ -460,8 +473,7 @@
 
     <!-- ====== GASTOS ====== -->
     <div class="page" id="page-gastos">
-      <p class="page-title">Gastos</p>
-      <p class="page-sub">Controla tus egresos y analiza en qué gastas más</p>
+      
 
       <div class="section">
         <div class="section-title" style="margin-bottom:16px;" id="gas-form-title">Nuevo gasto</div>
@@ -563,7 +575,7 @@
     <!-- ====== Movimientos ====== -->
 
     <div class="page" id="page-movimientos">
-      <p class="page-title">Movimientos</p>
+      
 
       <!-- Filtros + Botones inline -->
       <div class="section mov-filtros-section" style="display:flex;flex-direction:column;gap:10px;overflow:visible;">
@@ -819,73 +831,34 @@
 
     <!-- ====== DEUDAS ====== -->
     <div class="page" id="page-deudas">
-      <p class="page-title">Gestión de Deudas</p>
-      <p class="page-sub">Crea cronogramas de pago y rastrea el progreso de cada deuda</p>
 
-      <div class="section">
-        <div class="section-title" style="margin-bottom:16px;">Nueva deuda</div>
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Tipo de deuda *</label>
-            <select class="form-control" id="d-tipo" onchange="onDeudaTipoChange()">
-              <option value="compra">Compra a crédito</option>
-              <option value="prestamo">Préstamo de dinero recibido</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Nombre / Acreedor *</label>
-            <input type="text" class="form-control" id="d-nombre" placeholder="Ej: Banco, préstamo...">
-          </div>
-          <div class="form-group">
-            <label>Monto total *</label>
-            <input type="number" class="form-control" id="d-total" placeholder="0">
-          </div>
-          <div class="form-group">
-            <label>Fecha de inicio *</label>
-            <input type="date" class="form-control" id="d-fecha">
-          </div>
-          <div class="form-group">
-            <label>Cuota mensual sugerida</label>
-            <input type="number" class="form-control" id="d-cuota" placeholder="Opcional">
-          </div>
-          <div class="form-group">
-            <label>Próximo pago</label>
-            <input type="date" class="form-control" id="d-prox">
-          </div>
-          <div class="form-group">
-            <label>Tasa de interés % (anual)</label>
-            <input type="number" class="form-control" id="d-interes" placeholder="0" step="0.01">
-          </div>
-          <div class="form-group" id="d-billetera-group" style="display:none">
-            <label>Dinero recibido en (billetera)</label>
-            <select class="form-control" id="d-billetera">
-              <option value="">Sin asignar</option>
-            </select>
-            <small style="color:var(--muted);font-size:.72rem">El dinero del préstamo se sumará a esta billetera</small>
-          </div>
-        </div>
-        <div class="form-actions">
-          <button class="btn btn-primary" onclick="saveDeuda()">Crear deuda</button>
+      <!-- Barra de acciones -->
+      <div class="section" style="overflow:visible;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <input type="text" class="form-control" id="deudas-search" placeholder="Buscar deuda..." oninput="renderDeudas()" style="flex:1;min-width:160px;height:38px;">
+          <button onclick="openModalNuevaDeuda()" class="mov-btn-ingreso" style="height:38px;border-radius:8px;padding:0 16px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Nueva deuda
+          </button>
         </div>
       </div>
 
       <!-- Lista deudas -->
       <div id="deudas-lista"></div>
       <div id="deudas-empty" class="empty-state" style="display:none">
-        <div class="empty-icon" style="font-size:2rem;font-weight:300;color:var(--border)">&#8595;</div>
+        <div class="empty-icon" style="font-size:2rem;font-weight:300;color:var(--border)">⊖</div>
         <p>Sin deudas registradas. ¡Excelente!</p>
       </div>
     </div>
 
     <!-- ====== PRÉSTAMOS A TERCEROS ====== -->
     <div class="page" id="page-prestamos">
-      <p class="page-title">Préstamos a terceros</p>
-      <p class="page-sub">Registra el dinero que has prestado, cuándo cobrar y lleva el historial de cobros</p>
+      
 
       <!-- Resumen rápido -->
       <div class="stats-grid" id="prest-stats-grid">
         <div class="stat-card blue">
-          <div class="stat-icon-box"><span style="font-size:.9rem">&#x2194;</span></div>
+          <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
           <div class="stat-body">
             <div class="stat-label">Total prestado</div>
             <div class="stat-value" id="prest-total-val">$0</div>
@@ -893,7 +866,7 @@
           </div>
         </div>
         <div class="stat-card green">
-          <div class="stat-icon-box"><span style="font-size:.9rem">✓</span></div>
+          <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
           <div class="stat-body">
             <div class="stat-label">Total recuperado</div>
             <div class="stat-value" id="prest-cobrado-val">$0</div>
@@ -901,7 +874,7 @@
           </div>
         </div>
         <div class="stat-card red">
-          <div class="stat-icon-box"><span style="font-size:.9rem">…</span></div>
+          <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
           <div class="stat-body">
             <div class="stat-label">Por cobrar</div>
             <div class="stat-value" id="prest-pendiente-val">$0</div>
@@ -910,70 +883,28 @@
         </div>
       </div>
 
-      <div class="section">
-        <div class="section-title" style="margin-bottom:16px;">Nuevo préstamo</div>
-
-        <!-- Fila 1: Deudor + Contacto + Billetera -->
-        <div class="form-grid" style="grid-template-columns:2fr 1fr 1fr;margin-bottom:0;">
-          <div class="form-group">
-            <label>Nombre del deudor *</label>
-            <input type="text" class="form-control" id="pr-nombre" placeholder="Nombre completo">
-          </div>
-          <div class="form-group">
-            <label>Teléfono / Contacto</label>
-            <input type="text" class="form-control" id="pr-contacto" placeholder="Ej: 300 123 4567">
-          </div>
-          <div class="form-group">
-            <label>Sale de billetera *</label>
-            <select class="form-control" id="pr-billetera">
-              <option value="">— Selecciona billetera —</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Fila 2: Monto + Fecha préstamo + Fecha cobro + Interés -->
-        <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr 1fr;margin-bottom:0;">
-          <div class="form-group">
-            <label>Monto prestado *</label>
-            <input type="number" class="form-control" id="pr-monto" placeholder="0">
-          </div>
-          <div class="form-group">
-            <label>Fecha del préstamo *</label>
-            <input type="date" class="form-control" id="pr-fecha">
-          </div>
-          <div class="form-group">
-            <label>Fecha de cobro / vencimiento</label>
-            <input type="date" class="form-control" id="pr-vence">
-          </div>
-          <div class="form-group">
-            <label>Interés % (si aplica)</label>
-            <input type="number" class="form-control" id="pr-interes" placeholder="0" step="0.1">
-          </div>
-        </div>
-
-        <!-- Fila 3: Descripción -->
-        <div class="form-group" style="margin-bottom:16px;">
-          <label>Descripción / Motivo</label>
-          <input type="text" class="form-control" id="pr-desc" placeholder="Ej: Préstamo personal, mercancía...">
-        </div>
-
-        <div class="form-actions">
-          <button class="btn btn-primary" onclick="savePrestamo()">Registrar préstamo</button>
+      <!-- Barra de acciones -->
+      <div class="section" style="overflow:visible;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <input type="text" class="form-control" id="prestamos-search" placeholder="Buscar préstamo..." oninput="renderPrestamos()" style="flex:1;min-width:160px;height:38px;">
+          <button onclick="openModalNuevoPrestamo()" class="mov-btn-ingreso" style="height:38px;border-radius:8px;padding:0 16px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Nuevo préstamo
+          </button>
         </div>
       </div>
 
       <!-- Lista -->
       <div id="prestamos-lista"></div>
       <div id="prestamos-empty" class="empty-state" style="display:none">
-        <div class="empty-icon" style="font-size:2rem;font-weight:300;color:var(--border)">&#8596;</div>
+        <div class="empty-icon" style="font-size:2rem;font-weight:300;color:var(--border)">⊖</div>
         <p>Sin préstamos registrados aún.</p>
       </div>
     </div>
 
     <!-- ====== GASTOS FIJOS ====== -->
     <div class="page" id="page-fijos">
-      <p class="page-title">Gastos Fijos Mensuales</p>
-      <p class="page-sub">Tus compromisos de pago del mes — marca cuáles ya pagaste y cuáles están pendientes</p>
+      
 
       <!-- Resumen del mes -->
       <div class="gf-resumen" id="gf-resumen"></div>
@@ -1049,8 +980,7 @@
     <div class="page" id="page-inversiones">
       <div class="page-header-row">
         <div>
-          <p class="page-title">Inversiones</p>
-          <p class="page-sub" style="margin-bottom:0">Control de productos importados y otras inversiones</p>
+          
         </div>
         <button class="btn btn-primary" onclick="openModalNuevaInversion()">+ Nueva inversión</button>
       </div>
@@ -1152,8 +1082,7 @@
 
     <!-- ====== REPORTES ====== -->
     <div class="page" id="page-reportes">
-      <p class="page-title">Reportes & Métricas</p>
-      <p class="page-sub">Análisis visual de tus ingresos y gastos mes a mes</p>
+      
 
       <!-- Selector de periodo -->
       <div class="section" style="padding:14px 18px;margin-bottom:16px;">
@@ -1228,8 +1157,7 @@
     <div class="page" id="page-billeteras">
       <div class="page-header-row">
         <div>
-          <p class="page-title">Billeteras</p>
-          <p class="page-sub" style="margin-bottom:0">Controla dónde tienes tu dinero y lleva el saldo real de cada cuenta</p>
+          
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-ghost" onclick="openModalTransferencia()">Transferir</button>
@@ -1268,8 +1196,7 @@
 
     <!-- ====== CLAVES ====== -->
     <div class="page" id="page-claves">
-      <p class="page-title">Gestor de Contraseñas</p>
-      <p class="page-sub">Tus contraseñas guardadas de forma privada (sólo en este dispositivo)</p>
+      
 
       <div class="section">
         <div class="section-title" style="margin-bottom:16px;">Nueva contraseña</div>
@@ -1314,8 +1241,35 @@
 
       <!-- ====== CONFIGURACIÓN ====== -->
       <div class="page" id="page-config">
-        <p class="page-title">Configuración</p>
-        <p class="page-sub">Gestiona tu seguridad y datos</p>
+        
+
+        <!-- Perfil de usuario -->
+        <div class="section" style="max-width:520px;">
+          <div style="font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:14px;">Mi perfil</div>
+
+          <!-- Foto de perfil -->
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+            <div style="position:relative;">
+              <div id="config-avatar" style="width:72px;height:72px;border-radius:50%;background:var(--accent-light);display:flex;align-items:center;justify-content:center;overflow:hidden;border:3px solid var(--border);">
+                <svg id="config-avatar-icon" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <img id="config-avatar-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%;">
+              </div>
+              <button onclick="document.getElementById('config-foto-input').click()" style="position:absolute;bottom:-2px;right:-2px;width:26px;height:26px;border-radius:50%;background:var(--accent);border:2px solid var(--card);display:flex;align-items:center;justify-content:center;cursor:pointer;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              </button>
+              <input type="file" id="config-foto-input" accept="image/*" style="display:none;" onchange="subirFotoPerfil(this)">
+            </div>
+            <div style="flex:1;">
+              <div class="form-group" style="margin:0;">
+                <label>Nombre de perfil</label>
+                <div style="display:flex;gap:8px;margin-top:6px;">
+                  <input type="text" id="config-nombre-input" class="form-control" placeholder="Tu nombre..." style="height:40px;flex:1;">
+                  <button onclick="guardarNombrePerfil()" class="btn btn-primary btn-sm" style="white-space:nowrap;">Guardar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div class="section" style="max-width:520px;">
 
@@ -1923,6 +1877,163 @@
     <div class="modal-actions" style="padding:16px 24px;gap:10px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-nuevo-usuario')" style="flex:1;">Cancelar</button>
       <button onclick="guardarNuevoUsuario()" class="btn btn-primary" style="flex:2;">Crear usuario</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Nuevo Préstamo -->
+<div class="modal-overlay" id="modal-nuevo-prestamo">
+  <div class="modal" style="max-width:520px;width:100%;">
+    <div class="modal-title" style="display:flex;align-items:center;gap:10px;padding:20px 24px;">
+      <div style="width:36px;height:36px;background:#0f2d6b;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      </div>
+      <div>
+        <div style="font-size:1rem;font-weight:700;color:var(--text);">Nuevo préstamo</div>
+        <div style="font-size:.75rem;color:var(--muted);">Registra dinero que prestaste a alguien</div>
+      </div>
+      <button onclick="closeModal('modal-nuevo-prestamo')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+    </div>
+    <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:14px;">
+      <div class="form-group">
+        <label>Nombre del deudor *</label>
+        <input type="text" class="form-control" id="pr-nombre" placeholder="Nombre completo" style="height:44px;">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group">
+          <label>Teléfono / Contacto</label>
+          <input type="text" class="form-control" id="pr-contacto" placeholder="Ej: 300 123 4567" style="height:44px;">
+        </div>
+        <div class="form-group">
+          <label>Sale de billetera *</label>
+          <select class="form-control" id="pr-billetera" style="height:44px;">
+            <option value="">— Selecciona billetera —</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Monto prestado *</label>
+        <input type="number" class="form-control" id="pr-monto" placeholder="0" style="height:44px;">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group">
+          <label>Fecha del préstamo *</label>
+          <input type="date" class="form-control" id="pr-fecha" style="height:44px;">
+        </div>
+        <div class="form-group">
+          <label>Fecha de cobro</label>
+          <input type="date" class="form-control" id="pr-vence" style="height:44px;">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group">
+          <label>Interés % (si aplica)</label>
+          <input type="number" class="form-control" id="pr-interes" placeholder="0" step="0.1" style="height:44px;">
+        </div>
+        <div class="form-group">
+          <label>Descripción / Motivo</label>
+          <input type="text" class="form-control" id="pr-desc" placeholder="Ej: Préstamo personal..." style="height:44px;">
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions" style="padding:16px 24px;gap:10px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-nuevo-prestamo')" style="flex:1;">Cancelar</button>
+      <button onclick="savePrestamo()" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;">Registrar préstamo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Nueva Deuda -->
+<div class="modal-overlay" id="modal-nueva-deuda">
+  <div class="modal" style="max-width:520px;width:100%;">
+    <div class="modal-title" style="display:flex;align-items:center;gap:10px;padding:20px 24px;">
+      <div style="width:36px;height:36px;background:#0f2d6b;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </div>
+      <div>
+        <div style="font-size:1rem;font-weight:700;color:var(--text);">Nueva deuda</div>
+        <div style="font-size:.75rem;color:var(--muted);">Registra una deuda o préstamo recibido</div>
+      </div>
+      <button onclick="closeModal('modal-nueva-deuda')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+    </div>
+    <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:14px;">
+      <div class="form-group">
+        <label>Tipo de deuda *</label>
+        <select class="form-control" id="d-tipo" onchange="onDeudaTipoChange()" style="height:44px;">
+          <option value="compra">Compra a crédito</option>
+          <option value="prestamo">Préstamo de dinero recibido</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Nombre / Acreedor *</label>
+        <input type="text" class="form-control" id="d-nombre" placeholder="Ej: Banco, préstamo..." style="height:44px;">
+      </div>
+      <div class="form-group">
+        <label>Monto total *</label>
+        <input type="number" class="form-control" id="d-total" placeholder="0" style="height:44px;">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group">
+          <label>Fecha de inicio *</label>
+          <input type="date" class="form-control" id="d-fecha" style="height:44px;width:100%;">
+        </div>
+        <div class="form-group">
+          <label>Próximo pago</label>
+          <input type="date" class="form-control" id="d-prox" style="height:44px;width:100%;">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group">
+          <label>Cuota mensual sugerida</label>
+          <input type="number" class="form-control" id="d-cuota" placeholder="Opcional" style="height:44px;width:100%;">
+        </div>
+        <div class="form-group">
+          <label>Tasa de interés % (anual)</label>
+          <input type="number" class="form-control" id="d-interes" placeholder="0" step="0.01" style="height:44px;width:100%;">
+        </div>
+      </div>
+      <div class="form-group" id="d-billetera-group" style="display:none">
+        <label>Dinero recibido en (billetera)</label>
+        <select class="form-control" id="d-billetera" style="height:44px;">
+          <option value="">Sin asignar</option>
+        </select>
+        <small style="color:var(--muted);font-size:.72rem;">El dinero del préstamo se sumará a esta billetera</small>
+      </div>
+    </div>
+    <div class="modal-actions" style="padding:16px 24px;gap:10px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-nueva-deuda')" style="flex:1;">Cancelar</button>
+      <button onclick="saveDeuda()" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;">Crear deuda</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal confirmación PIN para eliminar -->
+<div class="modal-overlay" id="modal-confirm-pin">
+  <div class="modal" style="max-width:360px;width:100%;">
+    <div class="modal-title" style="display:flex;align-items:center;gap:10px;padding:20px 24px;">
+      <div style="width:36px;height:36px;background:var(--red);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+      </div>
+      <div>
+        <div style="font-size:.95rem;font-weight:700;color:var(--text);" id="confirm-pin-titulo">Eliminar</div>
+        <div style="font-size:.72rem;color:var(--muted);">Ingresa tu PIN de acceso para confirmar</div>
+      </div>
+      <button onclick="closeModal('modal-confirm-pin')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+    </div>
+    <div class="modal-body-wrap" style="padding:20px 24px;">
+      <div class="form-group">
+        <label style="font-size:.78rem;font-weight:600;color:var(--muted);display:block;margin-bottom:6px;">Tu PIN de acceso</label>
+        <input type="password" inputmode="numeric" maxlength="4" id="confirm-pin-input"
+          class="form-control"
+          style="text-align:center;font-size:1.4rem;letter-spacing:.4em;font-weight:700;height:52px;"
+          placeholder="••••"
+          onkeydown="if(event.key==='Enter') confirmarAccionConPin()">
+        <div id="confirm-pin-error" style="display:none;color:var(--red);font-size:.78rem;margin-top:6px;text-align:center;font-weight:600;"></div>
+      </div>
+    </div>
+    <div class="modal-actions" style="padding:16px 24px;gap:10px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-confirm-pin')" style="flex:1;">Cancelar</button>
+      <button onclick="confirmarAccionConPin()" class="btn btn-danger" style="flex:2;">Confirmar</button>
     </div>
   </div>
 </div>
