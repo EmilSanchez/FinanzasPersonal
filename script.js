@@ -3150,27 +3150,28 @@ function renderGastosFijos() {
     const deudaVinc = g.deudaId ? STATE.db.deudas.find(d => d.id === g.deudaId) : null;
 
     return `
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);display:flex;align-items:center;gap:14px;padding:14px 18px;${pagado?'opacity:.65;':''}">
-      <div style="width:10px;height:10px;border-radius:50%;background:${pagado?'var(--green)':'var(--red)'};flex-shrink:0;"></div>
-      <div style="flex:1;min-width:0;">
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <span style="font-weight:700;font-size:.92rem;color:var(--text);">${g.nombre}</span>
+    <div style="background:var(--card);border:1px solid ${pagado?'var(--border)':'var(--border)'};border-left:3px solid ${pagado?'var(--green)':'var(--red)'};border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;${pagado?'opacity:.7;':''}">
+      <!-- Fila 1: nombre + meta -->
+      <div style="margin-bottom:8px;">
+        <div style="font-weight:700;font-size:.93rem;color:var(--text);">${g.nombre}</div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px;">
           <span style="font-size:.72rem;color:var(--muted);">${g.cat}${g.notas?' · '+g.notas:''}</span>
           ${diasBadge}
           ${deudaVinc?`<span class="badge badge-blue" style="font-size:.68rem;">→ ${deudaVinc.nombre}</span>`:''}
         </div>
         ${pagadoFecha?`<div style="font-size:.7rem;color:var(--muted);margin-top:2px;">Pagado: ${formatFechaLarga(pagadoFecha)}</div>`:''}
       </div>
-      <div style="font-weight:700;font-size:1rem;color:${pagado?'var(--green)':'var(--text)'};flex-shrink:0;">${fmt(g.monto)}</div>
-      <div style="display:flex;gap:6px;flex-shrink:0;">
-        <button onclick="togglePagoGF('${g.id}')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:7px;background:${pagado?'var(--bg2)':'#0f2d6b'};color:${pagado?'var(--muted)':'#fff'};font-size:.75rem;font-weight:600;cursor:pointer;white-space:nowrap;">
+      <!-- Fila 2: monto + botones -->
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="font-weight:800;font-size:1.05rem;color:${pagado?'var(--green)':'var(--text)'};flex:1;">${fmt(g.monto)}</div>
+        <button onclick="togglePagoGF('${g.id}')" style="height:32px;padding:0 14px;border:none;border-radius:7px;background:${pagado?'var(--bg2)':'#0f2d6b'};color:${pagado?'var(--muted)':'#fff'};font-size:.75rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">
           ${pagado ? 'Desmarcar' : 'Pagar'}
         </button>
-        <button onclick="openEditGastoFijo('${g.id}')" style="height:34px;width:34px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        <button onclick="openEditGastoFijo('${g.id}')" style="height:32px;width:32px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
-        <button onclick="deleteGastoFijo('${g.id}')" style="height:34px;width:34px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--muted)'">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        <button onclick="deleteGastoFijo('${g.id}')" style="height:32px;width:32px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
         </button>
       </div>
     </div>`;
