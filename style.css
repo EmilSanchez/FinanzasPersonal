@@ -1324,22 +1324,36 @@ button:active, .btn:active, [role="button"]:active,
   }
 }
 
-/* ── Gastos Fijos topbar: una fila en desktop, dos en móvil ── */
-.gf-topbar {
+
+
+/* ── Billeteras bar buttons responsive ── */
+.bill-bar-btns {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: nowrap;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
 }
-@media (max-width: 768px) {
-  .gf-topbar {
-    flex-wrap: wrap;
-  }
-  .gf-topbar select { flex: 1; }
-  .gf-topbar #gf-resumen {
-    order: 3;
-    width: 100%;
-    flex-basis: 100%;
-    margin-top: 4px;
-  }
+.bill-bar-btn-sec, .bill-bar-btn-pri {
+  height: 34px; padding: 0 12px;
+  border-radius: 8px; cursor: pointer;
+  font-size: .78rem; font-weight: 600;
+  display: flex; align-items: center; gap: 5px;
+  white-space: nowrap;
+}
+.bill-bar-btn-sec {
+  border: 1px solid var(--border);
+  background: var(--card); color: var(--text);
+}
+.bill-bar-btn-pri {
+  border: none;
+  background: #0f2d6b; color: #fff;
+}
+@media (min-width: 600px) {
+  .bill-bar-btns { flex-direction: row; }
+  .bill-bar-btn-sec, .bill-bar-btn-pri { height: 38px; padding: 0 14px; font-size: .82rem; }
+}
+
+/* ── Reportes responsive ── */
+@media (max-width: 600px) {
+  .rep-charts-grid { grid-template-columns: 1fr !important; }
 }

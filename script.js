@@ -3090,7 +3090,7 @@ function renderGastosFijos() {
   const color = pct===100?'var(--green)':pct>50?'var(--yellow)':'var(--accent)';
   const gfStatsVisible = localStorage.getItem('gf_stats_visible') !== 'false';
   resumen.innerHTML = `
-    <div style="display:flex;align-items:center;gap:10px;flex:1;flex-wrap:nowrap;min-width:0;">
+    <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;flex-wrap:wrap;">
       <!-- Conteo siempre visible -->
       <span style="font-size:.82rem;font-weight:600;color:var(--muted);white-space:nowrap;flex-shrink:0;">${pagados.length}/${list.length}</span>
       <!-- Stats ocultables -->
@@ -3286,14 +3286,8 @@ function renderInversiones() {
   if ((window._invTab || 'productos') !== 'productos') return;
 
   // Asegurar que el contenedor del listado tenga ID correcto
-  const tbody = document.getElementById('inv-tbody');
-  const tabla = document.getElementById('inv-tabla');
+  const listaCards = document.getElementById('inv-lista-cards');
   const empty = document.getElementById('inversiones-empty');
-  // Marcar el section padre con ID para control de tabs
-  if (tabla) {
-    const secPadre = tabla.closest('.section');
-    if (secPadre && !secPadre.id) secPadre.id = 'inv-listado-sec';
-  }
 
   // Filtrar
   let lista = r.lista.slice();
@@ -3302,63 +3296,78 @@ function renderInversiones() {
   if(fTipo)  lista = lista.filter(p=>p.tipo===fTipo);
 
   if(!lista.length) {
-    if(tabla) tabla.style.display='none';
+    if(listaCards) listaCards.innerHTML = '';
     if(empty) empty.style.display='';
     return;
   }
-  if(tabla) tabla.style.display='';
   if(empty) empty.style.display='none';
 
-  tbody.innerHTML = lista.map(p => {
+  if(listaCards) listaCards.innerHTML = lista.map(p => {
     const idx = STATE.db.inversiones.indexOf(STATE.db.inversiones.find(i=>i.id===p.id));
-    const stockColor = p.estadoStock==='agotado'?'color:var(--red);font-weight:600':
-                       p.estadoStock==='bajo'?'color:var(--yellow);font-weight:600':'';
-    const ganColor = p.ganancia>=0?'color:var(--green);font-weight:600':'color:var(--red);font-weight:600';
+    const ganColor = p.ganancia>=0?'var(--green)':'var(--red)';
+    const stockColor = p.estadoStock==='agotado'?'var(--red)':p.estadoStock==='bajo'?'var(--yellow)':'var(--text)';
     const letra = (p.nombre||'?')[0].toUpperCase();
-    const imgCell = p.imagen
-      ? `<img src="${p.imagen}" alt="${p.nombre}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;flex-shrink:0;"
-           onerror="this.style.display='none';this.nextSibling.style.display='flex'">`
-      : '';
-    const placeholderCell = `<div style="width:36px;height:36px;border-radius:6px;background:linear-gradient(135deg,var(--accent-light),var(--purple-light));
-      color:var(--accent);display:${p.imagen?'none':'flex'};align-items:center;justify-content:center;font-weight:700;font-size:.9rem;flex-shrink:0;">${letra}</div>`;
-    return `<tr>
-      <td>
-        <div style="display:flex;align-items:center;gap:10px;">
-          ${imgCell}${placeholderCell}
-          <div>
-            <div style="font-weight:600;color:var(--text)">${p.nombre}</div>
-            ${p.sku?`<code style="font-family:var(--font-mono);font-size:.75rem;background:var(--bg2);border:1px solid var(--border);padding:1px 5px;border-radius:3px;color:var(--muted)">${p.sku}</code>`:''}
+    const avatar = p.imagen
+      ? `<img src="${p.imagen}" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:10px;flex-shrink:0;" onerror="this.style.display='none'">`
+      : `<div style="width:44px;height:44px;border-radius:10px;background:var(--accent-light);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;flex-shrink:0;">${letra}</div>`;
+    return `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;margin-bottom:10px;">
+      <!-- Cabecera -->
+      <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;">
+        ${avatar}
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:.95rem;color:var(--text);">${p.nombre}</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap;">
+            ${p.sku?`<code style="font-size:.7rem;background:var(--bg2);border:1px solid var(--border);padding:1px 6px;border-radius:4px;color:var(--muted);">${p.sku}</code>`:''}
+            <span style="font-size:.72rem;color:var(--muted);">${p.tipo||''}</span>
+            ${invBadgeEstado(p.estado)}
           </div>
         </div>
-      </td>
-      <td style="color:var(--muted);font-size:.83rem">${p.tipo||'—'}</td>
-      <td>${fmtNum(p.unidades||0)}</td>
-      <td>${fmtNum(p.unidadesVendidas)}</td>
-      <td style="${stockColor}">${fmtNum(p.stockActual)} ${invBadgeStock(p.estadoStock)}</td>
-      <td>${fmtCOP(p.inversionTotal)}</td>
-      <td>${fmtCOP(p.totalRecuperado)}</td>
-      <td style="${ganColor}">${p.ganancia>=0?'↑':'↓'} ${fmtCOP(p.ganancia)}</td>
-      <td>${invBadgeEstado(p.estado)}</td>
-      <td>
-        <div style="display:flex;gap:4px;">
-          <button class="btn btn-ghost btn-sm" title="Ver detalle" onclick="openDetalleInv('${p.id}')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        <!-- Acciones -->
+        <div style="display:flex;gap:4px;flex-shrink:0;">
+          <button onclick="openDetalleInv('${p.id}')" title="Ver detalle" style="width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
-          <button class="btn btn-ghost btn-sm" title="Registrar venta" onclick="openModalVentaInv('${p.id}')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          <button onclick="openModalNuevaInversion('${p.id}')" title="Editar" style="width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
-          <button class="btn btn-success btn-sm" title="Renovar stock" onclick="openModalRenovarStock('${p.id}')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-          </button>
-          <button class="btn btn-ghost btn-sm" title="Editar" onclick="openModalNuevaInversion('${p.id}')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          </button>
-          <button class="btn btn-danger btn-sm" title="Eliminar" onclick="deleteInversion(${idx})">
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          <button onclick="deleteInversion(${idx})" title="Eliminar" style="width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--muted)'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
           </button>
         </div>
-      </td>
-    </tr>`;
+      </div>
+      <!-- Stats en grid -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px;">
+        <div style="padding:10px 12px;border-right:1px solid var(--border);">
+          <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px;">Inversión</div>
+          <div style="font-weight:700;font-size:.9rem;">${fmtCOP(p.inversionTotal)}</div>
+        </div>
+        <div style="padding:10px 12px;border-right:1px solid var(--border);">
+          <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px;">Recuperado</div>
+          <div style="font-weight:700;font-size:.9rem;color:var(--green);">${fmtCOP(p.totalRecuperado)}</div>
+        </div>
+        <div style="padding:10px 12px;">
+          <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px;">Ganancia</div>
+          <div style="font-weight:700;font-size:.9rem;color:${ganColor};">${p.ganancia>=0?'+':''}${fmtCOP(p.ganancia)}</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <span style="font-size:.78rem;color:var(--muted);">Stock: <strong style="color:${stockColor};">${fmtNum(p.stockActual)}</strong> ${invBadgeStock(p.estadoStock)}</span>
+        <span style="color:var(--border);">·</span>
+        <span style="font-size:.78rem;color:var(--muted);">Vendidas: <strong>${fmtNum(p.unidadesVendidas)}</strong></span>
+      </div>
+      <!-- Acciones operativas -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="openModalVentaInv('${p.id}')" style="height:32px;padding:0 12px;border:1px solid var(--border);border-radius:7px;background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+          Registrar venta
+        </button>
+        <button onclick="openModalRenovarStock('${p.id}')" style="height:32px;padding:0 12px;border:1px solid var(--border);border-radius:7px;background:var(--card);color:var(--text);font-size:.75rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.46"/></svg>
+          Renovar stock
+        </button>
+      </div>
+    </div>`;
   }).join('');
 }
 
@@ -4193,13 +4202,14 @@ async function eliminarVentaInv(ventaId, invId) {
 
 async function deleteInversion(idx) {
   const inv = STATE.db.inversiones[idx];
-  if(!confirm('¿Eliminar la inversión "'+inv?.nombre+'"? También se eliminarán sus ventas.')) return;
-  // Remove associated sales
-  STATE.db.ventasInv = (STATE.db.ventasInv||[]).filter(v=>v.invId!==inv.id);
-  STATE.db.inversiones.splice(idx,1);
-  renderAll();
-  await saveDb(['inversiones','ventasInv']);
-  toast('Inversión eliminada','info');
+  if (!inv) return;
+  pedirPinParaAccion(`Eliminar "${inv.nombre}"`, async () => {
+    STATE.db.ventasInv = (STATE.db.ventasInv||[]).filter(v=>v.invId!==inv.id);
+    STATE.db.inversiones.splice(idx,1);
+    renderAll();
+    await saveDb(['inversiones','ventasInv']);
+    toast('Inversión eliminada','info');
+  });
 }
 
 async function cambiarEstadoInv(idx, estado) {
@@ -5799,20 +5809,24 @@ function renderBilleteras() {
   const totalGeneral = list.reduce((a,b)=>a+saldoBilletera(b.id),0);
 
   if (bar) bar.innerHTML = `
-    <div class="section" style="padding:16px 20px;">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+    <div class="section" style="padding:14px 18px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <!-- Info total -->
         <div style="flex:1;min-width:0;">
-          <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:3px;">Total en billeteras</div>
-          <div style="font-size:1.9rem;font-weight:800;color:${totalGeneral>=0?'var(--green)':'var(--red)'};line-height:1;">${fmt(totalGeneral)}</div>
-          <div style="font-size:.72rem;color:var(--muted);margin-top:3px;">${list.length} billetera${list.length!==1?'s':''}${ocultas.length?' · '+ocultas.length+' oculta'+(ocultas.length!==1?'s':''):''}</div>
+          <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:2px;">Total en billeteras</div>
+          <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
+            <div style="font-size:1.7rem;font-weight:800;color:${totalGeneral>=0?'var(--green)':'var(--red)'};line-height:1;">${fmt(totalGeneral)}</div>
+            <div style="font-size:.72rem;color:var(--muted);">${list.length} billetera${list.length!==1?'s':''}${ocultas.length?' · '+ocultas.length+' oculta'+(ocultas.length!==1?'s':''):''}</div>
+          </div>
         </div>
-        <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
-          <button onclick="openModalTransferencia()" style="height:38px;padding:0 14px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer;font-size:.82rem;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+        <!-- Botones: columna en móvil, fila en desktop -->
+        <div class="bill-bar-btns">
+          <button onclick="openModalTransferencia()" class="bill-bar-btn-sec">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
             Transferir
           </button>
-          <button onclick="openModalBilletera()" style="height:38px;padding:0 14px;border:none;border-radius:8px;background:#0f2d6b;cursor:pointer;font-size:.82rem;font-weight:700;color:#fff;display:flex;align-items:center;gap:6px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <button onclick="openModalBilletera()" class="bill-bar-btn-pri">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Nueva billetera
           </button>
         </div>
@@ -5997,7 +6011,6 @@ function renderReportes() {
   const nMeses = parseInt(periodoSel.value) || 6;
   const now    = new Date();
 
-  // Construir lista de meses
   const meses = [];
   for (let i = nMeses - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -6007,7 +6020,7 @@ function renderReportes() {
   // Populate mes detalle select
   if (mesDetSel) {
     const curMesDet = mesDetSel.value;
-    mesDetSel.innerHTML = '<option value="">— Detalle de un mes —</option>';
+    mesDetSel.innerHTML = '<option value="">— Ver detalle de un mes —</option>';
     [...meses].reverse().forEach(m => {
       const o = document.createElement('option');
       o.value = m; o.textContent = monthLabel(m);
@@ -6016,7 +6029,7 @@ function renderReportes() {
     });
   }
 
-  // Calcular datos por mes
+  // Datos por mes
   const datos = meses.map(m => {
     const ings  = STATE.db.ingresos.filter(i => ym(i.fecha) === m);
     const gass  = STATE.db.gastos.filter(g => ym(g.fecha) === m);
@@ -6025,197 +6038,125 @@ function renderReportes() {
     return { m, ings, gass, totalIng, totalGas, balance: totalIng - totalGas };
   });
 
-  // KPIs del período
+  const totIng = datos.reduce((a,d)=>a+d.totalIng, 0);
+  const totGas = datos.reduce((a,d)=>a+d.totalGas, 0);
+  const bal    = totIng - totGas;
+  const mejorMes = datos.length ? datos.reduce((a,d)=>d.balance>a.balance?d:a, datos[0]) : null;
+
+  // KPIs
   const kpisEl = document.getElementById('rep-kpis');
   if (kpisEl) {
-    const totIng = datos.reduce((a,d)=>a+d.totalIng, 0);
-    const totGas = datos.reduce((a,d)=>a+d.totalGas, 0);
-    const mejorMes = datos.reduce((a,d)=>d.balance>a.balance?d:a, datos[0]);
-    const peorMes  = datos.reduce((a,d)=>d.balance<a.balance?d:a, datos[0]);
     kpisEl.innerHTML = `
-      <div class="stat-card green"><div class="stat-icon-box"><span>&#x2191;</span></div>
-        <div class="stat-body"><div class="stat-label">Total ingresos (${nMeses}m)</div>
-          <div class="stat-value positive">${fmt(totIng)}</div></div></div>
-      <div class="stat-card red"><div class="stat-icon-box"><span>&#x2193;</span></div>
-        <div class="stat-body"><div class="stat-label">Total gastos (${nMeses}m)</div>
-          <div class="stat-value negative">${fmt(totGas)}</div></div></div>
-      <div class="stat-card blue"><div class="stat-icon-box"><span>⚖️</span></div>
-        <div class="stat-body"><div class="stat-label">Balance período</div>
-          <div class="stat-value ${totIng-totGas>=0?'positive':'negative'}">${fmt(totIng-totGas)}</div></div></div>
-      <div class="stat-card teal"><div class="stat-icon-box"><span>★</span></div>
-        <div class="stat-body"><div class="stat-label">Mejor mes</div>
-          <div class="stat-value">${mejorMes ? monthLabel(mejorMes.m) : '—'}</div>
-          <div class="stat-sub">${mejorMes ? fmt(mejorMes.balance) : ''}</div></div></div>`;
+      <div class="stat-card green">
+        <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></div>
+        <div class="stat-body"><div class="stat-label">Total ingresos</div><div class="stat-value positive">${fmt(totIng)}</div><div class="stat-sub">${nMeses} meses</div></div>
+      </div>
+      <div class="stat-card red">
+        <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg></div>
+        <div class="stat-body"><div class="stat-label">Total gastos</div><div class="stat-value negative">${fmt(totGas)}</div><div class="stat-sub">${nMeses} meses</div></div>
+      </div>
+      <div class="stat-card ${bal>=0?'green':'red'}">
+        <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <div class="stat-body"><div class="stat-label">Balance período</div><div class="stat-value ${bal>=0?'positive':'negative'}">${fmt(bal)}</div></div>
+      </div>
+      <div class="stat-card blue">
+        <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+        <div class="stat-body"><div class="stat-label">Mejor mes</div><div class="stat-value" style="font-size:.95rem;">${mejorMes ? monthLabel(mejorMes.m) : '—'}</div><div class="stat-sub">${mejorMes ? fmt(mejorMes.balance) : ''}</div></div>
+      </div>`;
   }
 
-  // Tabla mes a mes
-  const tbody = document.getElementById('rep-tbody-meses');
-  if (tbody) {
-    tbody.innerHTML = [...datos].reverse().map(d => {
-      const bal = d.balance;
-      return `<tr>
-        <td style="font-weight:600">${monthLabel(d.m)}</td>
-        <td style="color:var(--green);font-weight:600">${fmt(d.totalIng)}</td>
-        <td style="color:var(--red);font-weight:600">${fmt(d.totalGas)}</td>
-        <td style="font-weight:700;color:${bal>=0?'var(--green)':'var(--red)'}">${fmt(bal)}</td>
-        <td>${d.ings.length}</td>
-        <td>${d.gass.length}</td>
-      </tr>`;
+  // Gráfica de barras SVG
+  drawRepBarChart(datos);
+
+  // Tabla como cards
+  const tablaEl = document.getElementById('rep-tabla-cards');
+  if (tablaEl) {
+    tablaEl.innerHTML = [...datos].reverse().map(d => {
+      const b = d.balance;
+      const pctGas = d.totalIng > 0 ? Math.min(100, Math.round(d.totalGas/d.totalIng*100)) : 0;
+      return `
+        <div style="display:flex;align-items:center;gap:12px;padding:11px 20px;border-bottom:1px solid var(--border);">
+          <div style="width:80px;flex-shrink:0;font-size:.82rem;font-weight:600;color:var(--text);">${monthLabel(d.m)}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;justify-content:space-between;font-size:.72rem;color:var(--muted);margin-bottom:3px;">
+              <span>${fmt(d.totalIng)}</span><span>${fmt(d.totalGas)}</span>
+            </div>
+            <div style="height:5px;background:var(--border);border-radius:10px;overflow:hidden;">
+              <div style="height:100%;width:${pctGas}%;background:${pctGas>90?'var(--red)':pctGas>70?'var(--yellow)':'var(--accent)'};border-radius:10px;transition:width .3s;"></div>
+            </div>
+          </div>
+          <div style="font-weight:700;font-size:.88rem;color:${b>=0?'var(--green)':'var(--red)'};flex-shrink:0;min-width:72px;text-align:right;">${fmt(b)}</div>
+        </div>`;
     }).join('');
   }
 
-  // Gráfico barras ingresos vs gastos
-  drawBalanceChart(meses, datos);
-
-  // Gráfico donut gastos por categoría (período completo)
-  drawCatChart(meses);
-
-  // Gráfico donut ingresos por categoría
-  drawIngCatChart(meses);
-
-  // Detalle mes seleccionado
+  // Detalle mes
   const mesDet = mesDetSel?.value;
   const detEl  = document.getElementById('rep-detalle-mes');
   if (mesDet && detEl) {
     detEl.style.display = '';
     const dMes = datos.find(d=>d.m===mesDet) || { ings:[], gass:[] };
-
     const topGas = [...dMes.gass].sort((a,b)=>Number(b.monto)-Number(a.monto)).slice(0,8);
     const topIng = [...dMes.ings].sort((a,b)=>Number(b.monto)-Number(a.monto)).slice(0,8);
-
     const topGasEl = document.getElementById('rep-top-gastos');
     const topIngEl = document.getElementById('rep-top-ingresos');
-
-    if (topGasEl) topGasEl.innerHTML = topGas.length
-      ? topGas.map(g=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border-light);font-size:.85rem">
-          <span>${g.desc||g.fuente||'—'} <span class="badge badge-yellow" style="font-size:.66rem">${g.cat||''}</span></span>
-          <span style="color:var(--red);font-weight:600;white-space:nowrap">${fmt(g.monto)}</span>
-        </div>`).join('')
-      : '<div style="color:var(--muted);font-size:.85rem;padding:12px 0">Sin gastos este mes</div>';
-
-    if (topIngEl) topIngEl.innerHTML = topIng.length
-      ? topIng.map(i=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border-light);font-size:.85rem">
-          <span>${i.fuente||i.desc||'—'} <span class="badge badge-blue" style="font-size:.66rem">${i.cat||''}</span></span>
-          <span style="color:var(--green);font-weight:600;white-space:nowrap">${fmt(i.monto)}</span>
-        </div>`).join('')
-      : '<div style="color:var(--muted);font-size:.85rem;padding:12px 0">Sin ingresos este mes</div>';
+    const itemRow = (label, monto, color, cat) => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-light);">
+        <div style="min-width:0;">
+          <div style="font-size:.83rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;">${label}</div>
+          <div style="font-size:.7rem;color:var(--muted);">${cat||''}</div>
+        </div>
+        <span style="font-weight:700;font-size:.88rem;color:${color};flex-shrink:0;margin-left:8px;">${fmt(monto)}</span>
+      </div>`;
+    if (topGasEl) topGasEl.innerHTML = topGas.length ? topGas.map(g=>itemRow(g.desc||'—', g.monto, 'var(--red)', g.cat)).join('') : '<p style="color:var(--muted);font-size:.82rem;padding:8px 0;">Sin gastos</p>';
+    if (topIngEl) topIngEl.innerHTML = topIng.length ? topIng.map(i=>itemRow(i.fuente||i.desc||'—', i.monto, 'var(--green)', i.cat)).join('') : '<p style="color:var(--muted);font-size:.82rem;padding:8px 0;">Sin ingresos</p>';
   } else if (detEl) {
     detEl.style.display = 'none';
   }
 }
 
-// Gráfico barras — ahora acepta datos calculados para no repetir
-function drawBalanceChart(meses, datos) {
-  const canvas = document.getElementById('chart-balance');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  canvas.width = canvas.offsetWidth || 500;
-  canvas.height = 200;
+function drawRepBarChart(datos) {
+  const container = document.getElementById('rep-bar-chart');
+  if (!container || !datos.length) return;
 
-  if (!meses || !datos) {
-    // fallback: build from DB
-    const now2 = new Date();
-    meses = [];
-    for (let i=5;i>=0;i--) { const d2=new Date(now2.getFullYear(),now2.getMonth()-i,1); meses.push(d2.getFullYear()+'-'+String(d2.getMonth()+1).padStart(2,'0')); }
-    datos = meses.map(m=>({ m, totalIng: STATE.db.ingresos.filter(i=>ym(i.fecha)===m).reduce((a,b)=>a+Number(b.monto),0), totalGas: STATE.db.gastos.filter(g=>ym(g.fecha)===m).reduce((a,b)=>a+Number(b.monto),0) }));
-  }
+  const maxVal = Math.max(...datos.map(d => Math.max(d.totalIng, d.totalGas)), 1);
+  const barH   = 140;
+  const barW   = Math.max(28, Math.min(48, Math.floor((container.clientWidth || 320) / (datos.length * 2.5))));
+  const gap    = Math.round(barW * 0.4);
+  const groupW = barW * 2 + gap + 8;
+  const totalW = Math.max(container.clientWidth || 320, datos.length * groupW + 40);
+  const labelH = 28;
+  const totalH = barH + labelH + 24;
 
-  const ingData  = datos.map(d=>d.totalIng);
-  const gasData  = datos.map(d=>d.totalGas);
-  const labels   = meses.map(m=>{ const [y,mo]=m.split('-'); return new Date(Number(y),Number(mo)-1,1).toLocaleDateString('es-CO',{month:'short'}); });
-  const W=canvas.width, H=canvas.height;
-  const pad={top:20,bottom:36,left:55,right:16};
-  const gW=W-pad.left-pad.right, gH=H-pad.top-pad.bottom;
-  const maxVal=Math.max(...ingData,...gasData,1);
+  let svg = `<svg width="${totalW}" height="${totalH}" xmlns="http://www.w3.org/2000/svg" style="display:block;">`;
 
-  ctx.clearRect(0,0,W,H);
-  ctx.strokeStyle='rgba(221,227,237,0.8)'; ctx.lineWidth=1;
-  for(let i=0;i<=4;i++){
-    const y=pad.top+(gH/4)*i;
-    ctx.beginPath();ctx.moveTo(pad.left,y);ctx.lineTo(W-pad.right,y);ctx.stroke();
-    ctx.fillStyle='rgba(100,116,139,0.7)';ctx.font='10px Inter,sans-serif';ctx.textAlign='right';
-    ctx.fillText((fmt(maxVal-(maxVal/4)*i)).replace('$',''),pad.left-4,y+4);
-  }
-  const barW=(gW/meses.length)*0.32;
-  meses.forEach((_,i)=>{
-    const x=pad.left+(gW/meses.length)*i+(gW/meses.length)*0.08;
-    const ingH=(ingData[i]/maxVal)*gH;
-    const g1=ctx.createLinearGradient(0,pad.top+gH-ingH,0,pad.top+gH);
-    g1.addColorStop(0,'#059669');g1.addColorStop(1,'rgba(5,150,105,.2)');
-    ctx.fillStyle=g1;ctx.beginPath();ctx.roundRect(x,pad.top+gH-ingH,barW,ingH,3);ctx.fill();
-    const gasH=(gasData[i]/maxVal)*gH;
-    const g2=ctx.createLinearGradient(0,pad.top+gH-gasH,0,pad.top+gH);
-    g2.addColorStop(0,'#dc2626');g2.addColorStop(1,'rgba(220,38,38,.2)');
-    ctx.fillStyle=g2;ctx.beginPath();ctx.roundRect(x+barW+3,pad.top+gH-gasH,barW,gasH,3);ctx.fill();
-    ctx.fillStyle='rgba(100,116,139,0.8)';ctx.font='10px Inter,sans-serif';ctx.textAlign='center';
-    ctx.fillText(labels[i],x+barW,H-10);
+  datos.forEach((d, i) => {
+    const x = 20 + i * groupW;
+    const hIng = d.totalIng > 0 ? Math.max(3, Math.round(d.totalIng / maxVal * barH)) : 0;
+    const hGas = d.totalGas > 0 ? Math.max(3, Math.round(d.totalGas / maxVal * barH)) : 0;
+    const hBal = Math.abs(d.balance) > 0 ? Math.max(2, Math.round(Math.abs(d.balance) / maxVal * barH)) : 0;
+    const balColor = d.balance >= 0 ? '#059669' : '#dc2626';
+
+    // Barra ingresos
+    svg += `<rect x="${x}" y="${barH - hIng + 8}" width="${barW}" height="${hIng}" rx="3" fill="#0f2d6b" opacity=".85"/>`;
+    // Barra gastos
+    svg += `<rect x="${x + barW + gap}" y="${barH - hGas + 8}" width="${barW}" height="${hGas}" rx="3" fill="#dc2626" opacity=".75"/>`;
+    // Línea balance
+    const balY = d.balance >= 0 ? barH - hBal + 8 : barH + 8;
+    svg += `<rect x="${x}" y="${balY}" width="${barW * 2 + gap}" height="2" rx="1" fill="${balColor}" opacity=".6"/>`;
+
+    // Etiqueta mes
+    const label = monthLabel(d.m).slice(0,3);
+    svg += `<text x="${x + barW + gap/2}" y="${barH + 24}" text-anchor="middle" font-size="10" fill="#64748b" font-family="system-ui,sans-serif">${label}</text>`;
   });
-  ctx.fillStyle='#059669';ctx.fillRect(pad.left,H-14,10,8);
-  ctx.fillStyle='rgba(100,116,139,0.8)';ctx.font='10px sans-serif';ctx.textAlign='left';ctx.fillText('Ingresos',pad.left+13,H-7);
-  ctx.fillStyle='#dc2626';ctx.fillRect(pad.left+80,H-14,10,8);
-  ctx.fillStyle='rgba(100,116,139,0.8)';ctx.fillText('Gastos',pad.left+93,H-7);
+
+  // Línea base
+  svg += `<line x1="16" y1="${barH + 8}" x2="${totalW - 4}" y2="${barH + 8}" stroke="#e2e8f0" stroke-width="1"/>`;
+  svg += '</svg>';
+
+  container.innerHTML = svg;
 }
 
-function drawCatChart(meses) {
-  const canvas=document.getElementById('chart-cats');
-  if(!canvas)return;
-  const ctx=canvas.getContext('2d');
-  canvas.width=canvas.offsetWidth||300;canvas.height=200;
-  const gasAll = meses
-    ? STATE.db.gastos.filter(g=>meses.includes(ym(g.fecha)))
-    : STATE.db.gastos.filter(g=>ym(g.fecha)===currentYM());
-  const catT={};
-  gasAll.forEach(g=>{catT[g.cat]=(catT[g.cat]||0)+Number(g.monto);});
-  drawDonutChart(ctx,canvas,catT,'Sin gastos en el período');
-}
-
-function drawIngCatChart(meses) {
-  const canvas=document.getElementById('chart-ing-cats');
-  if(!canvas)return;
-  const ctx=canvas.getContext('2d');
-  canvas.width=canvas.offsetWidth||300;canvas.height=200;
-  const ingAll = meses
-    ? STATE.db.ingresos.filter(i=>meses.includes(ym(i.fecha)))
-    : STATE.db.ingresos.filter(i=>ym(i.fecha)===currentYM());
-  const catT={};
-  ingAll.forEach(i=>{catT[i.cat]=(catT[i.cat]||0)+Number(i.monto);});
-  drawDonutChart(ctx,canvas,catT,'Sin ingresos en el período');
-}
-
-function drawDonutChart(ctx, canvas, catTotals, emptyMsg) {
-  const cats=Object.keys(catTotals);
-  const vals=cats.map(c=>catTotals[c]);
-  const total=vals.reduce((a,b)=>a+b,0);
-  if(!total){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle='rgba(100,116,139,0.6)';ctx.font='12px Inter,sans-serif';ctx.textAlign='center';
-    ctx.fillText(emptyMsg,canvas.width/2,canvas.height/2);return;
-  }
-  const COLORS=['#2563eb','#059669','#dc2626','#d97706','#7c3aed','#0d9488','#ea580c','#ec4899','#06b6d4','#84cc16'];
-  const cx=canvas.width*0.34,cy=canvas.height/2,r=Math.min(cx,cy)-8;
-  let angle=-Math.PI/2;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  vals.forEach((v,i)=>{
-    const sl=(v/total)*Math.PI*2;
-    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,angle,angle+sl);ctx.closePath();
-    ctx.fillStyle=COLORS[i%COLORS.length];ctx.fill();
-    ctx.strokeStyle='rgba(255,255,255,.8)';ctx.lineWidth=1.5;ctx.stroke();
-    angle+=sl;
-  });
-  ctx.beginPath();ctx.arc(cx,cy,r*.52,0,Math.PI*2);
-  ctx.fillStyle='#fff';ctx.fill();
-  ctx.fillStyle='rgba(26,35,50,.8)';ctx.font='bold 10px Inter,sans-serif';ctx.textAlign='center';
-  ctx.fillText(fmt(total),cx,cy+4);
-  const legX=cx*2+6;
-  cats.slice(0,7).forEach((c,i)=>{
-    const y2=14+i*24;
-    ctx.fillStyle=COLORS[i%COLORS.length];ctx.beginPath();ctx.arc(legX+5,y2+5,4,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='rgba(26,35,50,.8)';ctx.font='9px Inter,sans-serif';ctx.textAlign='left';
-    ctx.fillText(c.slice(0,12),legX+12,y2+9);
-    const pct2=vals[i];
-    ctx.fillStyle='rgba(100,116,139,.8)';ctx.fillText(Math.round(pct2/total*100)+'%',legX+12,y2+20);
-  });
-}
 
 // ── Forzar sincronización con Firebase ──
 async function forceSyncFirebase() {

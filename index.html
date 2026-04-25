@@ -928,14 +928,17 @@
       <!-- Resumen del mes -->
       <!-- Barra de acciones gastos fijos -->
       <div class="section" style="overflow:visible;padding:16px 20px;">
-        <div class="gf-topbar">
+        <!-- Fila 1: mes + botón (siempre juntos) -->
+        <div style="display:flex;align-items:center;gap:10px;">
           <select class="form-control" style="height:40px;width:auto;min-width:130px;font-weight:600;" id="gf-mes-sel" onchange="renderGastosFijos()"></select>
-          <div id="gf-resumen" style="display:flex;align-items:center;gap:10px;flex-wrap:nowrap;min-width:0;flex:1;"></div>
+          <div style="flex:1;"></div>
           <button onclick="openModalNuevoGastoFijo()" class="mov-btn-ingreso" style="height:40px;border-radius:8px;padding:0 18px;flex-shrink:0;">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Nuevo gasto fijo
           </button>
         </div>
+        <!-- Fila 2: resumen siempre debajo -->
+        <div id="gf-resumen" style="display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);"></div>
       </div>
 
       <div id="gf-grid" style="display:flex;flex-direction:column;gap:10px;"></div>
@@ -947,176 +950,121 @@
 
     <!-- ====== INVERSIONES ====== -->
     <div class="page" id="page-inversiones">
-      <div class="page-header-row">
-        <div>
-          
-        </div>
-        <button class="btn btn-primary" onclick="openModalNuevaInversion()">+ Nueva inversión</button>
-      </div>
 
       <!-- KPIs -->
       <div class="stats-grid">
         <div class="stat-card blue">
-          <div class="stat-icon-box"><span style="font-size:.9rem">$</span></div>
-          <div class="stat-body">
-            <div class="stat-label">Capital invertido</div>
-            <div class="stat-value" id="inv-capital">$0</div>
-            <div class="stat-sub" id="inv-capital-sub"></div>
-          </div>
+          <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+          <div class="stat-body"><div class="stat-label">Capital invertido</div><div class="stat-value" id="inv-capital">$0</div><div class="stat-sub" id="inv-capital-sub"></div></div>
         </div>
         <div class="stat-card green">
-          <div class="stat-icon-box"><span style="font-size:.9rem">&#x2193;$</span></div>
-          <div class="stat-body">
-            <div class="stat-label">Total recuperado</div>
-            <div class="stat-value" id="inv-valor">$0</div>
-            <div class="stat-sub"></div>
-          </div>
+          <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div>
+          <div class="stat-body"><div class="stat-label">Total recuperado</div><div class="stat-value" id="inv-valor">$0</div></div>
         </div>
         <div class="stat-card teal">
-          <div class="stat-icon-box"><span style="font-size:.8rem;font-weight:700">KPI</span></div>
-          <div class="stat-body">
-            <div class="stat-label">Ganancia acumulada</div>
-            <div class="stat-value" id="inv-ganancia">$0</div>
-            <div class="stat-sub" id="inv-ganancia-pct"></div>
-          </div>
+          <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+          <div class="stat-body"><div class="stat-label">Ganancia acumulada</div><div class="stat-value" id="inv-ganancia">$0</div><div class="stat-sub" id="inv-ganancia-pct"></div></div>
         </div>
         <div class="stat-card purple">
-          <div class="stat-icon-box"><span style="font-size:.9rem">&#x25A1;</span></div>
-          <div class="stat-body">
-            <div class="stat-label">Productos activos</div>
-            <div class="stat-value" id="inv-activas">0</div>
-            <div class="stat-sub" id="inv-cerradas-sub"></div>
-          </div>
+          <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
+          <div class="stat-body"><div class="stat-label">Productos activos</div><div class="stat-value" id="inv-activas">0</div><div class="stat-sub" id="inv-cerradas-sub"></div></div>
         </div>
         <div class="stat-card orange">
-          <div class="stat-icon-box"><span style="font-size:.9rem">&#x25A1;</span></div>
-          <div class="stat-body">
-            <div class="stat-label">Unidades en stock</div>
-            <div class="stat-value" id="inv-stock-total">0</div>
-            <div class="stat-sub">disponibles</div>
-          </div>
+          <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
+          <div class="stat-body"><div class="stat-label">Stock disponible</div><div class="stat-value" id="inv-stock-total">0</div><div class="stat-sub">unidades</div></div>
         </div>
         <div class="stat-card blue">
-          <div class="stat-icon-box"><span style="font-size:.9rem">&#x25A1;</span></div>
-          <div class="stat-body">
-            <div class="stat-label">Unidades vendidas</div>
-            <div class="stat-value" id="inv-vendidas-total">0</div>
-            <div class="stat-sub">acumuladas</div>
-          </div>
+          <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></div>
+          <div class="stat-body"><div class="stat-label">Unidades vendidas</div><div class="stat-value" id="inv-vendidas-total">0</div><div class="stat-sub">acumuladas</div></div>
         </div>
       </div>
 
-      <!-- Filtros + Tabla -->
-      <div class="section">
-        <div class="section-header">
-          <span class="section-title">Listado de inversiones</span>
-          <div class="inv-filter-bar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-            <input type="text" class="form-control" style="min-width:160px;height:34px" placeholder="Buscar SKU..." id="inv-search" oninput="renderInversiones()">
-            <select class="form-control" style="width:auto;height:34px" id="inv-filter-estado" onchange="renderInversiones()">
-              <option value="">Todos los estados</option>
-              <option value="activa">Activas</option>
-              <option value="cerrada">Cerradas</option>
-              <option value="pausada">Pausadas</option>
-            </select>
-            <select class="form-control" style="width:auto;height:34px" id="inv-filter-tipo" onchange="renderInversiones()">
-              <option value="">Todos los tipos</option>
-            </select>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table class="data-table" id="inv-tabla">
-            <thead>
-              <tr>
-                <th>Producto / SKU</th>
-                <th>Tipo</th>
-                <th>Comprado</th>
-                <th>Vendido</th>
-                <th>Stock</th>
-                <th>Inversión</th>
-                <th>Recuperado</th>
-                <th>Ganancia</th>
-                <th>Estado</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody id="inv-tbody"></tbody>
-          </table>
-        </div>
-        <div id="inversiones-empty" class="empty-state" style="display:none;padding:40px 20px;text-align:center;color:var(--muted);">
-          <div style="font-size:2.5rem;margin-bottom:12px;">&#9633;</div>
-          <p>Sin inversiones registradas aún. Haz clic en <strong>+ Nueva inversión</strong> para comenzar.</p>
+      <!-- Buscador + acciones -->
+      <div class="section" style="overflow:visible;padding:14px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <input type="text" class="form-control" style="flex:1;min-width:140px;height:38px;" placeholder="Buscar producto o SKU..." id="inv-search" oninput="renderInversiones()">
+          <select class="form-control" style="height:38px;width:auto;" id="inv-filter-estado" onchange="renderInversiones()">
+            <option value="">Todos los estados</option>
+            <option value="activa">Activas</option>
+            <option value="cerrada">Cerradas</option>
+            <option value="pausada">Pausadas</option>
+          </select>
+          <select class="form-control" style="height:38px;width:auto;" id="inv-filter-tipo" onchange="renderInversiones()">
+            <option value="">Todos los tipos</option>
+          </select>
+          <button onclick="openModalNuevaInversion()" style="height:38px;padding:0 16px;border:none;border-radius:8px;background:#0f2d6b;color:#fff;font-size:.82rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Nueva inversión
+          </button>
         </div>
       </div>
+
+      <!-- Lista de inversiones (cards) -->
+      <div id="inv-lista-cards"></div>
+      <div id="inversiones-empty" class="empty-state" style="display:none;">
+        <div style="font-size:2rem;margin-bottom:12px;color:var(--border);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+        </div>
+        <p>Sin inversiones registradas aún.</p>
+      </div>
+
+      <!-- Tabla oculta para compatibilidad -->
+      <table id="inv-tabla" style="display:none;"><tbody id="inv-tbody"></tbody></table>
     </div>
 
     <!-- ====== REPORTES ====== -->
     <div class="page" id="page-reportes">
-      
 
       <!-- Selector de periodo -->
-      <div class="section" style="padding:14px 18px;margin-bottom:16px;">
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-          <span style="font-size:.85rem;color:var(--muted);font-weight:600;">Ver período:</span>
-          <select class="form-control" style="width:auto" id="rep-periodo" onchange="renderReportes()">
-            <option value="6">Últimos 6 meses</option>
-            <option value="12">Últimos 12 meses</option>
+      <div class="section" style="padding:14px 18px;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <select class="form-control" style="height:38px;width:auto;" id="rep-periodo" onchange="renderReportes()">
             <option value="3">Últimos 3 meses</option>
+            <option value="6" selected>Últimos 6 meses</option>
+            <option value="12">Últimos 12 meses</option>
           </select>
-          <select class="form-control" style="width:auto" id="rep-mes-detalle" onchange="renderReportes()">
-            <option value="">— Detalle de un mes —</option>
+          <select class="form-control" style="height:38px;width:auto;" id="rep-mes-detalle" onchange="renderReportes()">
+            <option value="">— Ver detalle de un mes —</option>
           </select>
         </div>
       </div>
 
-      <!-- KPIs del período -->
+      <!-- KPIs -->
       <div class="stats-grid" id="rep-kpis"></div>
 
-      <!-- Gráfico ingresos vs gastos -->
-      <div class="chart-card section" style="margin-bottom:16px;">
-        <div class="chart-title">Ingresos vs Gastos por mes</div>
-        <canvas id="chart-balance" height="200"></canvas>
+      <!-- Tabla mes a mes -->
+      <div class="section" style="padding:0;overflow:hidden;">
+        <div style="padding:16px 20px 10px;font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);">Mes a mes</div>
+        <div id="rep-tabla-cards"></div>
       </div>
 
-      <!-- Gráfico donut categorías -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;" class="rep-charts-grid">
-        <div class="chart-card section">
-          <div class="chart-title">Gastos por categoría</div>
-          <canvas id="chart-cats" height="200"></canvas>
-        </div>
-        <div class="chart-card section">
-          <div class="chart-title">Ingresos por categoría</div>
-          <canvas id="chart-ing-cats" height="200"></canvas>
-        </div>
-      </div>
-
-      <!-- Tabla resumen mensual -->
-      <div class="section">
-        <div class="section-header">
-          <span class="section-title">Resumen mes a mes</span>
-        </div>
-        <div class="table-wrap">
-          <table class="data-table" id="rep-tabla-meses">
-            <thead>
-              <tr>
-                <th>Mes</th><th>Ingresos</th><th>Gastos</th>
-                <th>Balance</th><th>Nº Ingresos</th><th>Nº Gastos</th>
-              </tr>
-            </thead>
-            <tbody id="rep-tbody-meses"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Top gastos e ingresos del mes seleccionado -->
-      <div id="rep-detalle-mes" style="display:none">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;" class="rep-charts-grid">
+      <!-- Detalle mes seleccionado -->
+      <div id="rep-detalle-mes" style="display:none;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;" class="rep-charts-grid">
           <div class="section">
-            <div class="section-header"><span class="section-title">Mayores gastos del mes</span></div>
+            <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:12px;">Top gastos</div>
             <div id="rep-top-gastos"></div>
           </div>
           <div class="section">
-            <div class="section-header"><span class="section-title">Mayores ingresos del mes</span></div>
+            <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:12px;">Top ingresos</div>
             <div id="rep-top-ingresos"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gráfica de barras SVG — al final -->
+      <div class="section" id="rep-chart-section" style="padding:20px;">
+        <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:16px;">Ingresos vs Gastos</div>
+        <div id="rep-bar-chart" style="overflow-x:auto;"></div>
+        <div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--muted);">
+            <div style="width:12px;height:12px;border-radius:3px;background:#0f2d6b;flex-shrink:0;"></div> Ingresos
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--muted);">
+            <div style="width:12px;height:12px;border-radius:3px;background:#dc2626;flex-shrink:0;"></div> Gastos
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--muted);">
+            <div style="width:12px;height:12px;border-radius:3px;background:#059669;flex-shrink:0;"></div> Balance
           </div>
         </div>
       </div>
