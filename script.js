@@ -49,6 +49,7 @@ function loadDbLocal() {
   if (!STATE.db.ventasInv)      STATE.db.ventasInv      = [];
   if (!STATE.db.billeteras)     STATE.db.billeteras     = [];
   if (!STATE.db.transferencias) STATE.db.transferencias = [];
+  if (!STATE.db.recordatorios)  STATE.db.recordatorios  = [];
 }
 
 // ── Cargar datos: local primero (instantáneo), Firebase en background ──
@@ -1192,6 +1193,8 @@ function renderAll() {
   renderDeudas();
   renderPrestamos();
   renderGastosFijos();
+  renderRecordatorios();
+  actualizarBadgeRecordatorios();
   renderInversiones();
   renderBilleteras();
   renderBilleterasDashWidget();
@@ -5436,6 +5439,188 @@ async function confirmarEliminarMov() {
 function cancelarEliminarMov() {
   const modal = document.getElementById('modal-eliminar-mov');
   if (modal) modal.classList.remove('open');
+}
+
+/* ============================================================
+   RECORDATORIOS
+   ============================================================ */
+const REC_CATS = {
+  general:    { label: 'General',    color: '#64748b', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' },
+  pago:       { label: 'Pago',       color: '#dc2626', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>' },
+  salud:      { label: 'Salud',      color: '#059669', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>' },
+  trabajo:    { label: 'Trabajo',    color: '#2563eb', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>' },
+  personal:   { label: 'Personal',   color: '#7c3aed', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>' },
+  financiero: { label: 'Financiero', color: '#d97706', icon: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>' },
+};
+
+function getRecEstado(r) {
+  if (r.completado) return 'completado';
+  const ahora = new Date();
+  const fecha = new Date(r.fecha + (r.hora ? 'T' + r.hora : 'T23:59'));
+  return fecha < ahora ? 'vencido' : 'pendiente';
+}
+
+function getDiasRec(r) {
+  const ahora = new Date(); ahora.setHours(0,0,0,0);
+  const fecha = new Date(r.fecha + 'T00:00:00');
+  return Math.round((fecha - ahora) / (1000*60*60*24));
+}
+
+function actualizarBadgeRecordatorios() {
+  const badge = document.getElementById('rec-badge');
+  if (!badge) return;
+  const pendientes = (STATE.db.recordatorios || []).filter(r => !r.completado && getRecEstado(r) !== 'completado');
+  const vencidos   = pendientes.filter(r => getRecEstado(r) === 'vencido').length;
+  const hoy        = pendientes.filter(r => getDiasRec(r) === 0).length;
+  const n = vencidos + hoy;
+  if (n > 0) { badge.textContent = n; badge.style.display = ''; }
+  else        { badge.style.display = 'none'; }
+}
+
+function renderRecordatorios() {
+  const lista = document.getElementById('rec-lista');
+  const empty = document.getElementById('rec-empty');
+  if (!lista) return;
+
+  const q      = (document.getElementById('rec-search')?.value || '').toLowerCase().trim();
+  const filtro = document.getElementById('rec-filter')?.value || '';
+  const todos  = (STATE.db.recordatorios || []).slice().sort((a, b) => {
+    // Ordenar: vencidos primero, luego por fecha
+    const ea = getRecEstado(a), eb = getRecEstado(b);
+    if (ea === 'completado' && eb !== 'completado') return 1;
+    if (eb === 'completado' && ea !== 'completado') return -1;
+    return (a.fecha + (a.hora||'')) < (b.fecha + (b.hora||'')) ? -1 : 1;
+  });
+
+  let filtrados = todos;
+  if (q)      filtrados = filtrados.filter(r => r.nombre?.toLowerCase().includes(q) || r.nota?.toLowerCase().includes(q));
+  if (filtro) filtrados = filtrados.filter(r => getRecEstado(r) === filtro);
+
+  if (!filtrados.length) { lista.innerHTML = ''; empty.style.display = ''; return; }
+  empty.style.display = 'none';
+
+  lista.innerHTML = filtrados.map(r => {
+    const estado = getRecEstado(r);
+    const dias   = getDiasRec(r);
+    const cat    = REC_CATS[r.cat] || REC_CATS.general;
+
+    let estadoBadge = '', borderColor = 'var(--border)';
+    if (estado === 'completado') {
+      estadoBadge = `<span class="badge badge-green" style="font-size:.7rem;">Completado</span>`;
+      borderColor = 'var(--green)';
+    } else if (estado === 'vencido') {
+      estadoBadge = `<span class="badge badge-red" style="font-size:.7rem;">Vencido</span>`;
+      borderColor = 'var(--red)';
+    } else if (dias === 0) {
+      estadoBadge = `<span class="badge" style="background:#fef3c7;color:#92400e;font-size:.7rem;">Hoy</span>`;
+      borderColor = '#d97706';
+    } else if (dias === 1) {
+      estadoBadge = `<span class="badge" style="background:#fef3c7;color:#92400e;font-size:.7rem;">Mañana</span>`;
+      borderColor = '#d97706';
+    } else if (dias <= 7) {
+      estadoBadge = `<span class="badge" style="background:#eff6ff;color:#2563eb;font-size:.7rem;">En ${dias}d</span>`;
+    }
+
+    return `
+    <div style="background:var(--card);border:1px solid var(--border);border-left:3px solid ${borderColor};border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 18px;margin-bottom:8px;${estado==='completado'?'opacity:.6;':''}">
+      <div style="display:flex;align-items:flex-start;gap:12px;">
+        <!-- Icono categoría -->
+        <div style="width:36px;height:36px;border-radius:10px;background:${cat.color}1a;color:${cat.color};display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;">
+          ${cat.icon}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <!-- Nombre + badges -->
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+            <span style="font-weight:700;font-size:.93rem;color:var(--text);${estado==='completado'?'text-decoration:line-through;':''}">${r.nombre}</span>
+            <span style="font-size:.7rem;color:${cat.color};font-weight:600;">${cat.label}</span>
+            ${estadoBadge}
+          </div>
+          <!-- Fecha + hora -->
+          <div style="font-size:.78rem;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            ${formatFechaLarga(r.fecha)}
+            ${r.hora ? `<span>·</span><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${r.hora}` : ''}
+          </div>
+          ${r.nota ? `<div style="font-size:.75rem;color:var(--muted);margin-top:4px;">${r.nota}</div>` : ''}
+        </div>
+        <!-- Acciones -->
+        <div style="display:flex;gap:4px;flex-shrink:0;">
+          ${estado !== 'completado' ? `
+          <button onclick="completarRecordatorio('${r.id}')" title="Marcar completado" style="width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--muted)'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          </button>` : `
+          <button onclick="completarRecordatorio('${r.id}')" title="Marcar pendiente" style="width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--green);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--muted)'" onmouseout="this.style.color='var(--green)'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          </button>`}
+          <button onclick="openModalRecordatorio('${r.id}')" title="Editar" style="width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button onclick="eliminarRecordatorio('${r.id}')" title="Eliminar" style="width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--muted)'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openModalRecordatorio(id = null) {
+  const r = id ? (STATE.db.recordatorios || []).find(x => x.id === id) : null;
+  document.getElementById('rec-modal-titulo').textContent = r ? 'Editar recordatorio' : 'Nuevo recordatorio';
+  document.getElementById('rec-nombre').value = r?.nombre || '';
+  document.getElementById('rec-fecha').value  = r?.fecha  || new Date().toISOString().split('T')[0];
+  document.getElementById('rec-hora').value   = r?.hora   || '';
+  document.getElementById('rec-cat').value    = r?.cat    || 'general';
+  document.getElementById('rec-nota').value   = r?.nota   || '';
+  document.getElementById('rec-edit-id').value = r?.id   || '';
+  openModal('modal-recordatorio');
+}
+
+async function guardarRecordatorio() {
+  const nombre = document.getElementById('rec-nombre').value.trim();
+  const fecha  = document.getElementById('rec-fecha').value;
+  const hora   = document.getElementById('rec-hora').value;
+  const cat    = document.getElementById('rec-cat').value;
+  const nota   = document.getElementById('rec-nota').value.trim();
+  const editId = document.getElementById('rec-edit-id').value;
+
+  if (!nombre) return toast('El nombre es obligatorio', 'error');
+  if (!fecha)  return toast('La fecha es obligatoria', 'error');
+
+  if (!STATE.db.recordatorios) STATE.db.recordatorios = [];
+
+  if (editId) {
+    const idx = STATE.db.recordatorios.findIndex(r => r.id === editId);
+    if (idx !== -1) STATE.db.recordatorios[idx] = { ...STATE.db.recordatorios[idx], nombre, fecha, hora, cat, nota };
+  } else {
+    STATE.db.recordatorios.push({ id: uid(), nombre, fecha, hora, cat, nota, completado: false, creadoEn: new Date().toISOString() });
+  }
+
+  closeModal('modal-recordatorio');
+  renderRecordatorios();
+  actualizarBadgeRecordatorios();
+  await saveDb(['recordatorios']);
+  toast(editId ? 'Recordatorio actualizado' : 'Recordatorio creado', 'success');
+}
+
+async function completarRecordatorio(id) {
+  const r = (STATE.db.recordatorios || []).find(x => x.id === id);
+  if (!r) return;
+  r.completado = !r.completado;
+  renderRecordatorios();
+  actualizarBadgeRecordatorios();
+  await saveDb(['recordatorios']);
+  toast(r.completado ? 'Recordatorio completado' : 'Recordatorio reabierto', 'info');
+}
+
+async function eliminarRecordatorio(id) {
+  pedirPinParaAccion('Eliminar recordatorio', async () => {
+    STATE.db.recordatorios = (STATE.db.recordatorios || []).filter(r => r.id !== id);
+    renderRecordatorios();
+    actualizarBadgeRecordatorios();
+    await saveDb(['recordatorios']);
+    toast('Recordatorio eliminado', 'info');
+  });
 }
 
 /* ============================================================
