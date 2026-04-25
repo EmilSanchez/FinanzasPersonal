@@ -2,12 +2,13 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" type="image/png" href="img/favicon.png">
+
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
 <title>Finanzas PRO</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+CiAgPGRlZnM+CiAgICA8cmFkaWFsR3JhZGllbnQgaWQ9ImJnIiBjeD0iNDAlIiBjeT0iMzUlIiByPSI2NSUiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjMzRkMzk5Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iNTUlIiBzdG9wLWNvbG9yPSIjMDU5NjY5Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzA2NWY0NiIvPgogICAgPC9yYWRpYWxHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0ic2giIGN4PSIzNSUiIGN5PSIyOCUiIHI9IjM4JSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IndoaXRlIiBzdG9wLW9wYWNpdHk9IjAuNCIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IndoaXRlIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjE1LjUiIGZpbGw9InVybCgjYmcpIi8+CiAgPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTUuNSIgZmlsbD0idXJsKCNzaCkiLz4KICA8IS0tIEJhciBjaGFydCBiYXJzIC0tPgogIDxyZWN0IHg9IjYiICB5PSIxOCIgd2lkdGg9IjQiIGhlaWdodD0iOCIgIHJ4PSIxIiBmaWxsPSJ3aGl0ZSIgb3BhY2l0eT0iMC45NSIvPgogIDxyZWN0IHg9IjEyIiB5PSIxMyIgd2lkdGg9IjQiIGhlaWdodD0iMTMiIHJ4PSIxIiBmaWxsPSJ3aGl0ZSIgb3BhY2l0eT0iMC45NSIvPgogIDxyZWN0IHg9IjE4IiB5PSI5IiAgd2lkdGg9IjQiIGhlaWdodD0iMTciIHJ4PSIxIiBmaWxsPSJ3aGl0ZSIgb3BhY2l0eT0iMC45NSIvPgogIDwhLS0gVHJlbmQgYXJyb3cgLS0+CiAgPHBvbHlsaW5lIHBvaW50cz0iNiwxOCAxMiwxMyAxOCw5IDI0LDYiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMS44IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIG9wYWNpdHk9IjAuOSIvPgogIDxwb2x5Z29uIHBvaW50cz0iMjQsNiAyMiwxMCAyNyw5IiBmaWxsPSJ3aGl0ZSIgb3BhY2l0eT0iMC45Ii8+Cjwvc3ZnPg==">
 
 <!-- 
   @file index.html
@@ -878,44 +879,37 @@
 
     <!-- ====== PRÉSTAMOS A TERCEROS ====== -->
     <div class="page" id="page-prestamos">
-      
 
-      <!-- Resumen rápido -->
-      <div class="stats-grid" id="prest-stats-grid">
-        <div class="stat-card blue">
-          <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
-          <div class="stat-body">
-            <div class="stat-label">Total prestado</div>
-            <div class="stat-value" id="prest-total-val">$0</div>
-            <div class="stat-sub" id="prest-total-sub"></div>
-          </div>
-        </div>
-        <div class="stat-card green">
-          <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
-          <div class="stat-body">
-            <div class="stat-label">Total recuperado</div>
-            <div class="stat-value" id="prest-cobrado-val">$0</div>
-            <div class="stat-sub"></div>
-          </div>
-        </div>
-        <div class="stat-card red">
-          <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
-          <div class="stat-body">
-            <div class="stat-label">Por cobrar</div>
-            <div class="stat-value" id="prest-pendiente-val">$0</div>
-            <div class="stat-sub" id="prest-vencidos-sub"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Barra de acciones -->
+      <!-- Barra de acciones + resumen colapsable en un solo bloque -->
       <div class="section" style="overflow:visible;">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:0;" id="prest-stats-grid">
           <input type="text" class="form-control" id="prestamos-search" placeholder="Buscar préstamo..." oninput="renderPrestamos()" style="flex:1;min-width:160px;height:38px;">
           <button onclick="openModalNuevoPrestamo()" class="mov-btn-ingreso" style="height:38px;border-radius:8px;padding:0 16px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Nuevo préstamo
           </button>
+          <button onclick="togglePrestStats()" id="prest-stats-toggle" style="height:38px;padding:0 12px;background:none;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:.78rem;color:var(--muted);white-space:nowrap;">
+            Ver resumen
+          </button>
+        </div>
+        <!-- Resumen colapsado -->
+        <div id="prest-stats-body" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:none;">
+          <div style="display:flex;gap:24px;flex-wrap:wrap;">
+            <div>
+              <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px;">Total prestado</div>
+              <div style="font-weight:700;font-size:1rem;color:var(--text);" id="prest-total-val">$0</div>
+              <div style="font-size:.72rem;color:var(--muted);" id="prest-total-sub"></div>
+            </div>
+            <div>
+              <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px;">Recuperado</div>
+              <div style="font-weight:700;font-size:1rem;color:var(--green);" id="prest-cobrado-val">$0</div>
+            </div>
+            <div>
+              <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px;">Por cobrar</div>
+              <div style="font-weight:700;font-size:1rem;color:var(--red);" id="prest-pendiente-val">$0</div>
+              <div style="font-size:.72rem;color:var(--muted);" id="prest-vencidos-sub"></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -932,72 +926,22 @@
       
 
       <!-- Resumen del mes -->
-      <div class="gf-resumen" id="gf-resumen"></div>
-
-      <div class="section">
-        <div class="section-title" style="margin-bottom:16px;">Nuevo gasto fijo</div>
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Nombre *</label>
-            <input type="text" class="form-control" id="gf-nombre" placeholder="Ej: Arriendo, Netflix, agua...">
-          </div>
-          <div class="form-group">
-            <label>Valor mensual *</label>
-            <input type="number" class="form-control" id="gf-monto" placeholder="0">
-          </div>
-          <div class="form-group">
-            <label>Categoría</label>
-            <select class="form-control" id="gf-cat">
-              <option value="Arriendo">Arriendo</option>
-              <option value="Servicios">Servicios (agua/luz/gas)</option>
-              <option value="Internet">Internet / Telefonía</option>
-              <option value="Suscripción">Suscripción</option>
-              <option value="Crédito">Crédito / Cuota</option>
-              <option value="Seguro">Seguro</option>
-              <option value="Educación">Educación</option>
-              <option value="Salud">Salud / EPS</option>
-              <option value="Otro">Otro</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Día de pago (del mes)</label>
-            <input type="number" class="form-control" id="gf-dia" placeholder="Ej: 5" min="1" max="31">
-          </div>
-          <div class="form-group">
-            <label>Billetera por defecto</label>
-            <select class="form-control" id="gf-billetera">
-              <option value="">Sin asignar</option>
-            </select>
-            <small style="color:var(--muted);font-size:.72rem">Se usará al marcar como pagado</small>
-          </div>
-          <div class="form-group">
-            <label>Notas</label>
-            <input type="text" class="form-control" id="gf-notas" placeholder="Opcional...">
-          </div>
-          <div class="form-group" style="grid-column:1/-1">
-            <label>Vincular con deuda (opcional)</label>
-            <select class="form-control" id="gf-deuda-vinc">
-              <option value="">— Sin vincular —</option>
-            </select>
-            <small style="color:var(--muted);font-size:.72rem">Si seleccionas una deuda, al marcar este gasto como pagado se registrará el abono automáticamente en esa deuda</small>
-          </div>
-        </div>
-        <div class="form-actions">
-          <button class="btn btn-primary" onclick="saveGastoFijo()">Agregar gasto fijo</button>
+      <!-- Barra de acciones gastos fijos -->
+      <div class="section" style="overflow:visible;padding:16px 20px;">
+        <div class="gf-topbar">
+          <select class="form-control" style="height:40px;width:auto;min-width:130px;font-weight:600;" id="gf-mes-sel" onchange="renderGastosFijos()"></select>
+          <div id="gf-resumen" style="display:flex;align-items:center;gap:10px;flex-wrap:nowrap;min-width:0;flex:1;"></div>
+          <button onclick="openModalNuevoGastoFijo()" class="mov-btn-ingreso" style="height:40px;border-radius:8px;padding:0 18px;flex-shrink:0;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Nuevo gasto fijo
+          </button>
         </div>
       </div>
 
-      <!-- Filtro mes -->
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-        <span style="color:var(--muted);font-size:.85rem;">Ver mes:</span>
-        <select class="form-control" style="width:auto" id="gf-mes-sel" onchange="renderGastosFijos()"></select>
-        <button class="btn btn-ghost btn-sm" onclick="resetPagosGF()">Reiniciar pagos del mes</button>
-      </div>
-
-      <div class="gf-grid" id="gf-grid"></div>
+      <div id="gf-grid" style="display:flex;flex-direction:column;gap:10px;"></div>
       <div id="gf-empty" class="empty-state" style="display:none">
         <div class="empty-icon" style="font-size:2rem;font-weight:300;color:var(--border)">&#9635;</div>
-        <p>No tienes gastos fijos registrados aún.<br>Agrega tus compromisos mensuales.</p>
+        <p>No tienes gastos fijos registrados aún.</p>
       </div>
     </div>
 
@@ -1180,18 +1124,9 @@
 
     <!-- ====== BILLETERAS ====== -->
     <div class="page" id="page-billeteras">
-      <div class="page-header-row">
-        <div>
-          
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-ghost" onclick="openModalTransferencia()">Transferir</button>
-          <button class="btn btn-primary" onclick="openModalBilletera()">+ Nueva billetera</button>
-        </div>
-      </div>
 
-      <!-- Resumen total -->
-      <div class="bill-total-bar" id="bill-total-bar"></div>
+      <!-- Resumen total + acciones (generado por JS) -->
+      <div id="bill-total-bar"></div>
 
       <!-- Tarjetas -->
       <div class="bill-grid" id="bill-grid"></div>
@@ -1457,39 +1392,55 @@
 
 <!-- Modal Transferencia entre billeteras -->
 <div class="modal-overlay" id="modal-transferencia">
-  <div class="modal" style="max-width:420px;">
-    <div class="modal-title">Transferir entre billeteras</div>
-    <p style="color:var(--muted);font-size:.88rem;margin-bottom:20px;">Mueve dinero de una cuenta a otra. Se registrará como salida en el origen y entrada en el destino.</p>
-    <div class="form-group" style="margin-bottom:14px;">
-      <label>Billetera origen *</label>
-      <select class="form-control" id="tr-origen">
-        <option value="">— Selecciona origen —</option>
-      </select>
-      <div id="tr-saldo-origen" style="font-size:.78rem;color:var(--muted);margin-top:4px;"></div>
+  <div class="modal" style="max-width:440px;width:100%;">
+    <div class="modal-title" style="display:flex;align-items:center;gap:10px;padding:20px 24px;">
+      <div style="width:36px;height:36px;background:#0f2d6b;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+      </div>
+      <div>
+        <div style="font-size:1rem;font-weight:700;color:var(--text);">Transferir dinero</div>
+        <div style="font-size:.75rem;color:var(--muted);">Mueve saldo entre tus billeteras</div>
+      </div>
+      <button onclick="closeModal('modal-transferencia')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
     </div>
-    <div style="text-align:center;font-size:1.4rem;margin:-4px 0 10px;color:var(--muted);">↓</div>
-    <div class="form-group" style="margin-bottom:14px;">
-      <label>Billetera destino *</label>
-      <select class="form-control" id="tr-destino">
-        <option value="">— Selecciona destino —</option>
-      </select>
+    <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:12px;">
+      <div class="form-group">
+        <label>Desde (origen) *</label>
+        <select class="form-control" id="tr-origen" style="height:44px;width:100%;">
+          <option value="">— Selecciona origen —</option>
+        </select>
+        <div id="tr-saldo-origen" style="font-size:.78rem;color:var(--muted);margin-top:5px;font-weight:600;"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;height:1px;background:var(--border);"></div>
+        <div style="width:28px;height:28px;border-radius:50%;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+        </div>
+        <div style="flex:1;height:1px;background:var(--border);"></div>
+      </div>
+      <div class="form-group">
+        <label>Hacia (destino) *</label>
+        <select class="form-control" id="tr-destino" style="height:44px;width:100%;">
+          <option value="">— Selecciona destino —</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Monto *</label>
+        <input type="number" class="form-control" id="tr-monto" placeholder="0" min="1" oninput="onTrMontoChange()" style="height:44px;width:100%;">
+        <div id="tr-saldo-post" style="font-size:.78rem;margin-top:5px;display:none;padding:7px 10px;background:var(--bg2);border-radius:7px;"></div>
+      </div>
+      <div class="form-group">
+        <label>Descripción (opcional)</label>
+        <input type="text" class="form-control" id="tr-desc" placeholder="Ej: Consignación a Nequi..." style="height:44px;width:100%;">
+      </div>
+      <div class="form-group">
+        <label>Fecha</label>
+        <input type="date" class="form-control" id="tr-fecha" style="height:40px;width:100%;font-size:.85rem;">
+      </div>
     </div>
-    <div class="form-group" style="margin-bottom:14px;">
-      <label>Monto a transferir *</label>
-      <input type="number" class="form-control" id="tr-monto" placeholder="0" min="1" oninput="onTrMontoChange()">
-      <div id="tr-saldo-post" style="font-size:.78rem;margin-top:4px;display:none;"></div>
-    </div>
-    <div class="form-group" style="margin-bottom:14px;">
-      <label>Fecha</label>
-      <input type="date" class="form-control" id="tr-fecha">
-    </div>
-    <div class="form-group" style="margin-bottom:4px;">
-      <label>Descripción (opcional)</label>
-      <input type="text" class="form-control" id="tr-desc" placeholder="Ej: Consignación a Nequi...">
-    </div>
-    <div class="modal-actions" style="margin-top:20px;">
-      <button class="btn btn-ghost" onclick="closeModal('modal-transferencia')">Cancelar</button>
-      <button class="btn btn-primary" onclick="ejecutarTransferencia()">Transferir</button>
+    <div class="modal-actions" style="padding:16px 24px;gap:10px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-transferencia')" style="flex:1;">Cancelar</button>
+      <button onclick="ejecutarTransferencia()" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;">Transferir</button>
     </div>
   </div>
 </div>
@@ -1902,6 +1853,75 @@
     <div class="modal-actions" style="padding:16px 24px;gap:10px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-nuevo-usuario')" style="flex:1;">Cancelar</button>
       <button onclick="guardarNuevoUsuario()" class="btn btn-primary" style="flex:2;">Crear usuario</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Nuevo Gasto Fijo -->
+<div class="modal-overlay" id="modal-nuevo-gasto-fijo">
+  <div class="modal" style="max-width:500px;width:100%;">
+    <div class="modal-title" style="display:flex;align-items:center;gap:10px;padding:20px 24px;">
+      <div style="width:36px;height:36px;background:#7f0000;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      </div>
+      <div>
+        <div style="font-size:1rem;font-weight:700;color:var(--text);">Nuevo gasto fijo</div>
+        <div style="font-size:.75rem;color:var(--muted);">Compromiso mensual recurrente</div>
+      </div>
+      <button onclick="closeModal('modal-nuevo-gasto-fijo')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+    </div>
+    <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:14px;">
+      <div class="form-group">
+        <label>Nombre *</label>
+        <input type="text" class="form-control" id="gf-nombre" placeholder="Ej: Arriendo, Netflix, agua..." style="height:44px;">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group">
+          <label>Valor mensual *</label>
+          <input type="number" class="form-control" id="gf-monto" placeholder="0" style="height:44px;">
+        </div>
+        <div class="form-group">
+          <label>Día de pago</label>
+          <input type="number" class="form-control" id="gf-dia" placeholder="Ej: 5" min="1" max="31" style="height:44px;">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group">
+          <label>Categoría</label>
+          <select class="form-control" id="gf-cat" style="height:44px;">
+            <option value="Arriendo">Arriendo</option>
+            <option value="Servicios">Servicios</option>
+            <option value="Internet">Internet / Telefonía</option>
+            <option value="Suscripción">Suscripción</option>
+            <option value="Crédito">Crédito / Cuota</option>
+            <option value="Seguro">Seguro</option>
+            <option value="Educación">Educación</option>
+            <option value="Salud">Salud / EPS</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Billetera por defecto</label>
+          <select class="form-control" id="gf-billetera" style="height:44px;">
+            <option value="">Sin asignar</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Notas</label>
+        <input type="text" class="form-control" id="gf-notas" placeholder="Opcional..." style="height:44px;">
+      </div>
+      <div class="form-group">
+        <label>Vincular con deuda (opcional)</label>
+        <select class="form-control" id="gf-deuda-vinc" style="height:44px;">
+          <option value="">— Sin vincular —</option>
+        </select>
+        <small style="color:var(--muted);font-size:.72rem;">Al pagar se registra abono automático en la deuda</small>
+      </div>
+    </div>
+    <div class="modal-actions" style="padding:16px 24px;gap:10px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-nuevo-gasto-fijo')" style="flex:1;">Cancelar</button>
+      <button onclick="saveGastoFijo()" style="flex:2;background:#7f0000;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;">Agregar gasto fijo</button>
     </div>
   </div>
 </div>

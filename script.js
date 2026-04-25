@@ -901,6 +901,7 @@ async function initApp() {
   populateMonthFilters();
   populateCatFilters();
   populateGFMesSel();
+  autoResetGFIfNeeded();
   renderAll();
 
   // Restaurar última página visitada
@@ -2205,6 +2206,31 @@ function renderPass(search = '') {
 /* ============================================================
    PRÉSTAMOS A TERCEROS
    ============================================================ */
+function togglePrestStats() {
+  const body = document.getElementById('prest-stats-body');
+  const btn  = document.getElementById('prest-stats-toggle');
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (btn) btn.textContent = open ? 'Ver resumen' : 'Ocultar resumen';
+}
+
+function toggleGFStats() {
+  const visible = localStorage.getItem('gf_stats_visible') !== 'false';
+  localStorage.setItem('gf_stats_visible', visible ? 'false' : 'true');
+  renderGastosFijos();
+}
+
+function openModalNuevoGastoFijo() {
+  ['gf-nombre','gf-monto','gf-dia','gf-notas'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('gf-cat').value = 'Arriendo';
+  populateBilleteraSelects();
+  populateGFDeudaSelect('gf-deuda-vinc', '');
+  openModal('modal-nuevo-gasto-fijo');
+}
+
 function openModalNuevoPrestamo() {
   ['pr-nombre','pr-contacto','pr-monto','pr-interes','pr-desc'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
@@ -2619,6 +2645,7 @@ async function saveGastoFijo() {
   STATE.db.gastosFijos.push({ id: uid(), nombre, monto, cat, dia, notas, billeteraId, deudaId, pagos: {} });
   clearForm(['gf-nombre','gf-monto','gf-dia','gf-notas']);
   document.getElementById('gf-deuda-vinc').value = '';
+  closeModal('modal-nuevo-gasto-fijo');
   renderGastosFijos();
   await saveDb(['gastosFijos']);
   const vincMsg = deudaId ? ' — vinculado a deuda' : '';
@@ -2626,11 +2653,12 @@ async function saveGastoFijo() {
 }
 
 async function deleteGastoFijo(id) {
-  if (!confirm('¿Eliminar este gasto fijo?')) return;
-  STATE.db.gastosFijos = STATE.db.gastosFijos.filter(g => g.id !== id);
-  renderGastosFijos();
-  await saveDb(['gastosFijos']);
-  toast('Gasto fijo eliminado', 'info');
+  pedirPinParaAccion('Eliminar gasto fijo', async () => {
+    STATE.db.gastosFijos = STATE.db.gastosFijos.filter(g => g.id !== id);
+    renderGastosFijos();
+    await saveDb(['gastosFijos']);
+    toast('Gasto fijo eliminado', 'info');
+  });
 }
 
 function openEditGastoFijo(id) {
@@ -2753,7 +2781,40 @@ async function togglePagoGF(id) {
       : null;
     const extraMsg = deudaNombre ? `\nTambién se revertirá el abono en "${deudaNombre}".` : '';
 
-    if (!confirm(`¿Marcar "${gf.nombre}" como pendiente? Se eliminará el gasto registrado y se reintegrará ${fmt(gf.monto)} a la billetera.${extraMsg}`)) return;
+    const confirmed = await new Promise(resolve => {
+      let m = document.getElementById('modal-desmarcar-gf');
+      if (!m) {
+        m = document.createElement('div');
+        m.id = 'modal-desmarcar-gf';
+        m.className = 'modal-overlay';
+        m.innerHTML = `
+          <div class="modal" style="max-width:400px;width:100%;">
+            <div class="modal-title" style="display:flex;align-items:center;gap:10px;padding:20px 24px;">
+              <div style="width:36px;height:36px;background:#b45309;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+              <div>
+                <div style="font-size:1rem;font-weight:700;color:var(--text);">Desmarcar pago</div>
+                <div style="font-size:.75rem;color:var(--muted);" id="dgf-sub"></div>
+              </div>
+              <button onclick="document.getElementById('modal-desmarcar-gf').classList.remove('open');window._dgfResolve&&window._dgfResolve(false);" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">&#x2715;</button>
+            </div>
+            <div class="modal-body-wrap" style="padding:16px 24px;">
+              <p style="font-size:.88rem;color:var(--muted);line-height:1.6;" id="dgf-msg"></p>
+            </div>
+            <div class="modal-actions" style="padding:16px 24px;gap:10px;">
+              <button class="btn btn-ghost" onclick="document.getElementById('modal-desmarcar-gf').classList.remove('open');window._dgfResolve&&window._dgfResolve(false);" style="flex:1;">Cancelar</button>
+              <button onclick="document.getElementById('modal-desmarcar-gf').classList.remove('open');window._dgfResolve&&window._dgfResolve(true);" style="flex:2;background:#b45309;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;">Desmarcar</button>
+            </div>
+          </div>`;
+        document.body.appendChild(m);
+      }
+      document.getElementById('dgf-sub').textContent = gf.nombre + '  ·  ' + fmt(gf.monto);
+      document.getElementById('dgf-msg').textContent = 'Se eliminará el gasto registrado y se reintegrarán ' + fmt(gf.monto) + ' a la billetera.' + (extraMsg ? ' ' + extraMsg : '');
+      window._dgfResolve = resolve;
+      m.classList.add('open');
+    });
+    if (!confirmed) return;
 
     // 1. Buscar el gasto auto-generado (3 estrategias en orden de precisión)
     let gastoIdx = -1;
@@ -2810,36 +2871,45 @@ function openModalPagoFijo(gfId, mesKey) {
   if (!gf) return;
   const billeteras = STATE.db.billeteras || [];
 
-  // Crear modal si no existe
   let modal = document.getElementById('modal-pago-fijo-billetera');
   if (!modal) {
     modal = document.createElement('div');
     modal.id = 'modal-pago-fijo-billetera';
     modal.className = 'modal-overlay';
     modal.innerHTML = `
-      <div class="modal" style="max-width:380px;">
-        <div class="modal-title" id="mpf-titulo"> ¿De qué billetera pagas?</div>
-        <p style="color:var(--muted);font-size:.88rem;margin-bottom:16px;" id="mpf-desc"></p>
-        <div class="form-group">
-          <label>Billetera *</label>
-          <select class="form-control" id="mpf-billetera">
-            <option value="">— Selecciona billetera (obligatorio) —</option>
-          </select>
-          <div id="mpf-aviso" style="display:none;margin-top:6px;font-size:.8rem;color:var(--red);font-weight:600;"></div>
+      <div class="modal" style="max-width:420px;width:100%;">
+        <div class="modal-title" style="display:flex;align-items:center;gap:10px;padding:20px 24px;">
+          <div style="width:36px;height:36px;background:#0f2d6b;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          </div>
+          <div>
+            <div style="font-size:1rem;font-weight:700;color:var(--text);">Registrar pago</div>
+            <div style="font-size:.75rem;color:var(--muted);" id="mpf-desc"></div>
+          </div>
+          <button onclick="closeModal('modal-pago-fijo-billetera')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
         </div>
-        <div class="modal-actions">
-          <button class="btn btn-ghost" onclick="closeModal('modal-pago-fijo-billetera')">Cancelar</button>
-          <button class="btn btn-primary" id="mpf-confirmar">Confirmar pago</button>
+        <div class="modal-body-wrap" style="padding:20px 24px;">
+          <div class="form-group">
+            <label>Sale de billetera *</label>
+            <select class="form-control" id="mpf-billetera" style="height:44px;">
+              <option value="">— Selecciona billetera —</option>
+            </select>
+            <div id="mpf-saldo-info" style="display:none;margin-top:6px;padding:8px 12px;background:var(--bg2);border-radius:var(--radius-sm);font-size:.82rem;display:flex;align-items:center;justify-content:space-between;"></div>
+            <div id="mpf-aviso" style="display:none;margin-top:6px;font-size:.8rem;color:var(--red);font-weight:600;"></div>
+          </div>
+        </div>
+        <div class="modal-actions" style="padding:16px 24px;gap:10px;">
+          <button class="btn btn-ghost" onclick="closeModal('modal-pago-fijo-billetera')" style="flex:1;">Cancelar</button>
+          <button id="mpf-confirmar" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;">Confirmar pago</button>
         </div>
       </div>`;
     document.body.appendChild(modal);
-    // Cerrar al hacer click en overlay
     modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
   }
 
   // Poblar datos
   document.getElementById('mpf-desc').textContent =
-    `"${gf.nombre}" — ${fmt(gf.monto)}`;
+    `${gf.nombre}  ·  ${fmt(gf.monto)}`;
   const sel = document.getElementById('mpf-billetera');
   sel.innerHTML = '<option value="">— Selecciona billetera (obligatorio) —</option>';
 
@@ -2956,6 +3026,19 @@ async function confirmarPagoFijo(gfId, mesKey, billeteraUsada) {
   toast(`Pagado${dest} — ${fmt(gf.monto)}${mensajeDeuda}`, 'success');
 }
 
+function autoResetGFIfNeeded() {
+  // Reiniciar pagos automáticamente el 1ro de cada mes
+  const hoy = new Date();
+  if (hoy.getDate() !== 1) return; // solo el día 1
+  const mesKey = currentYM();
+  const lastReset = localStorage.getItem('gf_last_reset');
+  if (lastReset === mesKey) return; // ya se reinició este mes
+  // Marcar todos como pendientes para este mes (no borrar historial)
+  // Los pagos de meses anteriores se conservan — solo no pre-marcar este mes
+  localStorage.setItem('gf_last_reset', mesKey);
+  console.log('Auto-reset gastos fijos para', mesKey);
+}
+
 async function resetPagosGF() {
   const mesKey = document.getElementById('gf-mes-sel').value || currentYM();
   if (!confirm(`¿Reiniciar todos los pagos de ${monthLabel(mesKey)}?`)) return;
@@ -3004,30 +3087,31 @@ function renderGastosFijos() {
   const pct         = totalMes > 0 ? Math.round(totalPagado / totalMes * 100) : 0;
   const mes         = monthLabel(mesKey);
 
+  const color = pct===100?'var(--green)':pct>50?'var(--yellow)':'var(--accent)';
+  const gfStatsVisible = localStorage.getItem('gf_stats_visible') !== 'false';
   resumen.innerHTML = `
-    <div class="gf-resumen-item">
-      <div class="gf-resumen-label">Mes</div>
-      <div class="gf-resumen-val" style="font-size:1rem">${mes}</div>
-    </div>
-    <div class="gf-resumen-item">
-      <div class="gf-resumen-label">Total compromisos</div>
-      <div class="gf-resumen-val">${fmt(totalMes)}</div>
-    </div>
-    <div class="gf-resumen-item">
-      <div class="gf-resumen-label">Ya pagado</div>
-      <div class="gf-resumen-val" style="color:var(--green)">${fmt(totalPagado)}</div>
-    </div>
-    <div class="gf-resumen-item">
-      <div class="gf-resumen-label">Pendiente</div>
-      <div class="gf-resumen-val" style="color:${totalPend>0?'var(--red)':'var(--green)'}">${fmt(totalPend)}</div>
-    </div>
-    <div style="flex:1;min-width:160px;">
-      <div style="display:flex;justify-content:space-between;font-size:.78rem;color:var(--muted);margin-bottom:5px;">
-        <span>Progreso del mes</span><span>${pct}%</span>
+    <div style="display:flex;align-items:center;gap:10px;flex:1;flex-wrap:nowrap;min-width:0;">
+      <!-- Conteo siempre visible -->
+      <span style="font-size:.82rem;font-weight:600;color:var(--muted);white-space:nowrap;flex-shrink:0;">${pagados.length}/${list.length}</span>
+      <!-- Stats ocultables -->
+      <div id="gf-stats-nums" style="display:${gfStatsVisible?'flex':'none'};align-items:center;gap:8px;flex-wrap:nowrap;min-width:0;">
+        <span style="color:var(--border);">·</span>
+        <span style="font-size:.92rem;font-weight:700;color:var(--green);white-space:nowrap;">${fmt(totalPagado)}</span>
+        <span style="color:var(--border);">·</span>
+        <span style="font-size:.92rem;font-weight:700;color:${totalPend>0?'var(--red)':'var(--green)'};white-space:nowrap;">${fmt(totalPend)}</span>
       </div>
-      <div class="progress-bar" style="height:10px;">
-        <div class="progress-fill" style="width:${pct}%;background:${pct===100?'var(--green)':pct>50?'var(--yellow)':'var(--accent)'}"></div>
+      <!-- Barra progreso -->
+      <div class="progress-bar" style="flex:1;height:6px;border-radius:10px;min-width:40px;max-width:140px;flex-shrink:1;">
+        <div class="progress-fill" style="width:${pct}%;background:${color};border-radius:10px;transition:width .4s ease;"></div>
       </div>
+      <span style="font-size:.78rem;color:var(--muted);flex-shrink:0;">${pct}%</span>
+      <!-- Botón ojo -->
+      <button onclick="toggleGFStats()" title="${gfStatsVisible?'Ocultar montos':'Mostrar montos'}" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:2px 4px;flex-shrink:0;display:flex;align-items:center;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
+        ${gfStatsVisible
+          ? '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+          : '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'
+        }
+      </button>
     </div>`;
 
   if (!list.length) {
@@ -3053,48 +3137,40 @@ function renderGastosFijos() {
   grid.innerHTML = sorted.map(g => {
     const _pval = g.pagos && g.pagos[mesKey];
     const pagado = _pval === true || (_pval && _pval.pagado);
-    const pagadoInfo = (_pval && _pval.fecha) ? `${_pval.fecha} ${_pval.hora||''}` : '';
-    const now    = new Date();
+    const pagadoFecha = (_pval && _pval.fecha) ? _pval.fecha : '';
+    const now = new Date();
     const diasMes = g.dia > 0 ? g.dia - now.getDate() : null;
-    let diasStr = '';
-    if (diasMes !== null && !pagado) {
-      if (diasMes < 0)       diasStr = `<span class="dias-badge dias-venc">Venció hace ${Math.abs(diasMes)}d</span>`;
-      else if (diasMes === 0) diasStr = `<span class="dias-badge dias-soon">Vence hoy</span>`;
-      else if (diasMes <= 5)  diasStr = `<span class="dias-badge dias-soon">Vence en ${diasMes}d</span>`;
-      else                    diasStr = `<span class="dias-badge dias-ok">Día ${g.dia}</span>`;
-    } else if (g.dia && pagado) {
-      diasStr = `<span class="dias-badge dias-ok">Día ${g.dia}</span>`;
+    let diasBadge = '';
+    if (!pagado && diasMes !== null) {
+      if (diasMes < 0)       diasBadge = `<span class="badge badge-red" style="font-size:.7rem;">Venció hace ${Math.abs(diasMes)}d</span>`;
+      else if (diasMes === 0) diasBadge = `<span class="badge" style="background:var(--yellow-light);color:var(--yellow);font-size:.7rem;">Vence hoy</span>`;
+      else if (diasMes <= 5)  diasBadge = `<span class="badge" style="background:var(--yellow-light);color:var(--yellow);font-size:.7rem;">Vence en ${diasMes}d</span>`;
+      else                    diasBadge = `<span style="font-size:.72rem;color:var(--muted);">Día ${g.dia}</span>`;
     }
-
-    const deudaVinc = g.deudaId
-      ? STATE.db.deudas.find(d => d.id === g.deudaId)
-      : null;
-    const deudaBadge = deudaVinc
-      ? `<div style="margin-top:6px;"><span class="badge badge-blue" style="font-size:.7rem;">→ ${deudaVinc.nombre} — pend. ${fmt(Math.max(0, deudaVinc.total - (deudaVinc.pagado||0)))}</span></div>`
-      : '';
+    const deudaVinc = g.deudaId ? STATE.db.deudas.find(d => d.id === g.deudaId) : null;
 
     return `
-    <div class="gf-card" style="${pagado ? 'opacity:.7;' : ''}">
-      <div class="gf-card-top">
-        <div>
-          <div class="gf-nombre">${CAT_ICONS[g.cat]||''} ${g.nombre}</div>
-          <div class="gf-cat">${g.cat}${g.notas ? ' · ' + g.notas : ''}</div>
-          ${deudaBadge}
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);display:flex;align-items:center;gap:14px;padding:14px 18px;${pagado?'opacity:.65;':''}">
+      <div style="width:10px;height:10px;border-radius:50%;background:${pagado?'var(--green)':'var(--red)'};flex-shrink:0;"></div>
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span style="font-weight:700;font-size:.92rem;color:var(--text);">${g.nombre}</span>
+          <span style="font-size:.72rem;color:var(--muted);">${g.cat}${g.notas?' · '+g.notas:''}</span>
+          ${diasBadge}
+          ${deudaVinc?`<span class="badge badge-blue" style="font-size:.68rem;">→ ${deudaVinc.nombre}</span>`:''}
         </div>
-        <div style="display:flex;gap:6px;">
-          <button class="btn btn-ghost btn-sm" style="padding:4px 8px" onclick="openEditGastoFijo('${g.id}')" title="Editar">✏️</button>
-          <button class="btn btn-danger btn-sm" style="padding:4px 8px" onclick="deleteGastoFijo('${g.id}')">️</button>
-        </div>
+        ${pagadoFecha?`<div style="font-size:.7rem;color:var(--muted);margin-top:2px;">Pagado: ${formatFechaLarga(pagadoFecha)}</div>`:''}
       </div>
-      <div class="gf-monto" style="color:${pagado?'var(--green)':'var(--text)'}">${fmt(g.monto)}</div>
-      <div class="gf-info">
-        ${diasStr}
-        <span class="badge ${pagado ? 'badge-green' : 'badge-red'}">${pagado ? 'Pagado' : '⏳ Pendiente'}</span>
-        ${pagadoInfo ? `<span style="font-size:.68rem;color:var(--muted)">${pagadoInfo}</span>` : ''}
-      </div>
-      <div class="gf-actions">
-        <button class="toggle-pago ${pagado ? 'pagado' : ''}" onclick="togglePagoGF('${g.id}')">
-          ${pagado ? '↩️ Marcar pendiente' : 'Marcar como pagado'}
+      <div style="font-weight:700;font-size:1rem;color:${pagado?'var(--green)':'var(--text)'};flex-shrink:0;">${fmt(g.monto)}</div>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <button onclick="togglePagoGF('${g.id}')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:7px;background:${pagado?'var(--bg2)':'#0f2d6b'};color:${pagado?'var(--muted)':'#fff'};font-size:.75rem;font-weight:600;cursor:pointer;white-space:nowrap;">
+          ${pagado ? 'Desmarcar' : 'Pagar'}
+        </button>
+        <button onclick="openEditGastoFijo('${g.id}')" style="height:34px;width:34px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button onclick="deleteGastoFijo('${g.id}')" style="height:34px;width:34px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--muted)'">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
         </button>
       </div>
     </div>`;
@@ -4504,56 +4580,72 @@ function openModalBilletera(id=null) {
   const b = id ? getBilleteras().find(b=>b.id===id) : null;
   const tipos = ['Nequi','Efectivo','Bancolombia','Daviplata','Banco','BBVA','Ahorro','PayPal','Otro'];
 
-  const overlay = document.getElementById('modal-inv-form-overlay');
-  overlay.innerHTML = `
-    <div class="modal" style="max-width:400px;width:100%;">
-      <div class="modal-title">${b?'Editar billetera':'Nueva billetera'}
-        <button onclick="closeInvModal()" style="float:right;background:none;border:none;font-size:1rem;color:var(--muted);cursor:pointer;">✕</button>
-      </div>
-      <div class="modal-body-wrap">
-        <div class="form-grid">
-          <div class="form-group"><label>Nombre *</label>
-            <input type="text" class="form-control" id="fb-nombre" value="${b?.nombre||''}" placeholder="Ej: Nequi personal, Efectivo...">
-          </div>
-          <div class="form-group"><label>Tipo</label>
-            <select class="form-control" id="fb-tipo">
-              ${tipos.map(t=>`<option value="${t}" ${(b?.tipo||'Otro')===t?'selected':''}>${BILL_ICONOS[t]||''} ${t}</option>`).join('')}
-            </select>
-          </div>
-          <div class="form-group" style="grid-column:1/-1"><label>Saldo inicial (COP)</label>
-            <input type="number" class="form-control" id="fb-saldo" value="${b?.saldoInicial||0}" placeholder="0">
-            <small style="color:var(--muted);font-size:.72rem">Cuánto tienes ahora mismo en esta billetera</small>
-          </div>
-          <div class="form-group" style="grid-column:1/-1"><label>Color / estilo</label>
-            <select class="form-control" id="fb-color">
-              <option value="var(--accent)" ${(b?.color||'var(--accent)')===('var(--accent)')?'selected':''}>● Azul</option>
-              <option value="var(--green)"  ${b?.color==='var(--green)'?'selected':''}>● Verde</option>
-              <option value="var(--purple)" ${b?.color==='var(--purple)'?'selected':''}>● Morado</option>
-              <option value="var(--red)"    ${b?.color==='var(--red)'?'selected':''}>● Rojo</option>
-              <option value="var(--yellow)" ${b?.color==='var(--yellow)'?'selected':''}>● Amarillo</option>
-              <option value="var(--teal)"   ${b?.color==='var(--teal)'?'selected':''}>🩵 Teal</option>
-              <option value="var(--orange)" ${b?.color==='var(--orange)'?'selected':''}>● Naranja</option>
-            </select>
-          </div>
-          <div class="form-group" style="grid-column:1/-1">
-            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:500;">
-              <input type="checkbox" id="fb-cobra4x1000" ${b?.cobra4x1000 ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;">
-              Cobra 4x1000 (GMF)
-            </label>
-            <small style="color:var(--muted);font-size:.72rem;margin-top:4px;display:block;">
-              Actívalo en cuentas bancarias (Bancolombia, BBVA, Davivienda, etc.). El GMF se registrará automáticamente como gasto al hacer retiros.
-            </small>
-          </div>
+  // Usar modal estándar
+  let mo = document.getElementById('modal-billetera');
+  if (!mo) {
+    mo = document.createElement('div');
+    mo.className = 'modal-overlay';
+    mo.id = 'modal-billetera';
+    document.body.appendChild(mo);
+    mo.addEventListener('click', e => { if (e.target === mo) mo.classList.remove('open'); });
+  }
+
+  mo.innerHTML = `
+    <div class="modal" style="max-width:440px;width:100%;">
+      <div class="modal-title" style="display:flex;align-items:center;gap:10px;padding:20px 24px;">
+        <div style="width:36px;height:36px;background:#0f2d6b;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
         </div>
+        <div>
+          <div style="font-size:1rem;font-weight:700;color:var(--text);">${b?'Editar billetera':'Nueva billetera'}</div>
+          <div style="font-size:.75rem;color:var(--muted);">${b?'Modifica los datos de tu cuenta':'Registra una cuenta o método de pago'}</div>
+        </div>
+        <button onclick="closeModal('modal-billetera')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
       </div>
-      <div class="modal-actions">
-        <button class="btn btn-ghost" onclick="closeInvModal()">Cancelar</button>
-        <button class="btn btn-primary" onclick="guardarBilletera('${id||''}')">
+      <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:12px;">
+        <div class="form-group">
+          <label>Nombre *</label>
+          <input type="text" class="form-control" id="fb-nombre" value="${b?.nombre||''}" placeholder="Ej: Nequi personal, Efectivo..." style="height:44px;width:100%;">
+        </div>
+        <div class="form-group">
+          <label>Tipo</label>
+          <select class="form-control" id="fb-tipo" style="height:44px;width:100%;">
+            ${tipos.map(t=>`<option value="${t}" ${(b?.tipo||'Otro')===t?'selected':''}>${t}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Color</label>
+          <select class="form-control" id="fb-color" style="height:44px;width:100%;">
+            <option value="var(--accent)" ${(!b?.color||b?.color==='var(--accent)')?'selected':''}>Azul</option>
+            <option value="var(--green)"  ${b?.color==='var(--green)'?'selected':''}>Verde</option>
+            <option value="var(--purple)" ${b?.color==='var(--purple)'?'selected':''}>Morado</option>
+            <option value="var(--red)"    ${b?.color==='var(--red)'?'selected':''}>Rojo</option>
+            <option value="var(--yellow)" ${b?.color==='var(--yellow)'?'selected':''}>Amarillo</option>
+            <option value="var(--teal)"   ${b?.color==='var(--teal)'?'selected':''}>Teal</option>
+            <option value="var(--orange)" ${b?.color==='var(--orange)'?'selected':''}>Naranja</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Saldo inicial (COP)</label>
+          <input type="number" class="form-control" id="fb-saldo" value="${b?.saldoInicial||0}" placeholder="0" style="height:44px;width:100%;">
+          <small style="color:var(--muted);font-size:.72rem;">Cuánto tienes actualmente en esta cuenta</small>
+        </div>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--bg2);">
+          <input type="checkbox" id="fb-cobra4x1000" ${b?.cobra4x1000?'checked':''} style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;">
+          <div>
+            <div style="font-weight:600;font-size:.88rem;">Cobra 4x1000 (GMF)</div>
+            <div style="font-size:.72rem;color:var(--muted);margin-top:2px;">Para cuentas bancarias. El impuesto se registra automáticamente en cada retiro.</div>
+          </div>
+        </label>
+      </div>
+      <div class="modal-actions" style="padding:16px 24px;gap:10px;">
+        <button class="btn btn-ghost" onclick="closeModal('modal-billetera')" style="flex:1;">Cancelar</button>
+        <button onclick="guardarBilletera('${id||''}')" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;">
           ${b?'Guardar cambios':'Crear billetera'}
         </button>
       </div>
     </div>`;
-  overlay.style.display = 'flex';
+  mo.classList.add('open');
 }
 
 async function guardarBilletera(id='') {
@@ -4574,7 +4666,7 @@ async function guardarBilletera(id='') {
     
     toast('Billetera creada', 'success');
   }
-  closeInvModal();
+  closeModal('modal-billetera');
   renderBilleteras();
   populateBilleteraSelects();
   await saveDb(['billeteras']);
@@ -4583,12 +4675,14 @@ async function guardarBilletera(id='') {
 
 async function deleteBilletera(id) {
   const b = getBilleteras().find(b=>b.id===id);
-  if (!confirm(`¿Eliminar la billetera "${b?.nombre}"?\nLos movimientos asociados no se eliminarán.`)) return;
-  STATE.db.billeteras = STATE.db.billeteras.filter(b=>b.id!==id);
-  renderBilleteras();
-  populateBilleteraSelects();
-  await saveDb(['billeteras']);
-  toast('Billetera eliminada', 'info');
+  if (!b) return;
+  pedirPinParaAccion(`Eliminar "${b.nombre}"`, async () => {
+    STATE.db.billeteras = STATE.db.billeteras.filter(x=>x.id!==id);
+    renderBilleteras();
+    populateBilleteraSelects();
+    await saveDb(['billeteras']);
+    toast('Billetera eliminada', 'info');
+  });
 }
 
 // ─── Transferencia entre billeteras ──────────────────────────
@@ -5697,14 +5791,32 @@ function renderBilleteras() {
   const grid  = document.getElementById('bill-grid');
   const empty = document.getElementById('bill-empty');
   const bar   = document.getElementById('bill-total-bar');
-  const list  = getBilleteras();
+  const all   = getBilleteras();
+  const list  = all.filter(b => !b.oculta);
+  const ocultas = all.filter(b => b.oculta);
 
   const totalGeneral = list.reduce((a,b)=>a+saldoBilletera(b.id),0);
 
   if (bar) bar.innerHTML = `
-    <div style="font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600">Total en todas las billeteras</div>
-    <div style="font-size:1.6rem;font-weight:700;color:var(--green);font-family:var(--font-head)">${fmt(totalGeneral)}</div>
-    <div style="font-size:.78rem;color:var(--muted)">${list.length} billetera${list.length!==1?'s':''}</div>`;
+    <div class="section" style="padding:16px 20px;">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:3px;">Total en billeteras</div>
+          <div style="font-size:1.9rem;font-weight:800;color:${totalGeneral>=0?'var(--green)':'var(--red)'};line-height:1;">${fmt(totalGeneral)}</div>
+          <div style="font-size:.72rem;color:var(--muted);margin-top:3px;">${list.length} billetera${list.length!==1?'s':''}${ocultas.length?' · '+ocultas.length+' oculta'+(ocultas.length!==1?'s':''):''}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
+          <button onclick="openModalTransferencia()" style="height:38px;padding:0 14px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer;font-size:.82rem;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            Transferir
+          </button>
+          <button onclick="openModalBilletera()" style="height:38px;padding:0 14px;border:none;border-radius:8px;background:#0f2d6b;cursor:pointer;font-size:.82rem;font-weight:700;color:#fff;display:flex;align-items:center;gap:6px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Nueva billetera
+          </button>
+        </div>
+      </div>
+    </div>`;
 
   if (!list.length) {
     if(grid) grid.innerHTML = '';
@@ -5726,37 +5838,99 @@ function renderBilleteras() {
     'Otro':        `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`,
   };
 
-  grid.innerHTML = list.map(b => {
+  function billCard(b, esOculta=false) {
     const saldo = saldoBilletera(b.id);
     const svgIcon = BILL_SVG[b.tipo] || BILL_SVG['Otro'];
     const color = b.color || 'var(--accent)';
     const numIng = STATE.db.ingresos.filter(i=>i.billeteraId===b.id && i.cat!=='Transferencia').length;
     const numGas = STATE.db.gastos.filter(g=>g.billeteraId===b.id && g.cat!=='Transferencia').length;
-    const numTrf = (STATE.db.transferencias||[]).filter(t=>t.origenId===b.id||t.destinoId===b.id).length;
     return `
-      <div class="bill-card" style="color:${color}">
-        <div class="bill-icon" style="color:${color}">${svgIcon}</div>
-        <div class="bill-nombre">${b.nombre}</div>
-        <div class="bill-saldo" style="color:${saldo>=0?color:'var(--red)'}">${fmt(saldo)}</div>
-        <div style="font-size:.72rem;color:var(--muted)">${numIng} ingresos · ${numGas} gastos · ${numTrf} transf.</div>
-        <div class="bill-actions">
-          <button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center" onclick="verMovimientosBilletera('${b.id}')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Detalle
+    <div class="bill-card" style="border-top:3px solid ${color};">
+      <div class="bill-card-header">
+        <div class="bill-icon-wrap" style="background:${color}1a;color:${color};">${svgIcon}</div>
+        <div class="bill-info">
+          <div class="bill-nombre">${b.nombre}</div>
+          <div class="bill-meta">${numIng} ing · ${numGas} gas</div>
+        </div>
+        <div class="bill-card-btns">
+          <button class="bill-card-btn" onclick="ocultarBilletera('${b.id}',${!esOculta})" title="${esOculta?'Mostrar':'Ocultar'}">
+            ${esOculta
+              ? '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'
+              : '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+            }
           </button>
-          <button class="btn btn-ghost btn-sm" title="Transferir" onclick="openModalTransferenciaDesde('${b.id}')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.46"/></svg>
+          <button class="bill-card-btn" onclick="openModalBilletera('${b.id}')" title="Editar">
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
-          <button class="btn btn-ghost btn-sm" onclick="openModalBilletera('${b.id}')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          </button>
-          <button class="btn btn-danger btn-sm" onclick="deleteBilletera('${b.id}')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          <button class="bill-card-btn danger" onclick="deleteBilletera('${b.id}')" title="Eliminar">
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
           </button>
         </div>
+      </div>
+      <div class="bill-saldo" style="color:${saldo>=0?color:'var(--red)'};">${fmt(saldo)}</div>
+      <div class="bill-actions">
+        <button class="btn btn-ghost btn-sm" onclick="verMovimientosBilletera('${b.id}')">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>Movimientos
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="openModalTransferenciaDesde('${b.id}')" title="Transferir">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.46"/></svg>
+        </button>
+      </div>
+    </div>`;
+  }
+
+  if (!all.length) {
+    if(grid) grid.innerHTML = '';
+    if(empty) empty.style.display = '';
+    renderTablaTransferencias();
+    return;
+  }
+  if(empty) empty.style.display = 'none';
+
+  // Billeteras visibles
+  grid.innerHTML = list.length
+    ? list.map(b => billCard(b, false)).join('')
+    : '<p style="color:var(--muted);font-size:.85rem;grid-column:1/-1;padding:8px 0;">No hay billeteras visibles.</p>';
+
+  // Sección ocultas
+  let ocultasEl = document.getElementById('bill-ocultas-sec');
+  if (!ocultasEl) {
+    ocultasEl = document.createElement('div');
+    ocultasEl.id = 'bill-ocultas-sec';
+    grid.parentNode.insertBefore(ocultasEl, grid.nextSibling);
+  }
+  if (ocultas.length) {
+    const expanded = localStorage.getItem('bill_ocultas_expanded') === 'true';
+    ocultasEl.innerHTML = `
+      <div style="margin-top:20px;">
+        <button onclick="toggleBillOcultas()" style="display:flex;align-items:center;gap:8px;background:none;border:none;cursor:pointer;padding:0;margin-bottom:${expanded?'12px':'0'};">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          <span style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);">Billeteras ocultas (${ocultas.length})</span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2.5" style="transition:transform .2s;transform:rotate(${expanded?'180':'0'}deg)"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div id="bill-ocultas-grid" style="display:${expanded?'grid':'none'};" class="bill-grid">
+          ${ocultas.map(b => billCard(b, true)).join('')}
+        </div>
       </div>`;
-  }).join('');
+  } else {
+    ocultasEl.innerHTML = '';
+  }
 
   renderTablaTransferencias();
+}
+
+function toggleBillOcultas() {
+  const expanded = localStorage.getItem('bill_ocultas_expanded') === 'true';
+  localStorage.setItem('bill_ocultas_expanded', expanded ? 'false' : 'true');
+  renderBilleteras();
+}
+
+async function ocultarBilletera(id, ocultar) {
+  const idx = STATE.db.billeteras.findIndex(b=>b.id===id);
+  if (idx === -1) return;
+  STATE.db.billeteras[idx].oculta = ocultar;
+  await saveDb(['billeteras']);
+  renderBilleteras();
 }
 
 // Poblar todos los selects de billetera en los formularios

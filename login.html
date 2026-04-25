@@ -2,6 +2,8 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" type="image/png" href="img/favicon.png">
+
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Finanzas PRO</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -26,11 +28,13 @@ html, body {
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  display: flex; align-items: center; justify-content: center;
 }
 
 /* ── Full screen layout ── */
 .app {
   height: 100dvh;
+  width: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -65,7 +69,7 @@ html, body {
   position: relative; z-index: 1;
 }
 .hero h1 {
-  font-family: 'DM Serif Display', serif;
+  font-family: 'Calibri', 'Carlito', 'Trebuchet MS', sans-serif;
   font-size: 1.7rem;
   color: #fff;
   line-height: 1;
@@ -79,9 +83,8 @@ html, body {
 .body {
   flex: 1;
   background: var(--white);
-  border-radius: 24px 24px 0 0;
-  margin-top: -20px;
-  padding: 32px 24px;
+  border-radius: 0;
+  padding: 40px 28px;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -205,55 +208,31 @@ html, body {
 #loading .spin { width:36px;height:36px;border-top-color:#fff;border-color:rgba(255,255,255,.2); }
 #loading p { font-size:.85rem;color:rgba(255,255,255,.5);font-family:'DM Sans',sans-serif; }
 
-/* Desktop — layout split 2 columnas */
+/* Desktop — card centrado sin panel azul */
 @media (min-width: 700px) {
   html, body {
     overflow: auto; height: auto; min-height: 100%;
     background: #0d1117;
     background-image:
-      radial-gradient(ellipse at 20% 50%, rgba(26,58,92,.4) 0%, transparent 60%),
+      radial-gradient(ellipse at 20% 50%, rgba(26,58,92,.35) 0%, transparent 60%),
       radial-gradient(ellipse at 80% 20%, rgba(201,168,76,.06) 0%, transparent 50%);
     display: flex; align-items: center; justify-content: center;
   }
   .app {
-    height: auto; min-height: 560px;
-    width: 880px; max-width: 95vw;
-    flex-direction: row;
-    border-radius: 28px;
-    box-shadow: 0 40px 100px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.06);
+    height: auto;
+    width: 420px; max-width: 95vw;
+    flex-direction: column;
+    border-radius: 24px;
+    box-shadow: 0 40px 100px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.07);
     overflow: hidden;
   }
-  .hero {
-    flex: 1;
-    padding: 56px 48px;
-    display: flex; flex-direction: column; justify-content: space-between;
-    border-radius: 0;
-    margin: 0;
-  }
-  .hero-brand { flex-direction: row; align-items: center; gap: 0; }
-  .hero h1 { font-size: 1.9rem; white-space: nowrap; }
-  .hero-desc {
-    display: block;
-    font-size: .85rem;
-    color: rgba(255,255,255,.45);
-    line-height: 1.7;
-    margin-top: 16px;
-    padding-left: 2px;
-  }
-  .hero-foot {
-    font-size: .7rem;
-    color: rgba(255,255,255,.22);
-    letter-spacing: .06em;
-  }
+  .hero { display: none; }
   .body {
-    flex: none; width: 400px;
-    border-radius: 0; margin-top: 0;
-    padding: 52px 44px;
+    border-radius: 24px;
+    padding: 44px 40px;
     display: flex; flex-direction: column; justify-content: center;
-    overflow-y: auto;
     background: #f8f7f5;
   }
-  .section-label { font-size: .7rem; }
 }
 </style>
 </head>
@@ -266,23 +245,15 @@ html, body {
 
 <div class="app" id="app" style="display:none;">
 
-  <!-- Hero -->
-  <div class="hero">
-    <div>
-      <div class="hero-brand">
-        <h1>Finanzas <span>PRO</span></h1>
-      </div>
-      <p class="hero-desc">Gestiona tu dinero con claridad.<br>Todo en un solo lugar.</p>
-    </div>
-    <div class="hero-foot">© 2026 Finanzas PRO</div>
-  </div>
-
   <!-- Body -->
   <div class="body">
 
     <!-- Pantalla: selección -->
     <div class="screen active" id="screen-users">
-      <div class="section-label">Selecciona tu perfil</div>
+      <div style="text-align:center;margin-bottom:28px;">
+        <h1 style="font-family:'Calibri','Carlito','Trebuchet MS',sans-serif;font-size:1.8rem;font-weight:700;color:var(--ink);line-height:1;">Finanzas <span style="color:var(--gold);">PRO</span></h1>
+        <p style="font-size:.8rem;color:var(--muted);margin-top:6px;">Selecciona tu perfil para continuar</p>
+      </div>
       <div class="user-list" id="user-list"></div>
 
     </div>

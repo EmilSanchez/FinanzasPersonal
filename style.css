@@ -646,25 +646,30 @@ canvas { max-width: 100%; display: block; }
 @media (max-width: 960px) { .det-grid { grid-template-columns: 1fr; } }
 
 /* ── Billeteras ── */
-.bill-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap: 14px; margin-bottom: 20px; }
+.bill-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px,100%),1fr)); gap: 16px; margin-bottom: 20px; }
 .bill-card {
   background: var(--card); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 18px 20px;
+  border-radius: var(--radius); padding: 18px 18px 14px;
   box-shadow: var(--shadow);
-  display: flex; flex-direction: column; gap: 6px;
+  display: flex; flex-direction: column;
   position: relative; overflow: hidden;
   transition: transform var(--transition), box-shadow var(--transition);
-  border-top: 3px solid currentColor;
   min-width: 0;
 }
-.bill-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
-.bill-icon { font-size: 1.8rem; line-height: 1; margin-bottom: 2px; }
-.bill-nombre { font-weight: 700; font-size: .95rem; color: var(--text); }
-.bill-saldo { font-size: 1.3rem; font-weight: 700; font-family: var(--font-head); }
-.bill-actions { display: flex; gap: 4px; margin-top: 4px; flex-wrap: nowrap; align-items: center; }
-.bill-actions .btn { flex-shrink: 0; padding: 5px 8px; min-width: 0; }
-.bill-actions .btn:first-child { flex: 1; justify-content: center; min-width: 60px; }
-.bill-total-bar { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; box-shadow: var(--shadow); }
+.bill-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.bill-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.bill-icon-wrap { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.bill-info { flex: 1; min-width: 0; }
+.bill-nombre { font-weight: 700; font-size: .9rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bill-meta  { font-size: .7rem; color: var(--muted); margin-top: 1px; }
+.bill-card-btns { display: flex; gap: 4px; flex-shrink: 0; }
+.bill-card-btn { width: 26px; height: 26px; border: 1px solid var(--border); border-radius: 6px; background: none; cursor: pointer; color: var(--muted); display: flex; align-items: center; justify-content: center; transition: color .15s; }
+.bill-card-btn:hover { color: var(--accent); }
+.bill-card-btn.danger:hover { color: var(--red); }
+.bill-saldo { font-size: 1.5rem; font-weight: 800; margin: 6px 0 12px; line-height: 1; }
+.bill-actions { display: flex; gap: 6px; margin-top: auto; }
+.bill-actions .btn { flex: 1; justify-content: center; font-size: .76rem; }
+.bill-total-bar { margin-bottom: 0; }
 
 /* ============================================================
    BOTTOM NAV — Mobile only (visible ≤768px)
@@ -1269,6 +1274,29 @@ canvas { max-width: 100%; display: block; }
   #modal-eliminar-mov .modal::before { display: none; }
 }
 
+/* ── Animaciones globales de botones ── */
+button, .btn, [role="button"],
+.user-btn, .user-item, .nav-btn, .bnav-btn,
+.drawer-item, .config-item, .mov-btn-ingreso,
+.mov-btn-gasto, .pin-btn, .num, .mov-quick-btn {
+  transition: transform .12s cubic-bezier(.34,1.56,.64,1), box-shadow .12s ease, background .15s ease, color .15s ease !important;
+}
+button:hover, .btn:hover, .user-btn:hover,
+.mov-btn-ingreso:hover, .mov-btn-gasto:hover,
+.drawer-item:hover, .config-item:hover {
+  transform: scale(1.03);
+}
+/* Nav buttons: sin escala en hover, solo color */
+.nav-btn:hover { transform: none; }
+button:active, .btn:active, [role="button"]:active,
+.user-btn:active, .user-item:active, .nav-btn:active,
+.mov-btn-ingreso:active, .mov-btn-gasto:active,
+.drawer-item:active, .config-item:active,
+.pin-btn:active, .num:active, .mov-quick-btn:active {
+  transform: scale(0.94) !important;
+  transition: transform .08s ease !important;
+}
+
 /* ── Reload dots animation ── */
 .rdot {
   width: 5px; height: 5px;
@@ -1284,4 +1312,34 @@ canvas { max-width: 100%; display: block; }
 @keyframes rdot-bounce {
   0%, 80%, 100% { transform: translateY(0); opacity: .4; }
   40%            { transform: translateY(-5px); opacity: 1; }
+}
+
+
+/* ── Gastos Fijos: 2 columnas en desktop ── */
+@media (min-width: 769px) {
+  #gf-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+}
+
+/* ── Gastos Fijos topbar: una fila en desktop, dos en móvil ── */
+.gf-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+@media (max-width: 768px) {
+  .gf-topbar {
+    flex-wrap: wrap;
+  }
+  .gf-topbar select { flex: 1; }
+  .gf-topbar #gf-resumen {
+    order: 3;
+    width: 100%;
+    flex-basis: 100%;
+    margin-top: 4px;
+  }
 }
