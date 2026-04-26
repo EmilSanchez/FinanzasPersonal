@@ -4007,100 +4007,81 @@ function renderDetalleInv(invId) {
   const totalEnvios = Number(rawInv.envio||0) + (rawInv.renovaciones||[]).reduce((a,r)=>a+Number(r.envio||0),0);
   const totalCapital = p.inversionTotal - totalGastosAdic - totalEnvios;
 
+  const ventasPct = p.unidades>0 ? Math.min(100,Math.round((p.unidadesVendidas/p.unidades)*100)) : 0;
+  const avatarImg = p.imagen
+    ? `<img src="${p.imagen}" alt="${p.nombre}" style="width:100%;height:100%;object-fit:contain;border-radius:8px;"
+         onerror="this.style.display='none'">`
+    : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;color:var(--accent);background:var(--accent-light);border-radius:8px;">${(p.nombre||'?')[0].toUpperCase()}</div>`;
+
   document.getElementById('page-detalle-inv').innerHTML = `
-    <div class="page-header-row">
-      <div>
-        <button class="btn btn-ghost btn-sm" onclick="navigate('inversiones')" style="margin-bottom:8px;">&#x2190; Volver</button>
-        <p class="page-title">${p.nombre}</p>
-        <p class="page-sub" style="margin-bottom:0">${p.tipo||''}${p.plataforma?' · '+p.plataforma:''}${p.sku?' · SKU: '+p.sku:''}</p>
+    <!-- Header -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+      <button onclick="navigate('inversiones')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer;font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:5px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg> Volver
+      </button>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;font-size:1.05rem;">${p.nombre}</div>
+        <div style="font-size:.73rem;color:var(--muted);">${p.tipo||''}${p.plataforma?' · '+p.plataforma:''}${p.sku?' · '+p.sku:''}</div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="btn btn-primary" onclick="openModalVentaInv('${p.id}')">+ Registrar venta</button>
-        <button class="btn btn-success" onclick="openModalRenovarStock('${p.id}')">Renovar stock</button>
-        <button class="btn btn-danger btn-sm" onclick="openModalGastoAdicionalInv('${p.id}')">+ Gasto adicional</button>
-        <button class="btn btn-ghost" onclick="openModalNuevaInversion('${p.id}')">Editar</button>
+      <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;">
+        <button onclick="openModalVentaInv('${p.id}')" style="height:34px;padding:0 12px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:.78rem;font-weight:700;cursor:pointer;">+ Venta</button>
+        <button onclick="openModalRenovarStock('${p.id}')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:.78rem;font-weight:600;cursor:pointer;">+ Stock</button>
+        <button onclick="openModalGastoAdicionalInv('${p.id}')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:.78rem;font-weight:600;cursor:pointer;">+ Gasto</button>
+        <button onclick="openModalNuevaInversion('${p.id}')" style="height:34px;width:34px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
       </div>
     </div>
 
-    <!-- KPIs del producto -->
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px;">
-      ${[
-        ['var(--red)',    'Capital invertido',    fmtCOP(totalCapital),          `${fmtNum(p.unidades||0)} unidades`],
-        ['var(--orange)', 'Envíos pagados',        fmtCOP(totalEnvios),           'costos de logística'],
-        ['var(--red)',    'Gastos adicionales',    fmtCOP(totalGastosAdic),       `${(p.gastosAdicionales||[]).length} registros`],
-        ['var(--green)',  'Total recuperado',      fmtCOP(p.totalRecuperado),     `${pct}% de lo invertido`],
-        [p.ganancia>=0?'var(--green)':'var(--red)', 'Ganancia neta', fmtCOP(p.ganancia), `${p.unidadesVendidas} uds vendidas`],
-        ['var(--orange)', 'Stock actual',          fmtNum(p.stockActual)+' uds', invBadgeStock(p.estadoStock)],
-      ].map(([color,lbl,val,sub])=>`
-        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
-          padding:14px 16px;border-left:4px solid ${color};box-shadow:var(--shadow);">
-          <div style="font-size:.72rem;color:var(--muted);font-weight:500;margin-bottom:4px">${lbl}</div>
-          <div style="font-size:1.1rem;font-weight:700;margin-bottom:2px;color:${color}">${val}</div>
-          <div style="font-size:.72rem;color:var(--muted)">${sub}</div>
+    <!-- Fila: foto + info + costos -->
+    <div style="display:grid;grid-template-columns:130px 1fr 1fr;gap:12px;margin-bottom:12px;" class="inv-det-grid">
+      <!-- Foto -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px;display:flex;flex-direction:column;gap:8px;">
+        <div style="width:100%;aspect-ratio:1;overflow:hidden;border-radius:8px;background:var(--bg2);">${avatarImg}</div>
+        <div style="display:flex;flex-direction:column;gap:4px;">${invBadgeEstado(p.estado)}${invBadgeStock(p.estadoStock)}</div>
+        ${p.estado!=='cerrada'?`<div style="display:flex;flex-direction:column;gap:4px;margin-top:auto;">
+          ${p.estado==='activa'?`<button onclick="cambiarEstadoInv(${invIdx},'cerrada')" style="height:26px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;font-size:.68rem;color:var(--muted);">Cerrar</button>`:''}
+          ${p.estado==='activa'?`<button onclick="cambiarEstadoInv(${invIdx},'pausada')" style="height:26px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;font-size:.68rem;color:var(--muted);">Pausar</button>`:''}
+          ${p.estado==='pausada'?`<button onclick="cambiarEstadoInv(${invIdx},'activa')" style="height:26px;border:none;border-radius:6px;background:#0f2d6b;color:#fff;cursor:pointer;font-size:.68rem;">Activar</button>`:''}
+        </div>`:''}
+      </div>
+      <!-- Info -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;">
+        <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px;">Información</div>
+        ${[['SKU',p.sku?`<code style="font-size:.73rem;background:var(--bg2);border:1px solid var(--border);padding:1px 5px;border-radius:4px;">${p.sku}</code>`:'—'],['Categoría',p.categoria||'—'],['Proveedor',p.plataforma||'—'],['Compra',p.fecha||'—'],['Link',p.link?`<a href="${p.link}" target="_blank" style="color:var(--accent);font-size:.8rem;">Ver ↗</a>`:'—']].map(([l,v])=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-light);font-size:.82rem;">
+            <span style="color:var(--muted);">${l}</span><span>${v}</span></div>`).join('')}
+        ${p.notas?`<div style="margin-top:8px;font-size:.76rem;color:var(--muted);font-style:italic;">${p.notas}</div>`:''}
+      </div>
+      <!-- Costos -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;">
+        <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px;">Estructura de costos</div>
+        ${[['USD c/u',`$${p.precioUSD||0} USD`],['Tasa',fmtCOP(p.tasa||0)],['Costo COP',fmtCOP(p.costoUnitario)],['Envío',fmtCOP(rawInv.envio||0)],['Otros',fmtCOP(rawInv.otrosCostos||0)],['Precio sugerido',`<strong style="color:var(--accent);">${fmtCOP(p.precioSugerido||0)}</strong>`]].map(([l,v])=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-light);font-size:.82rem;">
+            <span style="color:var(--muted);">${l}</span><span>${v}</span></div>`).join('')}
+      </div>
+    </div>
+
+    <!-- KPIs compactos -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:12px;">
+      ${[['Capital',fmtCOP(totalCapital),'var(--text)'],['Envíos',fmtCOP(totalEnvios),'var(--orange)'],['Recuperado',fmtCOP(p.totalRecuperado),'var(--green)'],[`Ganancia${p.ganancia>=0?'':' ↓'}`,fmtCOP(p.ganancia),p.ganancia>=0?'var(--green)':'var(--red)'],['Stock',fmtNum(p.stockActual)+' uds','var(--orange)'],['Vendidas',fmtNum(p.unidadesVendidas)+' uds','var(--accent)']].map(([l,v,c])=>`
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;box-shadow:var(--shadow);">
+          <div style="font-size:.65rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">${l}</div>
+          <div style="font-size:.9rem;font-weight:800;color:${c};">${v}</div>
         </div>`).join('')}
     </div>
 
-    <!-- Barra de progreso de ventas -->
+    <!-- Progreso -->
     ${p.unidades>0?`
-    <div class="section" style="padding:14px 18px;margin-bottom:16px;">
-      <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--muted);margin-bottom:6px;">
-        <span>Progreso de ventas — ${p.unidadesVendidas} de ${p.unidades} unidades</span>
-        <span style="font-weight:700">${Math.round((p.unidadesVendidas/p.unidades)*100)}%</span>
+    <div class="section" style="padding:11px 16px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;font-size:.77rem;color:var(--muted);margin-bottom:4px;">
+        <span>${p.unidadesVendidas} / ${p.unidades} unidades vendidas</span>
+        <span style="font-weight:700;color:var(--accent);">${ventasPct}%</span>
       </div>
-      <div class="progress-bar" style="height:10px;">
-        <div class="progress-fill" style="width:${Math.min(100,Math.round((p.unidadesVendidas/p.unidades)*100))}%;background:var(--accent)"></div>
+      <div class="progress-bar" style="height:7px;border-radius:10px;">
+        <div class="progress-fill" style="width:${ventasPct}%;background:${ventasPct>=100?'var(--green)':ventasPct>60?'var(--yellow)':'var(--accent)'};border-radius:10px;"></div>
       </div>
     </div>`:''}
-
-    <!-- Info del producto + precios -->
-    <div class="det-grid" style="margin-bottom:20px;">
-      <div class="section" style="padding:20px;">
-        ${p.imagen
-          ? `<img src="${p.imagen}" alt="${p.nombre}" style="width:100%;height:160px;object-fit:cover;border-radius:var(--radius-sm);margin-bottom:16px;"
-               onerror="this.outerHTML='<div style=\\'width:100%;height:160px;border-radius:var(--radius-sm);background:linear-gradient(135deg,var(--accent-light),var(--purple-light));color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:3.5rem;margin-bottom:16px;\\'>${(p.nombre||'?')[0].toUpperCase()}</div>'">`
-          : `<div style="width:100%;height:160px;border-radius:var(--radius-sm);background:linear-gradient(135deg,var(--accent-light),var(--purple-light));
-              color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:3.5rem;margin-bottom:16px;">
-              ${(p.nombre||'?')[0].toUpperCase()}
-             </div>`}
-        ${[
-          ['SKU', p.sku ? `<code style="font-family:var(--font-mono);font-size:.78rem;background:var(--bg2);border:1px solid var(--border);padding:2px 6px;border-radius:4px;color:var(--muted)">${p.sku}</code>` : '—'],
-          ['Categoría', p.categoria||'—'],
-          ['Proveedor', p.plataforma||'—'],
-          ['Estado', invBadgeEstado(p.estado)],
-          ['Stock', invBadgeStock(p.estadoStock)],
-          ['Fecha compra', p.fecha||'—'],
-          ['Link', p.link?`<a href="${p.link}" target="_blank" style="color:var(--accent);font-size:.85rem">Ver producto ↗</a>`:'—'],
-        ].map(([lbl,val])=>`
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-light);font-size:.875rem;">
-            <span style="color:var(--muted);font-size:.8rem">${lbl}</span>
-            <span>${val}</span>
-          </div>`).join('')}
-        ${p.notas?`<div style="margin-top:10px;font-size:.82rem;color:var(--muted);font-style:italic">${p.notas}</div>`:''}
-        ${p.estado!=='cerrada'?`
-        <div style="margin-top:16px;display:flex;gap:8px;">
-          ${p.estado==='activa'?`<button class="btn btn-ghost btn-sm" style="flex:1" onclick="cambiarEstadoInv(${invIdx},'cerrada')">Cerrar inversión</button>`:''}
-          ${p.estado==='activa'?`<button class="btn btn-ghost btn-sm" style="flex:1" onclick="cambiarEstadoInv(${invIdx},'pausada')">Pausar</button>`:''}
-          ${p.estado==='pausada'?`<button class="btn btn-ghost btn-sm" style="flex:1" onclick="cambiarEstadoInv(${invIdx},'activa')">Activar</button>`:''}
-        </div>`:''}
-      </div>
-
-      <div class="section" style="padding:20px;">
-        <div style="font-size:.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:14px;">Estructura de costos</div>
-        ${[
-          ['Precio USD c/u',    `$${p.precioUSD||0} USD`],
-          ['Tasa de cambio',    fmtCOP(p.tasa||0)],
-          ['Costo unitario COP', fmtCOP(p.costoUnitario)],
-          ['Envío base',        fmtCOP(rawInv.envio||0)],
-          ['Otros costos',      fmtCOP(rawInv.otrosCostos||0)],
-          ['Precio sugerido',   `<strong style="color:var(--accent)">${fmtCOP(p.precioSugerido||0)}</strong>`],
-        ].map(([lbl,val])=>`
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border-light);font-size:.875rem;">
-            <span style="color:var(--muted);font-size:.8rem">${lbl}</span>
-            <span>${val}</span>
-          </div>`).join('')}
-      </div>
-    </div>
-
     <!-- Renovaciones -->
     ${p.renovaciones && p.renovaciones.length ? `
     <div class="section" style="margin-bottom:14px;">

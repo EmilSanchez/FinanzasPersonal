@@ -1357,3 +1357,21 @@ button:active, .btn:active, [role="button"]:active,
 @media (max-width: 600px) {
   .rep-charts-grid { grid-template-columns: 1fr !important; }
 }
+
+/* ── Inversiones detalle grid responsive ── */
+@media (max-width: 700px) {
+  .inv-det-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .inv-det-grid > div:first-child {
+    display: flex !important;
+    flex-direction: row;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .inv-det-grid > div:first-child > div:first-child {
+    width: 80px !important;
+    height: 80px !important;
+    flex-shrink: 0;
+  }
+}

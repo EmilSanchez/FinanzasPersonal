@@ -122,14 +122,21 @@ html, body {
   background: var(--white);
   font-family: inherit;
   width: 100%; text-align: left;
-  transition: border-color .15s, background .15s, box-shadow .15s;
+  transition: border-color .18s, background .18s, box-shadow .18s, transform .18s cubic-bezier(.34,1.56,.64,1);
   -webkit-tap-highlight-color: transparent;
 }
-.user-item:active { transform: scale(.98); }
+.user-item:hover {
+  border-color: var(--navy);
+  background: #f0f4f9;
+  transform: translateX(4px);
+  box-shadow: -3px 0 0 0 var(--navy);
+}
+.user-item:active { transform: scale(.97) translateX(2px); }
 .user-item.selected {
   border-color: var(--navy);
   background: #f0f4f9;
-  box-shadow: 0 0 0 3px rgba(26,58,92,.08);
+  box-shadow: -3px 0 0 0 var(--navy), 0 0 0 3px rgba(26,58,92,.07);
+  transform: translateX(4px);
 }
 .avatar {
   width: 42px; height: 42px; border-radius: 50%;
