@@ -1375,3 +1375,31 @@ button:active, .btn:active, [role="button"]:active,
     flex-shrink: 0;
   }
 }
+
+/* ── Configuración 2 columnas desktop ── */
+.config-grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 20px;
+  align-items: start;
+}
+.config-col { display: flex; flex-direction: column; gap: 0; }
+@media (max-width: 768px) {
+  .config-grid-2col { grid-template-columns: 1fr; }
+}
+
+/* ── FAB botones flotantes ── */
+#fab-container {
+  transition: opacity .2s;
+}
+#fab-ingreso:hover { transform: scale(1.12); box-shadow: 0 6px 20px rgba(5,150,105,.5) !important; }
+#fab-gasto:hover   { transform: scale(1.12); box-shadow: 0 6px 20px rgba(220,38,38,.5) !important; }
+#fab-ingreso:active, #fab-gasto:active { transform: scale(.92) !important; }
+
+/* Ocultar FABs en movimientos (ya tienen los botones inline) */
+.page-movimientos-active #fab-container { display: none !important; }
+
+/* En desktop los FABs van más abajo (sin bottom-nav) */
+@media (min-width: 769px) {
+  #fab-container { bottom: 28px !important; right: 28px !important; }
+}

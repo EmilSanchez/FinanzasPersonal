@@ -2255,29 +2255,32 @@ async function savePrestamo() {
   const desc        = document.getElementById('pr-desc').value.trim();
   const billeteraId = document.getElementById('pr-billetera')?.value || '';
 
-  if (!nombre)      return toast('El nombre del deudor es obligatorio', 'error');
-  if (!monto)       return toast('El monto es obligatorio', 'error');
-  if (!fecha)       return toast('La fecha es obligatoria', 'error');
-  if (!billeteraId) return toast('Debes seleccionar de qué billetera sale el dinero', 'error');
+  if (!nombre) return toast('El nombre del deudor es obligatorio', 'error');
+  if (!monto)  return toast('El monto es obligatorio', 'error');
+  if (!fecha)  return toast('La fecha es obligatoria', 'error');
 
-  // Verificar saldo suficiente
-  const saldo = saldoBilletera(billeteraId);
-  if (saldo < monto) {
-    const bill = STATE.db.billeteras.find(b => b.id === billeteraId);
-    return toast(`Saldo insuficiente en ${bill?.nombre || 'la billetera'} (${fmt(saldo)})`, 'error');
+  // Verificar saldo solo si se seleccionó billetera
+  if (billeteraId) {
+    const saldo = saldoBilletera(billeteraId);
+    if (saldo < monto) {
+      const bill = STATE.db.billeteras.find(b => b.id === billeteraId);
+      return toast(`Saldo insuficiente en ${bill?.nombre || 'la billetera'} (${fmt(saldo)})`, 'error');
+    }
   }
 
   const totalConInteres = interes > 0 ? monto * (1 + interes / 100) : monto;
-  const billNombre = STATE.db.billeteras.find(b => b.id === billeteraId)?.nombre || '';
+  const billNombre = STATE.db.billeteras.find(b => b.id === billeteraId)?.nombre || 'sin billetera';
 
-  // Registrar como gasto para que se descuente de la billetera
-  registrarGastoConGMF({
-    id: uid(), fecha, hora: horaActual(), monto,
-    desc: 'Préstamo a: ' + nombre + (desc ? ' — ' + desc : ''),
-    cat: 'Préstamo otorgado',
-    billeteraId,
-    autoGenerado: true
-  });
+  // Registrar gasto en billetera solo si se seleccionó una
+  if (billeteraId) {
+    registrarGastoConGMF({
+      id: uid(), fecha, hora: horaActual(), monto,
+      desc: 'Préstamo a: ' + nombre + (desc ? ' — ' + desc : ''),
+      cat: 'Préstamo otorgado',
+      billeteraId,
+      autoGenerado: true
+    });
+  }
 
   STATE.db.prestamos.push({
     id: uid(), nombre, contacto, monto, totalConInteres, fecha, vence, interes, desc,
@@ -2895,7 +2898,7 @@ function openModalPagoFijo(gfId, mesKey) {
           <div class="form-group">
             <label>Sale de billetera *</label>
             <select class="form-control" id="mpf-billetera" style="height:44px;">
-              <option value="">— Selecciona billetera —</option>
+              <option value="">— Sin billetera (préstamo previo) —</option>
             </select>
             <div id="mpf-saldo-info" style="display:none;margin-top:6px;padding:8px 12px;background:var(--bg2);border-radius:var(--radius-sm);font-size:.82rem;display:flex;align-items:center;justify-content:space-between;"></div>
             <div id="mpf-aviso" style="display:none;margin-top:6px;font-size:.8rem;color:var(--red);font-weight:600;"></div>
@@ -6098,6 +6101,17 @@ function renderBilleteras() {
   }
 
   renderTablaTransferencias();
+}
+
+/* ── Acceso rápido: ingreso/gasto desde cualquier módulo ── */
+function openModalIngresoRapido() {
+  if (STATE.currentPage !== 'movimientos') navigate('movimientos');
+  setTimeout(() => openModalNuevoIngreso(), STATE.currentPage === 'movimientos' ? 0 : 350);
+}
+
+function openModalGastoRapido() {
+  if (STATE.currentPage !== 'movimientos') navigate('movimientos');
+  setTimeout(() => openModalNuevoGasto(), STATE.currentPage === 'movimientos' ? 0 : 350);
 }
 
 function toggleBillOcultas() {

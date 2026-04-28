@@ -1180,10 +1180,11 @@
 
     <!-- ====== CONFIGURACIÓN ====== -->
       <div class="page" id="page-config">
-        
+        <div class="config-grid-2col">
+          <div class="config-col">
 
         <!-- Perfil de usuario -->
-        <div class="section" style="max-width:520px;">
+        <div class="section">
           <div style="font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:14px;">Mi perfil</div>
 
           <!-- Foto de perfil -->
@@ -1210,7 +1211,7 @@
           </div>
         </div>
 
-        <div class="section" style="max-width:520px;">
+        <div class="section">
 
           <!-- Cambiar PIN -->
           <div class="config-item" onclick="showChangePinModal()">
@@ -1256,23 +1257,28 @@
         </div>
 
         <!-- Info de sesión -->
-        <div class="section" style="max-width:520px;margin-top:0;">
+        <div class="section">
           <div style="display:flex;align-items:center;gap:10px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             <span style="font-size:.8rem;color:var(--muted);">Sesión activa · expira en <strong id="config-session-timer">—</strong></span>
           </div>
         </div>
 
+          </div><!-- /config-col -->
+          <div class="config-col">
+
         <!-- Gestión de usuarios (solo admin) -->
-        <div id="config-usuarios-section" class="section" style="max-width:520px;margin-top:0;display:none;">
+        <div id="config-usuarios-section" class="section" style="display:none;">
           <div class="section-header" style="margin-bottom:16px;">
-            <span class="section-title">👥 Usuarios</span>
+            <span class="section-title">Usuarios</span>
             <button onclick="abrirModalNuevoUsuario()" class="btn btn-primary btn-sm">+ Nuevo usuario</button>
           </div>
           <div id="config-usuarios-lista">
             <p style="color:var(--muted);font-size:.85rem;">Cargando...</p>
           </div>
         </div>
+          </div><!-- /config-col -->
+        </div><!-- /config-grid-2col -->
       </div>
 
   </main>
@@ -2119,5 +2125,19 @@
 <div class="toast-container" id="toast-container"></div>
 
 <script src="script.js"></script>
+<!-- Botones flotantes de acceso rápido -->
+<div id="fab-container" style="position:fixed;bottom:90px;right:20px;display:flex;flex-direction:column;gap:10px;z-index:500;">
+  <!-- Ingreso (verde, flecha abajo) -->
+  <button id="fab-ingreso" onclick="openModalIngresoRapido()" title="Registrar ingreso"
+    style="width:50px;height:50px;border-radius:50%;border:none;background:#059669;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(5,150,105,.4);transition:transform .15s cubic-bezier(.34,1.56,.64,1),box-shadow .15s;">
+    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+  </button>
+  <!-- Gasto (rojo, flecha arriba) -->
+  <button id="fab-gasto" onclick="openModalGastoRapido()" title="Registrar gasto"
+    style="width:50px;height:50px;border-radius:50%;border:none;background:#dc2626;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(220,38,38,.4);transition:transform .15s cubic-bezier(.34,1.56,.64,1),box-shadow .15s;">
+    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+  </button>
+</div>
+
 </body>
 </html>
