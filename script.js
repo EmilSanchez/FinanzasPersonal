@@ -2406,13 +2406,14 @@ async function confirmarAmpliarPrestamo() {
   if (!monto || monto <= 0) return toast('El monto adicional debe ser mayor a 0', 'error');
   if (!fecha) return toast('La fecha es obligatoria', 'error');
   if (!desc)  return toast('El motivo / detalle es obligatorio', 'error');
-  if (!billeteraId) return toast('Debes seleccionar de qué billetera sale el dinero', 'error');
 
-  // Verificar saldo
-  const saldo = saldoBilletera(billeteraId);
-  if (saldo < monto) {
-    const bill = STATE.db.billeteras.find(b => b.id === billeteraId);
-    return toast(`Saldo insuficiente en ${bill?.nombre || 'la billetera'} (${fmt(saldo)})`, 'error');
+  // Verificar saldo solo si se seleccionó billetera
+  if (billeteraId) {
+    const saldo = saldoBilletera(billeteraId);
+    if (saldo < monto) {
+      const bill = STATE.db.billeteras.find(b => b.id === billeteraId);
+      return toast(`Saldo insuficiente en ${bill?.nombre || 'la billetera'} (${fmt(saldo)})`, 'error');
+    }
   }
 
   // Registrar el desembolso adicional en el historial del préstamo
@@ -2424,16 +2425,17 @@ async function confirmarAmpliarPrestamo() {
   p.monto += monto;
   p.totalConInteres = p.interes > 0 ? Math.round(p.monto * (1 + p.interes / 100)) : p.monto;
 
-  // Registrar como gasto en la billetera
-  const billNombre = STATE.db.billeteras.find(b => b.id === billeteraId)?.nombre || '';
-  registrarGastoConGMF({
-    id: uid(), fecha, hora: horaActual(), monto,
-    desc: 'Préstamo adicional a: ' + p.nombre + ' — ' + desc,
-    cat: 'Préstamo otorgado',
-    billeteraId,
-    autoGenerado: true,
-    origenDesembolsoId: desId
-  });
+  // Registrar como gasto en la billetera solo si se seleccionó
+  if (billeteraId) {
+    registrarGastoConGMF({
+      id: uid(), fecha, hora: horaActual(), monto,
+      desc: 'Préstamo adicional a: ' + p.nombre + ' — ' + desc,
+      cat: 'Préstamo otorgado',
+      billeteraId,
+      autoGenerado: true,
+      origenDesembolsoId: desId
+    });
+  }
 
   closeModal('modal-ampliar-prestamo');
   renderAll();
@@ -5959,21 +5961,25 @@ function renderTablaTransferencias() {
 }
 
 async function deleteTransferencia(id) {
-  if (!confirm('¿Eliminar esta transferencia? Los saldos de ambas billeteras se ajustarán automáticamente.')) return;
-  STATE.db.transferencias = (STATE.db.transferencias||[]).filter(t=>t.id!==id);
-  renderBilleteras();
-  renderTablaTransferencias();
-  await saveDb(['transferencias']);
-  toast('Transferencia eliminada', 'info');
+  pedirPinParaAccion('Eliminar transferencia', async () => {
+    STATE.db.transferencias = (STATE.db.transferencias||[]).filter(t=>t.id!==id);
+    renderBilleteras();
+    renderTablaTransferencias();
+    await saveDb(['transferencias']);
+    toast('Transferencia eliminada', 'info');
+  });
 }
 
 function renderBilleteras() {
   const grid  = document.getElementById('bill-grid');
   const empty = document.getElementById('bill-empty');
   const bar   = document.getElementById('bill-total-bar');
-  const all   = getBilleteras();
-  const list  = all.filter(b => !b.oculta);
-  const ocultas = all.filter(b => b.oculta);
+  const all = getBilleteras();
+  // Ocultas por usuario en localStorage (no compartido entre usuarios)
+  const _ocultasKey = `fp_bill_ocultas_${window.__CURRENT_USER?.id||'admin'}`;
+  const _ocultasSet = new Set(JSON.parse(localStorage.getItem(_ocultasKey)||'[]'));
+  const list    = all.filter(b => !_ocultasSet.has(b.id));
+  const ocultas = all.filter(b => _ocultasSet.has(b.id));
 
   const totalGeneral = list.reduce((a,b)=>a+saldoBilletera(b.id),0);
 
@@ -6120,11 +6126,12 @@ function toggleBillOcultas() {
   renderBilleteras();
 }
 
-async function ocultarBilletera(id, ocultar) {
-  const idx = STATE.db.billeteras.findIndex(b=>b.id===id);
-  if (idx === -1) return;
-  STATE.db.billeteras[idx].oculta = ocultar;
-  await saveDb(['billeteras']);
+function ocultarBilletera(id, ocultar) {
+  const _ocultasKey = `fp_bill_ocultas_${window.__CURRENT_USER?.id||'admin'}`;
+  const _ocultasSet = new Set(JSON.parse(localStorage.getItem(_ocultasKey)||'[]'));
+  if (ocultar) _ocultasSet.add(id);
+  else          _ocultasSet.delete(id);
+  localStorage.setItem(_ocultasKey, JSON.stringify([..._ocultasSet]));
   renderBilleteras();
 }
 

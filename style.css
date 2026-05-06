@@ -1391,6 +1391,7 @@ button:active, .btn:active, [role="button"]:active,
 /* ── FAB botones flotantes ── */
 #fab-container {
   transition: opacity .2s;
+  z-index: 200 !important; /* debajo de modals (500) y topbar (50) */
 }
 #fab-ingreso:hover { transform: scale(1.12); box-shadow: 0 6px 20px rgba(5,150,105,.5) !important; }
 #fab-gasto:hover   { transform: scale(1.12); box-shadow: 0 6px 20px rgba(220,38,38,.5) !important; }
