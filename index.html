@@ -225,6 +225,13 @@
 </script>
 
 
+
+<style>
+@keyframes gfFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+</style>
 </head>
 <body>
 
@@ -927,29 +934,40 @@
 
     <!-- ====== GASTOS FIJOS ====== -->
     <div class="page" id="page-fijos">
-      
 
-      <!-- Resumen del mes -->
-      <!-- Barra de acciones gastos fijos -->
-      <div class="section" style="overflow:visible;padding:16px 20px;">
-        <!-- Fila 1: mes + botón (siempre juntos) -->
+      <!-- Tabs sticky -->
+      <div id="gf-tabs-bar" style="position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--border);display:flex;gap:0;padding:4px 20px 0;">
+        <button id="gf-tab-activos" onclick="setGFTab('activos')"
+          style="padding:14px 24px 13px;border:none;background:none;cursor:pointer;font-size:.88rem;font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-1px;letter-spacing:.01em;transition:color .15s,border-color .15s;">
+          Activos
+        </button>
+        <button id="gf-tab-completados" onclick="setGFTab('completados')"
+          style="padding:14px 24px 13px;border:none;background:none;cursor:pointer;font-size:.88rem;font-weight:700;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;letter-spacing:.01em;transition:color .15s,border-color .15s;">
+          Completados
+        </button>
+      </div>
+
+      <!-- Barra de acciones (se oculta en completados) -->
+      <div id="gf-actions-bar" class="section" style="overflow:visible;padding:20px 20px 16px;margin-top:16px;">
         <div style="display:flex;align-items:center;gap:10px;">
           <select class="form-control" style="height:40px;width:auto;min-width:130px;font-weight:600;" id="gf-mes-sel" onchange="renderGastosFijos()"></select>
           <div style="flex:1;"></div>
-          <button onclick="openModalNuevoGastoFijo()" class="mov-btn-ingreso" style="height:40px;border-radius:8px;padding:0 18px;flex-shrink:0;">
+          <button id="gf-btn-nuevo" onclick="openModalNuevoGastoFijo()" class="mov-btn-ingreso" style="height:40px;border-radius:8px;padding:0 18px;flex-shrink:0;">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Nuevo gasto fijo
           </button>
         </div>
-        <!-- Fila 2: resumen siempre debajo -->
         <div id="gf-resumen" style="display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);"></div>
       </div>
 
-      <div id="gf-grid" style="display:flex;flex-direction:column;gap:10px;"></div>
-      <div id="gf-empty" class="empty-state" style="display:none">
-        <div class="empty-icon" style="font-size:2rem;font-weight:300;color:var(--border)">&#9635;</div>
-        <p>No tienes gastos fijos registrados aún.</p>
-      </div>
+      <!-- Contenido con transición -->
+      <div id="gf-content" style="animation:gfFadeIn .18s ease; padding-top:20px;">
+        <div id="gf-grid" style="display:flex;flex-direction:column;gap:10px;"></div>
+        <div id="gf-empty" class="empty-state" style="display:none">
+          <div class="empty-icon" style="font-size:2rem;font-weight:300;color:var(--border)">&#9635;</div>
+          <p>No tienes gastos fijos registrados aún.</p>
+        </div>
+      </div><!-- /gf-content -->
     </div>
 
     <!-- ====== INVERSIONES ====== -->
@@ -1583,6 +1601,51 @@
   </div>
 </div>
 
+
+<!-- ══ Modal: Tabla de Amortización ══ -->
+<div class="modal-overlay" id="modal-tabla-amort">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-title">Tabla de cuotas</div>
+    <div class="modal-body-wrap">
+      <div style="font-size:.82rem;color:var(--muted);margin-bottom:14px;">
+        Ingresa cada cuota con su fecha y monto exacto. El sistema mostrará la cuota del mes actual automáticamente.
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+        <button class="btn btn-ghost btn-sm" onclick="tablaAmortAgregarFila()">+ Agregar cuota</button>
+        <button class="btn btn-ghost btn-sm" onclick="tablaAmortImportar()">Pegar desde Excel</button>
+        <span id="tabla-amort-resumen" style="font-size:.75rem;color:var(--muted);margin-left:auto;"></span>
+      </div>
+      <div id="tabla-amort-paste-area" style="display:none;margin-bottom:12px;">
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:6px;">Pega las columnas de Excel (monto &#9;fecha) una cuota por línea.</div>
+        <textarea id="tabla-amort-paste-txt" class="form-control" rows="6" placeholder="571180&#9;2026-04-20&#10;558931&#9;2026-05-20"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn btn-primary btn-sm" onclick="tablaAmortProcesarPaste()">Procesar</button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('tabla-amort-paste-area').style.display='none'">Cancelar</button>
+        </div>
+      </div>
+      <div id="tabla-amort-filas" style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:var(--surface);">
+              <th style="padding:8px 10px;font-size:.7rem;font-weight:700;text-transform:uppercase;color:var(--muted);text-align:left;border-bottom:1px solid var(--border);">#</th>
+              <th style="padding:8px 10px;font-size:.7rem;font-weight:700;text-transform:uppercase;color:var(--muted);text-align:left;border-bottom:1px solid var(--border);">Fecha</th>
+              <th style="padding:8px 10px;font-size:.7rem;font-weight:700;text-transform:uppercase;color:var(--muted);text-align:left;border-bottom:1px solid var(--border);">Monto</th>
+              <th style="padding:8px 10px;font-size:.7rem;font-weight:700;text-transform:uppercase;color:var(--muted);text-align:center;border-bottom:1px solid var(--border);">Pagada</th>
+              <th style="padding:8px 4px;border-bottom:1px solid var(--border);"></th>
+            </tr>
+          </thead>
+          <tbody id="tabla-amort-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-tabla-amort')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveTablaAmort()">Guardar tabla</button>
+    </div>
+    <input type="hidden" id="tabla-amort-idx">
+  </div>
+</div>
+
 <!-- Modal SUMAR MÁS SALDO A DEUDA (préstamo adicional o compra a crédito) -->
 <div class="modal-overlay" id="modal-sumar-deuda">
   <div class="modal" style="max-width:480px;">
@@ -2139,5 +2202,19 @@
   </button>
 </div>
 
+
+<!-- ══ Modal: Confirmación genérica ══ -->
+<div class="modal-overlay" id="modal-gf-confirm">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-title" id="modal-gf-confirm-title">Confirmar acción</div>
+    <div class="modal-body-wrap">
+      <p id="modal-gf-confirm-msg" style="color:var(--text);font-size:.92rem;line-height:1.6;margin:0;"></p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-gf-confirm')">Cancelar</button>
+      <button class="btn btn-primary" id="modal-gf-confirm-btn" onclick="">Confirmar</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

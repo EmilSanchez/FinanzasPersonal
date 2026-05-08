@@ -1771,7 +1771,8 @@ function openAbonar(idx) {
   if (!d) return;
   document.getElementById('m-abonar-idx').value = idx;
   document.getElementById('m-abonar-nombre').value = d.nombre;
-  document.getElementById('m-abonar-monto').value = d.cuota || '';
+  const cuotaActual = getCuotaMesActual(d) || d.cuota;
+  document.getElementById('m-abonar-monto').value = cuotaActual || '';
   document.getElementById('m-abonar-fecha').value = fechaHoy();
   document.getElementById('m-abonar-nota').value = '';
   populateBilleteraSelects();
@@ -1796,6 +1797,8 @@ async function registrarAbono() {
   const abonoId = uid();
   d.pagado = (d.pagado || 0) + monto;
   d.pagos.push({ id: abonoId, fecha, monto, nota });
+  // Marcar cuota en tabla de amortización si existe
+  marcarCuotaEnTabla(d, monto, fecha);
 
   // AUTO-REGISTRAR como gasto (categoría Crédito / Deuda) + 4x1000 si aplica
   const billeteraIdAbono = document.getElementById('m-abonar-billetera')?.value || '';
@@ -1964,6 +1967,179 @@ async function deleteDesembolso(dIdx, desId) {
   });
 }
 
+
+// ══════════════════════════════════════════════════════
+// ══ TABLA DE AMORTIZACIÓN ══════════════════════════════
+// ══════════════════════════════════════════════════════
+
+/** Devuelve el monto de la cuota pendiente más próxima del mes actual o siguiente */
+function getCuotaMesActual(d) {
+  if (!d.tablaAmort || !d.tablaAmort.length) return null;
+  const hoy = fechaHoy();
+  // Buscar primera cuota no pagada cuya fecha >= hoy
+  const pendientes = d.tablaAmort.filter(c => !c.pagada).sort((a,b) => a.fecha.localeCompare(b.fecha));
+  if (!pendientes.length) return null;
+  return pendientes[0].monto;
+}
+
+/** Abre modal de tabla de amortización */
+function openTablaAmort(idx) {
+  const d = STATE.db.deudas[idx];
+  if (!d) return;
+  document.getElementById('tabla-amort-idx').value = idx;
+  document.getElementById('tabla-amort-paste-area').style.display = 'none';
+  renderTablaAmortFilas(d.tablaAmort || []);
+  openModal('modal-tabla-amort');
+}
+
+/** Renderiza las filas en el modal */
+function renderTablaAmortFilas(cuotas) {
+  const tbody = document.getElementById('tabla-amort-tbody');
+  const resumen = document.getElementById('tabla-amort-resumen');
+  if (!cuotas.length) {
+    tbody.innerHTML = `<tr><td colspan="5" style="padding:24px;text-align:center;color:var(--muted);font-size:.85rem;">Sin cuotas aún. Agrega una o pega desde Excel.</td></tr>`;
+    resumen.textContent = '';
+    return;
+  }
+  const pagadas = cuotas.filter(c => c.pagada).length;
+  resumen.textContent = `${pagadas} pagada${pagadas!==1?'s':''} · ${cuotas.length - pagadas} pendiente${(cuotas.length-pagadas)!==1?'s':''}`;
+  tbody.innerHTML = cuotas.map((c, i) => `
+    <tr style="border-bottom:1px solid var(--border-light,var(--border));${c.pagada ? 'opacity:.55;' : ''}">
+      <td style="padding:8px 10px;font-size:.78rem;color:var(--muted);">${i+1}</td>
+      <td style="padding:8px 10px;">
+        <input type="date" value="${c.fecha}" onchange="tablaAmortUpdateFila(${i},'fecha',this.value)"
+          style="background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 8px;font-size:.8rem;width:130px;">
+      </td>
+      <td style="padding:8px 10px;">
+        <input type="number" value="${c.monto}" onchange="tablaAmortUpdateFila(${i},'monto',this.value)"
+          style="background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 8px;font-size:.8rem;width:110px;">
+      </td>
+      <td style="padding:8px 10px;text-align:center;">
+        <span style="font-size:1rem;" title="${c.pagada ? 'Pagada' : 'Pendiente'}">${c.pagada ? '✓' : '—'}</span>
+      </td>
+      <td style="padding:4px;">
+        <button onclick="tablaAmortEliminarFila(${i})" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:.85rem;padding:4px 6px;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--muted)'">✕</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// Buffer temporal mientras se edita en el modal
+let _tablaAmortBuffer = [];
+
+function openTablaAmortWithBuffer(idx) {
+  const d = STATE.db.deudas[idx];
+  _tablaAmortBuffer = JSON.parse(JSON.stringify(d.tablaAmort || []));
+  renderTablaAmortFilas(_tablaAmortBuffer);
+}
+
+// Sobreescribir openTablaAmort para usar buffer
+const _origOpenTablaAmort = openTablaAmort;
+function openTablaAmort(idx) {
+  const d = STATE.db.deudas[idx];
+  if (!d) return;
+  document.getElementById('tabla-amort-idx').value = idx;
+  document.getElementById('tabla-amort-paste-area').style.display = 'none';
+  _tablaAmortBuffer = JSON.parse(JSON.stringify(d.tablaAmort || []));
+  renderTablaAmortFilas(_tablaAmortBuffer);
+  openModal('modal-tabla-amort');
+}
+
+function tablaAmortUpdateFila(i, campo, valor) {
+  if (!_tablaAmortBuffer[i]) return;
+  if (campo === 'monto') _tablaAmortBuffer[i].monto = Number(valor) || 0;
+  else if (campo === 'fecha') _tablaAmortBuffer[i].fecha = valor;
+  else if (campo === 'pagada') _tablaAmortBuffer[i].pagada = !!valor;
+  renderTablaAmortFilas(_tablaAmortBuffer);
+}
+
+function tablaAmortEliminarFila(i) {
+  _tablaAmortBuffer.splice(i, 1);
+  renderTablaAmortFilas(_tablaAmortBuffer);
+}
+
+function tablaAmortAgregarFila() {
+  // Sugerir fecha: último + 1 mes, o hoy
+  let fecha = fechaHoy();
+  if (_tablaAmortBuffer.length) {
+    const ultima = _tablaAmortBuffer[_tablaAmortBuffer.length - 1].fecha;
+    if (ultima) {
+      const d = new Date(ultima + 'T12:00:00');
+      d.setMonth(d.getMonth() + 1);
+      fecha = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+  }
+  const ultimoMonto = _tablaAmortBuffer.length ? _tablaAmortBuffer[_tablaAmortBuffer.length-1].monto : 0;
+  _tablaAmortBuffer.push({ fecha, monto: ultimoMonto, pagada: false });
+  renderTablaAmortFilas(_tablaAmortBuffer);
+  // Scroll al final
+  const cont = document.getElementById('tabla-amort-filas');
+  if (cont) cont.scrollTop = cont.scrollHeight;
+}
+
+function tablaAmortImportar() {
+  document.getElementById('tabla-amort-paste-area').style.display = '';
+  document.getElementById('tabla-amort-paste-txt').value = '';
+}
+
+function tablaAmortProcesarPaste() {
+  const txt = document.getElementById('tabla-amort-paste-txt').value.trim();
+  if (!txt) return toast('Pega el contenido primero', 'error');
+  const lineas = txt.split('\n').map(l => l.trim()).filter(Boolean);
+  let agregadas = 0;
+  for (const linea of lineas) {
+    // Separador: tab, punto y coma, o coma
+    const partes = linea.split(/\t|;|,/).map(p => p.trim().replace(/[$. ]/g, '').replace(',', '.'));
+    if (partes.length < 2) continue;
+    // Detectar cuál es monto y cuál es fecha
+    let monto = 0, fecha = '';
+    for (const p of partes) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(p)) fecha = p;
+      else if (/^\d+(\.\d+)?$/.test(p)) monto = Number(p);
+    }
+    if (!monto || !fecha) continue;
+    _tablaAmortBuffer.push({ fecha, monto, pagada: false });
+    agregadas++;
+  }
+  if (!agregadas) return toast('No se pudo procesar. Verifica el formato.', 'error');
+  document.getElementById('tabla-amort-paste-area').style.display = 'none';
+  renderTablaAmortFilas(_tablaAmortBuffer);
+  toast(`${agregadas} cuota${agregadas!==1?'s':''} agregada${agregadas!==1?'s':''}`, 'success');
+}
+
+async function saveTablaAmort() {
+  const idx = Number(document.getElementById('tabla-amort-idx').value);
+  const d = STATE.db.deudas[idx];
+  if (!d) return toast('Deuda no encontrada', 'error');
+  // Ordenar por fecha
+  _tablaAmortBuffer.sort((a,b) => a.fecha.localeCompare(b.fecha));
+  d.tablaAmort = JSON.parse(JSON.stringify(_tablaAmortBuffer));
+  // Actualizar prox pago automáticamente
+  const proxCuota = d.tablaAmort.find(c => !c.pagada);
+  if (proxCuota) d.prox = proxCuota.fecha;
+  closeModal('modal-tabla-amort');
+  renderAll();
+  await saveDb(['deudas']);
+  toast('Tabla de cuotas guardada', 'success');
+}
+
+// Al registrar abono: marcar cuota como pagada si el monto coincide
+function marcarCuotaEnTabla(d, monto, fecha) {
+  if (!d.tablaAmort || !d.tablaAmort.length) return;
+  const pendientes = d.tablaAmort.filter(c => !c.pagada).sort((a,b) => a.fecha.localeCompare(b.fecha));
+  if (!pendientes.length) return;
+  // Marcar la primera pendiente si el monto es >= 90% de la cuota
+  const primera = pendientes[0];
+  if (monto >= primera.monto * 0.9) {
+    primera.pagada = true;
+    // Actualizar próximo pago
+    const proxCuota = d.tablaAmort.find(c => !c.pagada);
+    if (proxCuota) d.prox = proxCuota.fecha;
+  }
+}
+
+// ══════════════════════════════════════════════════════
+
 function renderDeudas() {
   const container = document.getElementById('deudas-lista');
   const empty     = document.getElementById('deudas-empty');
@@ -2011,7 +2187,12 @@ function renderDeudas() {
     const falta    = Math.max(0, d.total - (d.pagado || 0));
     const pct      = Math.min(100, Math.round((d.pagado || 0) / d.total * 100));
     const terminada = falta === 0;
-    const cuotasRest = d.cuota ? Math.ceil(falta / d.cuota) : null;
+    // Cuota del mes actual desde tabla de amortización (si existe)
+    const cuotaMesActual = getCuotaMesActual(d);
+    const cuotaDisplay = cuotaMesActual || d.cuota;
+    const cuotasRest = d.tablaAmort?.length
+      ? d.tablaAmort.filter(c => !c.pagada).length
+      : (d.cuota ? Math.ceil(falta / d.cuota) : null);
     const expandId = `debt-expand-${realIdx}`;
 
     return `
@@ -2057,7 +2238,7 @@ function renderDeudas() {
           </div>
           <div style="padding:12px 16px;">
             <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px;">Cuota sugerida</div>
-            <div style="font-weight:700;font-size:.95rem;color:var(--text);">${d.cuota ? fmt(d.cuota) : '—'}</div>
+            <div style="font-weight:700;font-size:.95rem;color:var(--text);">${cuotaDisplay ? fmt(cuotaDisplay) : '—'}</div>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-bottom:1px solid var(--border);">
@@ -2079,6 +2260,7 @@ function renderDeudas() {
         <div style="display:flex;gap:8px;padding:14px 16px;flex-wrap:wrap;border-bottom:1px solid var(--border);">
           ${!terminada ? `<button class="btn btn-success btn-sm" onclick="openAbonar(${realIdx})">+ Registrar abono</button>` : ''}
           <button class="btn btn-ghost btn-sm" onclick="openSumarDeuda(${realIdx})">Agregar saldo</button>
+          <button class="btn btn-ghost btn-sm" onclick="openTablaAmort(${realIdx})">Cuotas</button>
           <button class="btn btn-ghost btn-sm" onclick="openEditDeuda(${realIdx})">Editar</button>
           <button class="btn btn-danger btn-sm" onclick="deleteDeuda(${realIdx})">Eliminar</button>
         </div>
@@ -2978,10 +3160,15 @@ async function confirmarPagoFijo(gfId, mesKey, billeteraUsada) {
   if (!gf) return;
   if (!gf.pagos) gf.pagos = {};
 
+  // Usar cuota real de la tabla de amortización si existe
+  const deudaParaPago = gf.deudaId ? STATE.db.deudas.find(d => d.id === gf.deudaId) : null;
+  const cuotaRealPago = deudaParaPago ? getCuotaMesActual(deudaParaPago) : null;
+  const montoAPagar   = cuotaRealPago || gf.monto;
+
   // Validar saldo suficiente
   const saldo = saldoBilletera(billeteraUsada);
-  if (saldo < gf.monto) {
-    return toast(`Saldo insuficiente. Disponible: ${fmt(saldo)} — Necesario: ${fmt(gf.monto)}`, 'error');
+  if (saldo < montoAPagar) {
+    return toast(`Saldo insuficiente. Disponible: ${fmt(saldo)} — Necesario: ${fmt(montoAPagar)}`, 'error');
   }
 
   const now   = new Date();
@@ -2996,7 +3183,7 @@ async function confirmarPagoFijo(gfId, mesKey, billeteraUsada) {
   // ── Registrar gasto (descuenta de billetera) ──
   registrarGastoConGMF({
     id: gastoId, fecha, hora,
-    monto: gf.monto,
+    monto: montoAPagar,
     desc: 'Gasto fijo: ' + gf.nombre,
     cat: gf.cat || 'Servicios',
     billeteraId: billeteraUsada,
@@ -3012,7 +3199,7 @@ async function confirmarPagoFijo(gfId, mesKey, billeteraUsada) {
     if (deuda) {
       const falta = Math.max(0, deuda.total - (deuda.pagado || 0));
       if (falta > 0) {
-        const montoAbono = Math.min(gf.monto, falta); // no abonar más de lo que falta
+        const montoAbono = Math.min(montoAPagar, falta); // no abonar más de lo que falta
         const abonoId    = uid();
         deuda.pagado = (deuda.pagado || 0) + montoAbono;
         if (!deuda.pagos) deuda.pagos = [];
@@ -3024,12 +3211,27 @@ async function confirmarPagoFijo(gfId, mesKey, billeteraUsada) {
           autoGastoFijoId: gf.id,
           autoGastoFijoMes: mesKey
         });
+        // Marcar cuota en tabla de amortización automáticamente
+        marcarCuotaEnTabla(deuda, montoAbono, fecha);
         // Guardar referencia del abono en el registro del pago
         gf.pagos[mesKey].abonoDeudaId = abonoId;
         gf.pagos[mesKey].deudaId      = gf.deudaId;
         mensajeDeuda = ` ·  Abono de ${fmt(montoAbono)} aplicado a "${deuda.nombre}"`;
+
+        // Si la deuda quedó saldada, archivar el gasto fijo automáticamente
+        const saldoRestante = Math.max(0, deuda.total - (deuda.pagado || 0));
+        if (saldoRestante === 0) {
+          gf.completado    = true;
+          gf.completadoEn  = fecha;
+          mensajeDeuda += ` — Deuda saldada. Gasto fijo archivado.`;
+        }
       } else {
         mensajeDeuda = ` · La deuda "${deuda.nombre}" ya estaba saldada`;
+        // Si la deuda ya estaba saldada y el GF sigue activo, archivarlo también
+        if (!gf.completado) {
+          gf.completado   = true;
+          gf.completadoEn = fecha;
+        }
       }
     }
   }
@@ -3037,7 +3239,7 @@ async function confirmarPagoFijo(gfId, mesKey, billeteraUsada) {
   renderAll();
   await saveDb(['gastosFijos', 'gastos', 'deudas']);
   const dest = billObj ? ` (de ${billObj.nombre})` : '';
-  toast(`Pagado${dest} — ${fmt(gf.monto)}${mensajeDeuda}`, 'success');
+  toast(`Pagado${dest} — ${fmt(montoAPagar)}${mensajeDeuda}`, 'success');
 }
 
 function autoResetGFIfNeeded() {
@@ -3088,9 +3290,34 @@ function renderGastosFijos() {
   populateGFDeudaSelect('gf-deuda-vinc', '');
 
   const mesKey  = document.getElementById('gf-mes-sel').value || currentYM();
-  const list    = STATE.db.gastosFijos;
+  const gfTab   = window._gfTab || 'activos';
+  const isCompletados = gfTab === 'completados';
+  const list    = STATE.db.gastosFijos.filter(g => isCompletados ? g.completado : !g.completado);
   const grid    = document.getElementById('gf-grid');
   const empty   = document.getElementById('gf-empty');
+
+  // ── Tab styles ──
+  const tabA = document.getElementById('gf-tab-activos');
+  const tabC = document.getElementById('gf-tab-completados');
+  const activeStyle   = 'padding:14px 24px 13px;border:none;background:none;cursor:pointer;font-size:.88rem;font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-1px;letter-spacing:.01em;transition:color .15s,border-color .15s;';
+  const inactiveStyle = 'padding:14px 24px 13px;border:none;background:none;cursor:pointer;font-size:.88rem;font-weight:700;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;letter-spacing:.01em;transition:color .15s,border-color .15s;';
+  if (tabA) tabA.style.cssText = !isCompletados ? activeStyle : inactiveStyle;
+  if (tabC) tabC.style.cssText =  isCompletados ? activeStyle : inactiveStyle;
+
+  // ── Fade animation on content ──
+  const contentEl = document.getElementById('gf-content');
+  if (contentEl) { contentEl.style.animation = 'none'; contentEl.offsetHeight; contentEl.style.animation = 'gfFadeIn .18s ease'; }
+
+  // ── Actions bar: hide in completados ──
+  const actionsBar = document.getElementById('gf-actions-bar');
+  const btnNuevo   = document.getElementById('gf-btn-nuevo');
+  if (actionsBar) {
+    if (isCompletados) {
+      actionsBar.style.display = 'none';
+    } else {
+      actionsBar.style.display = '';
+    }
+  }
   const resumen = document.getElementById('gf-resumen');
 
   const totalMes    = list.reduce((a, g) => a + g.monto, 0);
@@ -3162,9 +3389,14 @@ function renderGastosFijos() {
       else                    diasBadge = `<span style="font-size:.72rem;color:var(--muted);">Día ${g.dia}</span>`;
     }
     const deudaVinc = g.deudaId ? STATE.db.deudas.find(d => d.id === g.deudaId) : null;
+    // Si hay tabla de amortización, mostrar la cuota real del mes
+    const cuotaReal = deudaVinc ? getCuotaMesActual(deudaVinc) : null;
+    const montoMostrar = cuotaReal || g.monto;
+    const cuotaCambio = cuotaReal && cuotaReal !== g.monto;
 
+    const esCompletado = !!g.completado;
     return `
-    <div style="background:var(--card);border:1px solid ${pagado?'var(--border)':'var(--border)'};border-left:3px solid ${pagado?'var(--green)':'var(--red)'};border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;${pagado?'opacity:.7;':''}">
+    <div style="background:var(--card);border:1px solid var(--border);border-left:3px solid ${esCompletado?'var(--green)':pagado?'var(--green)':'var(--red)'};border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;${esCompletado||pagado?'opacity:.7;':''}">
       <!-- Fila 1: nombre + meta -->
       <div style="margin-bottom:8px;">
         <div style="font-weight:700;font-size:.93rem;color:var(--text);">${g.nombre}</div>
@@ -3172,24 +3404,84 @@ function renderGastosFijos() {
           <span style="font-size:.72rem;color:var(--muted);">${g.cat}${g.notas?' · '+g.notas:''}</span>
           ${diasBadge}
           ${deudaVinc?`<span class="badge badge-blue" style="font-size:.68rem;">→ ${deudaVinc.nombre}</span>`:''}
+          ${cuotaCambio?`<span class="badge" style="font-size:.68rem;background:var(--yellow-light);color:var(--yellow);">Cuota actualizada</span>`:''}
         </div>
         ${pagadoFecha?`<div style="font-size:.7rem;color:var(--muted);margin-top:2px;">Pagado: ${formatFechaLarga(pagadoFecha)}</div>`:''}
       </div>
       <!-- Fila 2: monto + botones -->
       <div style="display:flex;align-items:center;gap:8px;">
-        <div style="font-weight:800;font-size:1.05rem;color:${pagado?'var(--green)':'var(--text)'};flex:1;">${fmt(g.monto)}</div>
+        <div style="font-weight:800;font-size:1.05rem;color:${pagado?'var(--green)':'var(--text)'};flex:1;">${fmt(montoMostrar)}</div>
         <button onclick="togglePagoGF('${g.id}')" style="height:32px;padding:0 14px;border:none;border-radius:7px;background:${pagado?'var(--bg2)':'#0f2d6b'};color:${pagado?'var(--muted)':'#fff'};font-size:.75rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">
           ${pagado ? 'Desmarcar' : 'Pagar'}
         </button>
         <button onclick="openEditGastoFijo('${g.id}')" style="height:32px;width:32px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
+        ${!esCompletado ? `
+        <button onclick="archivarGastoFijo('${g.id}')" title="Marcar como completado" style="height:32px;width:32px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--muted)'">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        </button>
         <button onclick="deleteGastoFijo('${g.id}')" style="height:32px;width:32px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-        </button>
+        </button>` : `
+        <button onclick="reactivarGastoFijo('${g.id}')" style="height:32px;padding:0 12px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);font-size:.75rem;font-weight:600;flex-shrink:0;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Reactivar</button>
+        <button onclick="deleteGastoFijo('${g.id}')" style="height:32px;width:32px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        </button>`}
       </div>
     </div>`;
   }).join('');
+
+}
+
+function setGFTab(tab) {
+  window._gfTab = tab;
+  renderGastosFijos();
+}
+
+
+// ── Confirmación genérica para acciones de gastos fijos ──
+function gfConfirm(title, msg, onConfirm) {
+  const titleEl = document.getElementById('modal-gf-confirm-title');
+  const msgEl   = document.getElementById('modal-gf-confirm-msg');
+  const btnEl   = document.getElementById('modal-gf-confirm-btn');
+  if (!titleEl || !msgEl || !btnEl) { if (confirm(msg)) onConfirm(); return; }
+  titleEl.textContent = title;
+  msgEl.textContent   = msg;
+  btnEl.onclick = () => { closeModal('modal-gf-confirm'); onConfirm(); };
+  openModal('modal-gf-confirm');
+}
+
+async function archivarGastoFijo(id) {
+  const gf = STATE.db.gastosFijos.find(g => g.id === id);
+  if (!gf) return;
+  gfConfirm(
+    'Marcar como completado',
+    `¿Seguro que deseas marcar "${gf.nombre}" como completado? Desaparecerá de la lista activa.`,
+    async () => {
+      gf.completado   = true;
+      gf.completadoEn = fechaHoy();
+      renderGastosFijos();
+      await saveDb(['gastosFijos']);
+      toast('Gasto fijo archivado', 'success');
+    }
+  );
+}
+
+async function reactivarGastoFijo(id) {
+  const gf = STATE.db.gastosFijos.find(g => g.id === id);
+  if (!gf) return;
+  gfConfirm(
+    'Reactivar gasto fijo',
+    `¿Seguro que deseas reactivar "${gf.nombre}"? Volverá a aparecer en la lista activa.`,
+    async () => {
+      gf.completado   = false;
+      gf.completadoEn = null;
+      renderGastosFijos();
+      await saveDb(['gastosFijos']);
+      toast('Gasto fijo reactivado', 'info');
+    }
+  );
 }
 
 /* ============================================================
