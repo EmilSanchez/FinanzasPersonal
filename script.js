@@ -1,3 +1,9 @@
+// ── Fecha local segura (evita bug UTC que adelanta el día después de las 7pm) ──
+function fechaHoy() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
 /* ============================================================
    FIREBASE SETUP — INSTRUCCIONES
    ============================================================
@@ -926,7 +932,7 @@ function setDateLabels() {
     'Resumen de ' + monthName.charAt(0).toUpperCase() + monthName.slice(1);
 
   // set default dates on forms
-  const ymd = now.toISOString().slice(0, 10);
+  const ymd = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
   ['i-fecha','g-fecha','d-fecha','d-prox','m-abonar-fecha'].forEach(id => {
     const el = document.getElementById(id);
     if (el && !el.value) el.value = ymd;
@@ -1766,7 +1772,7 @@ function openAbonar(idx) {
   document.getElementById('m-abonar-idx').value = idx;
   document.getElementById('m-abonar-nombre').value = d.nombre;
   document.getElementById('m-abonar-monto').value = d.cuota || '';
-  document.getElementById('m-abonar-fecha').value = new Date().toISOString().slice(0,10);
+  document.getElementById('m-abonar-fecha').value = fechaHoy();
   document.getElementById('m-abonar-nota').value = '';
   populateBilleteraSelects();
   openModal('modal-abonar');
@@ -1873,7 +1879,7 @@ function openSumarDeuda(idx) {
   document.getElementById('msd-idx').value  = idx;
   document.getElementById('msd-monto').value = '';
   document.getElementById('msd-desc').value  = '';
-  document.getElementById('msd-fecha').value = new Date().toISOString().slice(0,10);
+  document.getElementById('msd-fecha').value = fechaHoy();
   document.getElementById('msd-tipo').value  = 'prestamo';
   onMsdTipoChange();
   // Info de la deuda actual
@@ -2299,7 +2305,7 @@ function openCobro(idx) {
   document.getElementById('m-cobro-idx').value    = idx;
   document.getElementById('m-cobro-nombre').value = p.nombre;
   document.getElementById('m-cobro-monto').value  = '';
-  document.getElementById('m-cobro-fecha').value  = new Date().toISOString().slice(0,10);
+  document.getElementById('m-cobro-fecha').value  = fechaHoy();
   document.getElementById('m-cobro-nota').value   = '';
   populateBilleteraSelects();
   openModal('modal-cobro');
@@ -2374,7 +2380,7 @@ function openAmpliarPrestamo(idx) {
   document.getElementById('map-idx').value   = idx;
   document.getElementById('map-monto').value = '';
   document.getElementById('map-desc').value  = '';
-  document.getElementById('map-fecha').value = new Date().toISOString().slice(0,10);
+  document.getElementById('map-fecha').value = fechaHoy();
   const falta = Math.max(0, p.totalConInteres - (p.cobrado || 0));
   document.getElementById('map-prest-info').innerHTML =
     `<strong> ${p.nombre}</strong><br>` +
@@ -2979,7 +2985,7 @@ async function confirmarPagoFijo(gfId, mesKey, billeteraUsada) {
   }
 
   const now   = new Date();
-  const fecha = now.toISOString().slice(0,10);
+  const fecha = fechaHoy();
   const hora  = horaActual();
 
   const gastoId = uid();
@@ -3623,7 +3629,7 @@ function populateInvTipoFilter() {
 function openModalNuevaInversion(id=null) {
   const inv = id ? STATE.db.inversiones.find(i=>i.id===id) : null;
   const titulo = inv ? 'Editar inversión' : 'Nueva inversión';
-  const ymd = new Date().toISOString().slice(0,10);
+  const ymd = fechaHoy();
 
   const overlay = document.getElementById('modal-inv-form-overlay');
   overlay.innerHTML = `
@@ -3864,7 +3870,7 @@ function openModalVentaInv(invId) {
   const inv = STATE.db.inversiones.find(i=>i.id===invId);
   if(!inv) return;
   const p = enriquecerInversion(inv);
-  const ymd = new Date().toISOString().slice(0,10);
+  const ymd = fechaHoy();
 
   const overlay = document.getElementById('modal-inv-form-overlay');
   overlay.innerHTML = `
@@ -4211,7 +4217,7 @@ async function cambiarEstadoInv(idx, estado) {
       // Al cerrar: solo registrar la GANANCIA NETA como ingreso
       STATE.db.ingresos.push({
         id: uid(),
-        fecha: new Date().toISOString().slice(0, 10),
+        fecha: fechaHoy(),
         hora: horaActual(),
         monto: Math.round(p.ganancia),
         fuente: 'Ganancia inversión cerrada: ' + inv.nombre,
@@ -4232,7 +4238,7 @@ function openModalRenovarStock(invId) {
   const inv = STATE.db.inversiones.find(i=>i.id===invId);
   if (!inv) return;
   const p = enriquecerInversion(inv);
-  const ymd = new Date().toISOString().slice(0,10);
+  const ymd = fechaHoy();
 
   const billeterasOpts = (STATE.db.billeteras||[]).map(b => {
     const s = saldoBilletera(b.id);
@@ -4409,7 +4415,7 @@ function actualizarInversion() {}
 function openModalGastoAdicionalInv(invId) {
   const inv = STATE.db.inversiones.find(i=>i.id===invId);
   if (!inv) return;
-  const ymd = new Date().toISOString().slice(0,10);
+  const ymd = fechaHoy();
 
   const billeterasOpts = (STATE.db.billeteras||[]).map(b => {
     const s = saldoBilletera(b.id);
@@ -4707,7 +4713,7 @@ function openModalTransferencia() {
 
   // Fecha por defecto = hoy
   const fechaEl = document.getElementById('tr-fecha');
-  if (fechaEl) fechaEl.value = new Date().toISOString().slice(0,10);
+  if (fechaEl) fechaEl.value = fechaHoy();
 
   // Limpiar campos
   const montoEl = document.getElementById('tr-monto');
@@ -4905,7 +4911,7 @@ function openModalNuevoIngreso() {
   }
 
   if (document.getElementById('mi-fuente')) document.getElementById('mi-fuente').value = '';
-  if (document.getElementById('mi-fecha')) document.getElementById('mi-fecha').value = new Date().toISOString().slice(0,10);
+  if (document.getElementById('mi-fecha')) document.getElementById('mi-fecha').value = fechaHoy();
   if (document.getElementById('mi-saldo-info')) document.getElementById('mi-saldo-info').style.display = 'none';
 
   openModal('modal-nuevo-ingreso');
@@ -4934,7 +4940,7 @@ function openModalNuevoGasto() {
   const fechaEl = document.getElementById('mg-fecha');
   const montoEl = document.getElementById('mg-monto');
 
-  if (fechaEl) fechaEl.value = new Date().toISOString().slice(0,10);
+  if (fechaEl) fechaEl.value = fechaHoy();
   if (montoEl) {
     montoEl.value = '';
     // Recarga el select cada vez que cambia el monto
@@ -6377,7 +6383,7 @@ function exportData() {
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href = url;
-  a.download = 'finanzas_backup_' + new Date().toISOString().slice(0,10) + '.json';
+  a.download = 'finanzas_backup_' + fechaHoy() + '.json';
   a.click();
   URL.revokeObjectURL(url);
   toast('Backup exportado correctamente', 'success');
