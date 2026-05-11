@@ -6306,7 +6306,7 @@ function renderBilleteras() {
       </div>
     </div>`;
 
-  if (!list.length) {
+  if (!all.length) {
     if(grid) grid.innerHTML = '';
     if(empty) empty.style.display = '';
     renderTablaTransferencias();
@@ -6375,10 +6375,10 @@ function renderBilleteras() {
   }
   if(empty) empty.style.display = 'none';
 
-  // Billeteras visibles
+  // Billeteras visibles (puede estar vacío si todas están ocultas)
   grid.innerHTML = list.length
     ? list.map(b => billCard(b, false)).join('')
-    : '<p style="color:var(--muted);font-size:.85rem;grid-column:1/-1;padding:8px 0;">No hay billeteras visibles.</p>';
+    : '<p style="color:var(--muted);font-size:.85rem;grid-column:1/-1;padding:8px 0;">Todas las billeteras están ocultas. Expande la sección de abajo para verlas.</p>';
 
   // Sección ocultas
   let ocultasEl = document.getElementById('bill-ocultas-sec');
