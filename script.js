@@ -6380,13 +6380,9 @@ function renderBilleteras() {
     ? list.map(b => billCard(b, false)).join('')
     : '<p style="color:var(--muted);font-size:.85rem;grid-column:1/-1;padding:8px 0;">Todas las billeteras están ocultas. Expande la sección de abajo para verlas.</p>';
 
-  // Sección ocultas
-  let ocultasEl = document.getElementById('bill-ocultas-sec');
-  if (!ocultasEl) {
-    ocultasEl = document.createElement('div');
-    ocultasEl.id = 'bill-ocultas-sec';
-    grid.parentNode.insertBefore(ocultasEl, grid.nextSibling);
-  }
+  // Sección ocultas (el elemento siempre existe en el HTML)
+  const ocultasEl = document.getElementById('bill-ocultas-sec');
+  if (!ocultasEl) return;
   if (ocultas.length) {
     const expanded = localStorage.getItem('bill_ocultas_expanded') === 'true';
     ocultasEl.innerHTML = `
