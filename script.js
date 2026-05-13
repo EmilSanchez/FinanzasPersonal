@@ -950,6 +950,7 @@ const PAGE_TITLES = {
 };
 
 function navigate(page, param=null) {
+  setTimeout(updateMovFABVisibility, 50);
   STATE.currentPage = page;
   STATE.navParam = param;
   // Persistir página actual en sessionStorage
@@ -5428,7 +5429,86 @@ function clearMovRango() {
   renderMovimientos();
 }
 
+
+// ══════════════════════════════════════════════════════
+// ══ MOVIMIENTOS MÓVIL — tabs + resumen + FAB
+// ══════════════════════════════════════════════════════
+
+window._movTab = 'todos'; // 'todos' | 'ingresos' | 'gastos'
+
+function setMovTab(tab) {
+  window._movTab = tab;
+  // Update tab styles
+  document.querySelectorAll('.mov-tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  // Sync with desktop filter
+  const tipoSel = document.getElementById('mov-filter-tipo');
+  if (tipoSel) {
+    tipoSel.value = tab === 'todos' ? '' : tab === 'ingresos' ? 'ingreso' : 'gasto';
+  }
+  renderMovimientos();
+}
+
+function updateMovResumenMobile() {
+  const ing = document.getElementById('mov-mob-ing');
+  const gas = document.getElementById('mov-mob-gas');
+  const bal = document.getElementById('mov-mob-bal');
+  if (!ing) return;
+
+  // Use same date range as current filter
+  const desde  = document.getElementById('mov-filter-desde')?.value || '';
+  const hasta  = document.getElementById('mov-filter-hasta')?.value || '';
+  const hoy    = fechaHoy();
+  const mesIni = hoy.slice(0, 7) + '-01';
+  const d0     = desde || mesIni;
+  const d1     = hasta || hoy;
+
+  const totalIng = (STATE.db.ingresos || [])
+    .filter(i => i.fecha >= d0 && i.fecha <= d1 && i.cat !== 'Transferencia')
+    .reduce((a, i) => a + i.monto, 0);
+
+  const totalGas = (STATE.db.gastos || [])
+    .filter(g => g.fecha >= d0 && g.fecha <= d1 && g.cat !== 'Transferencia')
+    .reduce((a, g) => a + g.monto, 0);
+
+  const balance = totalIng - totalGas;
+
+  ing.textContent = fmt(totalIng);
+  gas.textContent = fmt(totalGas);
+  bal.textContent = fmt(balance);
+  bal.style.color = balance >= 0 ? 'var(--green)' : 'var(--red)';
+}
+
+// Show/hide FAB only on movimientos page
+function updateMovFABVisibility() {
+  const fab = document.getElementById('mov-fab-container');
+  if (!fab) return;
+  const isMov = STATE.currentPage === 'movimientos';
+  const isMobile = window.innerWidth <= 768;
+  fab.style.display = (isMov && isMobile) ? 'flex' : 'none';
+}
+
+// Add padding div at end of mov-lista so FABs don't cover last item
+function ensureMovFabPadding() {
+  const lista = document.getElementById('mov-lista');
+  if (!lista) return;
+  if (!lista.querySelector('.mov-fab-padding')) {
+    const pad = document.createElement('div');
+    pad.className = 'mov-fab-padding';
+    lista.appendChild(pad);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+
 function renderMovimientos() {
+  // Sync mobile tab → desktop filter
+  if (window._movTab === 'ingresos') { const s = document.getElementById('mov-filter-tipo'); if(s) s.value = 'ingreso'; }
+  else if (window._movTab === 'gastos') { const s = document.getElementById('mov-filter-tipo'); if(s) s.value = 'gasto'; }
+  else if (window._movTab === 'todos') { const s = document.getElementById('mov-filter-tipo'); if(s && (s.value==='ingreso'||s.value==='gasto')) s.value=''; }
+  // Update mobile summary card
+  updateMovResumenMobile();
   const filtroTipo  = document.getElementById('mov-filter-tipo')?.value || '';
   const filtroDesde = document.getElementById('mov-filter-desde')?.value || '';
   const filtroHasta = document.getElementById('mov-filter-hasta')?.value || '';
@@ -7043,3 +7123,5 @@ window.addEventListener('resize', () => {
   });
 
 })();
+window.addEventListener('resize', updateMovFABVisibility);
+window.addEventListener('load', () => { updateMovFABVisibility(); updateMovResumenMobile(); });

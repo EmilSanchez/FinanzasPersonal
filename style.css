@@ -1404,3 +1404,145 @@ button:active, .btn:active, [role="button"]:active,
 @media (min-width: 769px) {
   #fab-container { bottom: 28px !important; right: 28px !important; }
 }
+/* ══════════════════════════════════════════════════════
+   MOVIMIENTOS — DISEÑO MÓVIL TIPO MERCADO PAGO
+══════════════════════════════════════════════════════ */
+
+/* Card resumen superior — solo móvil */
+.mov-resumen-mobile {
+  display: none;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 20px 14px;
+}
+.mov-resumen-mobile-inner {
+  max-width: 100%;
+}
+.mov-resumen-mobile-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+.mov-resumen-mobile-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 12px;
+  text-align: center;
+}
+.mov-resumen-mobile-stat:first-child { padding-left: 0; text-align: left; }
+.mov-resumen-mobile-stat:last-child  { padding-right: 0; text-align: right; }
+.mov-resumen-mobile-divider {
+  width: 1px;
+  background: var(--border);
+  flex-shrink: 0;
+  margin: 4px 0;
+}
+.mov-resumen-mobile-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: .68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+}
+.mov-resumen-mobile-stat:last-child .mov-resumen-mobile-label { justify-content: flex-end; }
+.mov-resumen-mobile-stat:nth-child(3) .mov-resumen-mobile-label { justify-content: center; }
+.mov-resumen-mobile-val {
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.mov-resumen-mobile-val.ingreso { color: var(--green); }
+.mov-resumen-mobile-val.gasto   { color: var(--red); }
+.mov-resumen-mobile-val.balance { color: var(--text); }
+
+/* Tabs todos / ingresos / gastos — solo móvil */
+.mov-tabs-mobile {
+  display: none;
+  padding: 0;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 9;
+  justify-content: center;
+}
+.mov-tab-btn {
+  flex: 1;
+  max-width: 140px;
+  padding: 12px 0 11px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: .9rem;
+  font-weight: 700;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  letter-spacing: .01em;
+  text-align: center;
+  transition: color .15s, border-color .15s;
+}
+.mov-tab-btn.active {
+  color: var(--text);
+  border-bottom-color: var(--text);
+}
+
+/* FAB — botones flotantes móvil */
+.mov-fab-container {
+  display: none;
+  position: fixed;
+  bottom: calc(60px + env(safe-area-inset-bottom, 0px) + 12px);
+  left: 0;
+  right: 0;
+  padding: 0 16px;
+  gap: 10px;
+  z-index: 100;
+  pointer-events: none;
+}
+.mov-fab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 50px;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  font-size: .88rem;
+  font-weight: 700;
+  color: #fff;
+  pointer-events: all;
+  box-shadow: 0 4px 16px rgba(0,0,0,.25);
+  transition: transform .12s, box-shadow .12s;
+}
+.mov-fab:active { transform: scale(.97); box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+.mov-fab-ingreso { background: var(--teal, #0d9488); }
+.mov-fab-gasto   { background: #c0392b; }
+
+/* Padding bottom en lista para que los FABs no tapen el último item */
+.mov-fab-padding { height: 90px; }
+
+@media (max-width: 768px) {
+  .mov-resumen-mobile { display: block; }
+  .mov-tabs-mobile    { display: flex; }
+  .mov-fab-container  { display: flex; }
+
+  /* Ocultar resumen desktop y sección de filtros compleja en móvil */
+  .mov-filtros-section { display: none !important; }
+  #mov-resumen         { display: none !important; }
+
+  /* Lista: sin padding lateral extra */
+  #mov-lista { padding-bottom: 0; }
+}
+
+/* Ocultar FABs circulares en móvil (reemplazados por barra inferior) */
+@media (max-width: 768px) {
+  #fab-container { display: none !important; }
+}

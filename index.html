@@ -612,20 +612,48 @@
     <!-- ====== Movimientos ====== -->
 
     <div class="page" id="page-movimientos">
-      
 
-      <!-- Filtros + Botones inline -->
+      <!-- MÓVIL: Card de resumen superior -->
+      <div class="mov-resumen-mobile">
+        <div class="mov-resumen-mobile-inner">
+          <div class="mov-resumen-mobile-row">
+            <div class="mov-resumen-mobile-stat">
+              <div class="mov-resumen-mobile-label">
+                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+                Ingresos
+              </div>
+              <div class="mov-resumen-mobile-val ingreso" id="mov-mob-ing">—</div>
+            </div>
+            <div class="mov-resumen-mobile-divider"></div>
+            <div class="mov-resumen-mobile-stat">
+              <div class="mov-resumen-mobile-label">
+                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+                Gastos
+              </div>
+              <div class="mov-resumen-mobile-val gasto" id="mov-mob-gas">—</div>
+            </div>
+            <div class="mov-resumen-mobile-divider"></div>
+            <div class="mov-resumen-mobile-stat">
+              <div class="mov-resumen-mobile-label">Balance</div>
+              <div class="mov-resumen-mobile-val balance" id="mov-mob-bal">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MÓVIL: Tabs todos / ingresos / gastos -->
+      <div class="mov-tabs-mobile">
+        <button class="mov-tab-btn active" data-tab="todos" onclick="setMovTab('todos')">todos</button>
+        <button class="mov-tab-btn" data-tab="ingresos" onclick="setMovTab('ingresos')">ingresos</button>
+        <button class="mov-tab-btn" data-tab="gastos" onclick="setMovTab('gastos')">gastos</button>
+      </div>
+
+      <!-- Filtros + Botones inline (desktop) -->
       <div class="section mov-filtros-section" style="display:flex;flex-direction:column;gap:10px;overflow:visible;">
-        <!-- Fila de botones (solo visible en móvil, arriba) -->
-        <div class="mov-btns-row">
-          <button onclick="openModalNuevoIngreso()" class="mov-btn-ingreso">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
-            Ingreso
-          </button>
-          <button onclick="openModalNuevoGasto()" class="mov-btn-gasto">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
-            Gasto
-          </button>
+        <!-- Fila de botones (solo visible en móvil, arriba) — OCULTO, reemplazado por FABs -->
+        <div class="mov-btns-row" style="display:none;">
+          <button onclick="openModalNuevoIngreso()" class="mov-btn-ingreso">Ingreso</button>
+          <button onclick="openModalNuevoGasto()" class="mov-btn-gasto">Gasto</button>
         </div>
         <!-- Fila de filtros -->
         <div class="mov-filtros-row">
@@ -2217,5 +2245,18 @@
     </div>
   </div>
 </div>
+
+<!-- FAB Buttons móvil (movimientos) -->
+<div class="mov-fab-container" id="mov-fab-container">
+  <button class="mov-fab mov-fab-gasto" onclick="openModalNuevoGasto()">
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+    Nuevo gasto
+  </button>
+  <button class="mov-fab mov-fab-ingreso" onclick="openModalNuevoIngreso()">
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+    Nuevo ingreso
+  </button>
+</div>
+
 </body>
 </html>
