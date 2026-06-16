@@ -67,15 +67,24 @@ function loadDbLocal() {
 }
 
 // ── Cargar datos: espera sincronización real antes de pintar (evita ver datos de otro usuario) ──
+// A prueba de fallos: si la sincronización tarda demasiado (red móvil lenta/intermitente)
+// o lanza un error, NUNCA se queda pegada la pantalla de carga.
 async function loadDb(silent = false) {
   if (!silent) showLoadingOverlay('Cargando datos...');
   loadDbLocal(); // cache local del usuario actual como respaldo instantáneo
 
-  const minTime = silent ? 0 : 3500; // mínimo visible para que los puntitos no parpadeen
+  const minTime = silent ? 0 : 3500;   // mínimo visible para que los puntitos no parpadeen
+  const maxTime = silent ? 8000 : 12000; // tope duro: nunca esperar más que esto
   const start = Date.now();
 
-  // Esperar sincronización real con Firebase antes de continuar
-  await _sincronizarFirebase(silent);
+  try {
+    await Promise.race([
+      _sincronizarFirebase(silent),
+      new Promise(resolve => setTimeout(resolve, maxTime)),
+    ]);
+  } catch (err) {
+    console.error('Sincronización interrumpida, continuando con datos locales:', err);
+  }
 
   if (!silent) {
     const elapsed = Date.now() - start;
@@ -94,7 +103,7 @@ async function _sincronizarFirebase(silent = false) {
   }
 
   if (!window.__FB?.ready) {
-    if (!silent) toast('Sin conexión — datos locales', 'info');
+    if (!silent) { try { toast('Sin conexión — datos locales', 'info'); } catch(e) {} }
     return;
   }
 
