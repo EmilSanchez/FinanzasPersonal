@@ -26,6 +26,14 @@ function fechaHoy() {
       LocalStorage sigue funcionando como respaldo offline.
    ============================================================ */
 
+
+// ── Clave de localStorage específica por usuario (evita fuga de datos entre perfiles) ──
+function dbKey() {
+  const u = window.__CURRENT_USER;
+  if (!u || u.isAdmin) return 'finanzas_pro_v2_admin';
+  return 'finanzas_pro_v2_' + u.id;
+}
+
 /* ============================================================
    STATE & STORAGE
    ============================================================ */
@@ -44,7 +52,7 @@ const STATE = {
 
 // ── Fallback: cargar datos desde localStorage ──
 function loadDbLocal() {
-  const raw = localStorage.getItem('finanzas_pro_v2');
+  const raw = localStorage.getItem(dbKey());
   STATE.db = raw ? JSON.parse(raw) : {
     ingresos: [], gastos: [], deudas: [], pass: [],
     prestamos: [], gastosFijos: [], inversiones: [], ventasInv: [], billeteras: [], transferencias: []
@@ -58,15 +66,22 @@ function loadDbLocal() {
   if (!STATE.db.recordatorios)  STATE.db.recordatorios  = [];
 }
 
-// ── Cargar datos: local primero (instantáneo), Firebase en background ──
+// ── Cargar datos: espera sincronización real antes de pintar (evita ver datos de otro usuario) ──
 async function loadDb(silent = false) {
   if (!silent) showLoadingOverlay('Cargando datos...');
-  loadDbLocal();
-  // Spinner breve — solo para dar feedback visual
-  await new Promise(r => setTimeout(r, 400));
-  hideLoadingOverlay();
-  // Sincronizar Firebase en background sin bloquear la UI
-  _sincronizarFirebase(silent);
+  loadDbLocal(); // cache local del usuario actual como respaldo instantáneo
+
+  const minTime = silent ? 0 : 3500; // mínimo visible para que los puntitos no parpadeen
+  const start = Date.now();
+
+  // Esperar sincronización real con Firebase antes de continuar
+  await _sincronizarFirebase(silent);
+
+  if (!silent) {
+    const elapsed = Date.now() - start;
+    if (elapsed < minTime) await new Promise(r => setTimeout(r, minTime - elapsed));
+    hideLoadingOverlay();
+  }
 }
 
 async function _sincronizarFirebase(silent = false) {
@@ -96,11 +111,12 @@ async function _sincronizarFirebase(silent = false) {
       ventasInv:      data.ventasInv      || [],
       billeteras:     data.billeteras     || [],
       transferencias: data.transferencias || [],
+      recordatorios:  data.recordatorios  || [],
     };
     // Solo re-renderizar si hay diferencias
     if (JSON.stringify(STATE.db) !== JSON.stringify(dbRemote)) {
       STATE.db = dbRemote;
-      localStorage.setItem('finanzas_pro_v2', JSON.stringify(dbRemote));
+      localStorage.setItem(dbKey(), JSON.stringify(dbRemote));
       renderAll();
       console.log(' Sincronizado con Firestore');
     }
@@ -153,7 +169,7 @@ function hideLoading() {
 
 async function saveDb(coleccionesEspecificas = null) {
   // Siempre guardar en localStorage primero (respaldo inmediato)
-  localStorage.setItem('finanzas_pro_v2', JSON.stringify(STATE.db));
+  localStorage.setItem(dbKey(), JSON.stringify(STATE.db));
 
   // Si Firebase ya está listo, guardar inmediatamente
   // Si no, esperar hasta 8 segundos a que se conecte
@@ -357,7 +373,7 @@ async function saveItem(colName, item) {
   STATE.db[colName] = arr;
 
   // Guardar localStorage
-  localStorage.setItem('finanzas_pro_v2', JSON.stringify(STATE.db));
+  localStorage.setItem(dbKey(), JSON.stringify(STATE.db));
   showSavingDot();
 
   // Guardar en Firebase
@@ -369,7 +385,7 @@ async function saveItem(colName, item) {
     // Revertir el cambio en STATE si Firebase falló
     if (arr.findIndex(i => i.id === item.id) !== -1) {
       STATE.db[colName] = arr.filter(i => i.id !== item.id);
-      localStorage.setItem('finanzas_pro_v2', JSON.stringify(STATE.db));
+      localStorage.setItem(dbKey(), JSON.stringify(STATE.db));
     }
     console.error('Firebase saveItem error:', err);
     showSaveError(err);
@@ -383,7 +399,7 @@ async function deleteItem(colName, id) {
 
   const backup = [...(STATE.db[colName] || [])];
   STATE.db[colName] = backup.filter(i => i.id !== id);
-  localStorage.setItem('finanzas_pro_v2', JSON.stringify(STATE.db));
+  localStorage.setItem(dbKey(), JSON.stringify(STATE.db));
   showSavingDot();
 
   try {
@@ -393,7 +409,7 @@ async function deleteItem(colName, id) {
   } catch(err) {
     // Revertir si Firebase falló
     STATE.db[colName] = backup;
-    localStorage.setItem('finanzas_pro_v2', JSON.stringify(STATE.db));
+    localStorage.setItem(dbKey(), JSON.stringify(STATE.db));
     console.error('Firebase deleteItem error:', err);
     showSaveError(err);
     return false;
@@ -1247,7 +1263,6 @@ function renderDashboard() {
   const gasMes  = STATE.db.gastos.filter(g => ym(g.fecha) === ym0 && g.cat !== 'Transferencia');
   const totalIng = ingMes.reduce((a, b) => a + Number(b.monto), 0);
   const totalGas = gasMes.reduce((a, b) => a + Number(b.monto), 0);
-  const totalDeu = STATE.db.deudas.reduce((a, d) => a + Math.max(0, Number(d.total) - Number(d.pagado || 0)), 0);
   // Préstamos por cobrar suman al balance (dinero tuyo en la calle)
   const totalPrestPendiente = STATE.db.prestamos.reduce((a, p) =>
     a + Math.max(0, Number(p.totalConInteres) - Number(p.cobrado || 0)), 0);
@@ -1269,28 +1284,12 @@ function renderDashboard() {
   // ══ HERO: Total real en todas las billeteras ══
   const totalBilleteras = (STATE.db.billeteras || []).reduce((a, b) => a + saldoBilletera(b.id), 0);
 
-  document.getElementById('d-ing').textContent = fmt(totalIng);
-  document.getElementById('d-gas').textContent = fmt(totalGas);
-  document.getElementById('d-deu').textContent = fmt(totalDeu);
-
   // El balance del hero = total billeteras (dinero real disponible)
   const bEl = document.getElementById('d-balance');
   if (bEl) {
     bEl.textContent = fmt(totalBilleteras);
     bEl.className = 'dash-balance-amount';
   }
-
-  // Color de las tarjetas de detalle
-  const ingEl = document.getElementById('d-ing');
-  if(ingEl) ingEl.className = 'stat-value positive';
-  const gasEl = document.getElementById('d-gas');
-  if(gasEl) gasEl.className = 'stat-value negative';
-  const deuEl = document.getElementById('d-deu');
-  if(deuEl) deuEl.className = 'stat-value warning';
-
-  document.getElementById('d-ing-sub').textContent  = ingMes.length + ' transacciones';
-  document.getElementById('d-gas-sub').textContent  = gasMes.length + ' transacciones';
-  document.getElementById('d-deu-sub').textContent  = STATE.db.deudas.filter(d => d.total - (d.pagado||0) > 0).length + ' deudas activas';
 
   // Sub del hero balance: desglose de activos adicionales
   const partes = [];
@@ -1344,29 +1343,6 @@ function renderDashboard() {
     </table></div>`;
 
   // charts now in Reportes page
-}
-
-/* ============================================================
-   DASHBOARD EYE TOGGLE
-   ============================================================ */
-let _dashDetailsVisible = false;
-
-function toggleDashDetails() {
-  _dashDetailsVisible = !_dashDetailsVisible;
-  const panel    = document.getElementById('dash-detail-cards');
-  const eyeIcon  = document.getElementById('dash-eye-icon');
-  const eyeLabel = document.getElementById('dash-eye-label');
-  if (!panel) return;
-  if (_dashDetailsVisible) {
-    panel.style.display = '';
-    panel.style.animation = 'fadeSlide .25s ease';
-    if (eyeIcon)  eyeIcon.textContent  = '';
-    if (eyeLabel) eyeLabel.textContent = 'Ocultar';
-  } else {
-    panel.style.display = 'none';
-    if (eyeIcon)  eyeIcon.textContent  = '️';
-    if (eyeLabel) eyeLabel.textContent = 'Ver detalle';
-  }
 }
 
 /* ============================================================
@@ -2141,9 +2117,45 @@ function marcarCuotaEnTabla(d, monto, fecha) {
 
 // ══════════════════════════════════════════════════════
 
+/* ============================================================
+   DEUDAS — Ojito de privacidad para el valor total pendiente
+   Siempre inicia oculto por defecto en cada carga de la app.
+   ============================================================ */
+if (typeof window._deudaTotalOculto === 'undefined') window._deudaTotalOculto = true;
+
+function aplicarVisibilidadDeudaTotal() {
+  const oculto  = window._deudaTotalOculto;
+  const valorEl = document.getElementById('deudas-total-valor');
+  const iconEl  = document.getElementById('deudas-eye-icon');
+  if (!valorEl) return;
+  if (oculto) {
+    valorEl.style.filter = 'blur(7px)';
+    valorEl.style.userSelect = 'none';
+    if (iconEl) iconEl.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
+  } else {
+    valorEl.style.filter = 'none';
+    valorEl.style.userSelect = '';
+    if (iconEl) iconEl.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+  }
+}
+
+function toggleDeudaTotalVisible() {
+  window._deudaTotalOculto = !window._deudaTotalOculto;
+  aplicarVisibilidadDeudaTotal();
+}
+
 function renderDeudas() {
   const container = document.getElementById('deudas-lista');
   const empty     = document.getElementById('deudas-empty');
+
+  // ── Resumen: deuda total pendiente (con privacidad de ojito) ──
+  const totalDeuPend = STATE.db.deudas.reduce((a, d) => a + Math.max(0, Number(d.total) - Number(d.pagado || 0)), 0);
+  const nDeuActivas  = STATE.db.deudas.filter(d => Math.max(0, d.total - (d.pagado||0)) > 0).length;
+  const valorEl = document.getElementById('deudas-total-valor');
+  const subEl   = document.getElementById('deudas-total-sub');
+  if (valorEl) valorEl.textContent = fmt(totalDeuPend);
+  if (subEl)   subEl.textContent   = nDeuActivas + (nDeuActivas === 1 ? ' deuda activa' : ' deudas activas');
+  aplicarVisibilidadDeudaTotal();
 
   // Inject filter tabs if not present
   let tabsEl = document.getElementById('deudas-filter-tabs');
@@ -5435,6 +5447,13 @@ function clearMovRango() {
 // ══════════════════════════════════════════════════════
 
 window._movTab = 'todos'; // 'todos' | 'ingresos' | 'gastos'
+
+// Conecta la barra de búsqueda móvil con el filtro real de texto
+function onMovSearchMobile(value) {
+  const searchEl = document.getElementById('mov-filter-search');
+  if (searchEl) searchEl.value = value;
+  renderMovimientos();
+}
 
 function setMovTab(tab) {
   window._movTab = tab;

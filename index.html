@@ -238,10 +238,13 @@
 <!-- ============================================================
      FIREBASE LOADING OVERLAY
      ============================================================ -->
-<div id="fb-loading" style="display:none;position:fixed;inset:0;background:rgba(255,255,255,.92);
-  z-index:9998;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
-  <div style="width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);
-    border-radius:50%;animation:spin .7s linear infinite;"></div>
+<div id="fb-loading" style="display:none;position:fixed;inset:0;background:var(--bg);
+  z-index:9998;flex-direction:column;align-items:center;justify-content:center;gap:18px;">
+  <div style="display:flex;align-items:center;gap:7px;">
+    <span class="fb-dot" style="animation-delay:0s;"></span>
+    <span class="fb-dot" style="animation-delay:.15s;"></span>
+    <span class="fb-dot" style="animation-delay:.3s;"></span>
+  </div>
   <p id="fb-loading-msg" style="color:var(--muted);font-size:.9rem;font-family:var(--font-body);">Conectando...</p>
 </div>
 
@@ -367,46 +370,12 @@
     <div class="page active" id="page-dashboard">
       <p class="page-sub" id="dash-month-label" style="color:var(--muted);font-size:.82rem;margin-bottom:8px;">Cargando...</p>
 
-      <!-- ═══ BALANCE PRINCIPAL — Siempre visible ═══ -->
+      <!-- ═══ BALANCE PRINCIPAL ═══ -->
       <div class="dash-balance-hero">
         <div class="dash-balance-left">
           <div class="dash-balance-label">Total en billeteras</div>
           <div class="dash-balance-amount" id="d-balance">$0</div>
           <div class="dash-balance-sub" id="d-balance-sub"></div>
-        </div>
-        <button class="dash-eye-btn" id="dash-eye-btn" onclick="toggleDashDetails()" title="Mostrar / ocultar detalles">
-  
-          <span id="dash-eye-label">Ver detalle</span>
-        </button>
-      </div>
-
-      <!-- ═══ DETALLE — Oculto por defecto, toggle con ojito ═══ -->
-      <div id="dash-detail-cards" style="display:none;">
-        <div class="stats-grid" style="margin-bottom:16px;">
-          <div class="stat-card green">
-            <div class="stat-icon-box"><span style="font-size:.9rem">↑</span></div>
-            <div class="stat-body">
-              <div class="stat-label">Ingresos del mes</div>
-              <div class="stat-value" id="d-ing">$0</div>
-              <div class="stat-sub" id="d-ing-sub"></div>
-            </div>
-          </div>
-          <div class="stat-card red">
-            <div class="stat-icon-box"><span style="font-size:.9rem">↓</span></div>
-            <div class="stat-body">
-              <div class="stat-label">Gastos del mes</div>
-              <div class="stat-value" id="d-gas">$0</div>
-              <div class="stat-sub" id="d-gas-sub"></div>
-            </div>
-          </div>
-          <div class="stat-card yellow">
-            <div class="stat-icon-box"><span style="font-size:.9rem">!</span></div>
-            <div class="stat-body">
-              <div class="stat-label">Deudas pendientes</div>
-              <div class="stat-value" id="d-deu">$0</div>
-              <div class="stat-sub" id="d-deu-sub"></div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -646,6 +615,12 @@
         <button class="mov-tab-btn active" data-tab="todos" onclick="setMovTab('todos')">todos</button>
         <button class="mov-tab-btn" data-tab="ingresos" onclick="setMovTab('ingresos')">ingresos</button>
         <button class="mov-tab-btn" data-tab="gastos" onclick="setMovTab('gastos')">gastos</button>
+      </div>
+
+      <!-- MÓVIL: Barra de búsqueda -->
+      <div class="mov-search-mobile-wrap">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="mov-search-mobile" class="mov-search-mobile-input" placeholder="Buscar movimiento..." oninput="onMovSearchMobile(this.value)">
       </div>
 
       <!-- Filtros + Botones inline (desktop) -->
@@ -896,6 +871,22 @@
 
     <!-- ====== DEUDAS ====== -->
     <div class="page" id="page-deudas">
+
+      <!-- Resumen: deuda total pendiente con ojito de privacidad -->
+      <div class="section" style="margin-bottom:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div>
+            <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px;">Deuda total pendiente</div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div id="deudas-total-valor" style="font-weight:800;font-size:1.4rem;color:var(--text);transition:filter .15s;">$0</div>
+              <button id="deudas-eye-btn" onclick="toggleDeudaTotalVisible()" title="Mostrar / ocultar valor" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:4px;display:flex;align-items:center;flex-shrink:0;">
+                <svg id="deudas-eye-icon" xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+          </div>
+          <div id="deudas-total-sub" style="font-size:.78rem;color:var(--muted);text-align:right;"></div>
+        </div>
+      </div>
 
       <!-- Barra de acciones -->
       <div class="section" style="overflow:visible;">
@@ -2248,13 +2239,13 @@
 
 <!-- FAB Buttons móvil (movimientos) -->
 <div class="mov-fab-container" id="mov-fab-container">
-  <button class="mov-fab mov-fab-gasto" onclick="openModalNuevoGasto()">
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
-    Nuevo gasto
-  </button>
   <button class="mov-fab mov-fab-ingreso" onclick="openModalNuevoIngreso()">
     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
     Nuevo ingreso
+  </button>
+  <button class="mov-fab mov-fab-gasto" onclick="openModalNuevoGasto()">
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+    Nuevo gasto
   </button>
 </div>
 

@@ -283,15 +283,12 @@ html, body {
 .footer-dot { width:7px; height:7px; border-radius:50%; background:var(--accent); flex-shrink:0; }
 .footer-text { font-size:.7rem; color:var(--muted); }
 
-/* Loading */
-#loading {
-  position: fixed; inset: 0;
-  background: var(--bg);
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
-  z-index: 999;
-}
-#loading .spin { width:36px; height:36px; }
-#loading p { font-size:.85rem; color:var(--muted); }
+/* Puntos de carga — solo dentro del listado de usuarios */
+.login-dots-wrap { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 24px 0; }
+.login-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); display: inline-block; animation: loginDotBounce 1s ease-in-out infinite; }
+.login-dot:nth-child(2) { animation-delay: .15s; }
+.login-dot:nth-child(3) { animation-delay: .3s; }
+@keyframes loginDotBounce { 0%, 80%, 100% { transform: translateY(0); opacity:.5; } 40% { transform: translateY(-9px); opacity:1; } }
 
 /* Mobile */
 @media (max-width: 768px) {
@@ -322,12 +319,7 @@ html, body {
 </head>
 <body>
 
-<div id="loading">
-  <div class="spin"></div>
-  <p>Conectando…</p>
-</div>
-
-<div class="app" id="app" style="display:none;">
+<div class="app" id="app">
 
   <!-- Panel izquierdo: Hero -->
   <div class="hero">
@@ -366,7 +358,9 @@ html, body {
       <div class="login-title">Iniciar sesión</div>
       <div class="login-sub">Selecciona tu perfil para continuar</div>
       <div class="sec-label">Perfiles</div>
-      <div class="user-list" id="user-list"></div>
+      <div class="user-list" id="user-list">
+        <div class="login-dots-wrap"><span class="login-dot"></span><span class="login-dot"></span><span class="login-dot"></span></div>
+      </div>
       <div class="login-footer">
         <div class="footer-dot"></div>
         <span class="footer-text">Sesión segura · Firebase</span>
@@ -536,8 +530,6 @@ document.addEventListener('keydown',e=>{
 });
 
 renderUsers();
-document.getElementById('loading').style.display='none';
-document.getElementById('app').style.display='flex';
 </script>
 </body>
 </html>
