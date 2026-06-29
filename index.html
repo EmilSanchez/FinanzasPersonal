@@ -621,7 +621,10 @@
       <div class="mov-search-mobile-wrap">
         <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input type="text" id="mov-search-mobile" class="mov-search-mobile-input" placeholder="Buscar movimiento..." oninput="onMovSearchMobile(this.value)">
+        <button id="mov-search-clear-btn" onclick="clearMovSearchMobile()" style="display:none;background:none;border:none;cursor:pointer;color:var(--muted);padding:2px 4px;font-size:1rem;line-height:1;">&#x2715;</button>
       </div>
+      <!-- MÓVIL: Resumen de búsqueda -->
+      <div id="mov-resumen-mobile-search" style="display:none;padding:8px 20px 2px;"></div>
 
       <!-- Filtros + Botones inline (desktop) -->
       <div class="section mov-filtros-section" style="display:flex;flex-direction:column;gap:10px;overflow:visible;">
@@ -2237,8 +2240,8 @@
   </div>
 </div>
 
-<!-- FAB Buttons móvil (movimientos) -->
-<div class="mov-fab-container" id="mov-fab-container">
+<!-- FAB Buttons móvil — visibles en toda la app excepto en movimientos -->
+<div class="mov-fab-container" id="mov-fab-container" style="display:none;">
   <button class="mov-fab mov-fab-ingreso" onclick="openModalNuevoIngreso()">
     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
     Nuevo ingreso

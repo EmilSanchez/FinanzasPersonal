@@ -5461,6 +5461,18 @@ window._movTab = 'todos'; // 'todos' | 'ingresos' | 'gastos'
 function onMovSearchMobile(value) {
   const searchEl = document.getElementById('mov-filter-search');
   if (searchEl) searchEl.value = value;
+  const clearBtn = document.getElementById('mov-search-clear-btn');
+  if (clearBtn) clearBtn.style.display = value ? '' : 'none';
+  renderMovimientos();
+}
+
+function clearMovSearchMobile() {
+  const mobileInput = document.getElementById('mov-search-mobile');
+  if (mobileInput) mobileInput.value = '';
+  const searchEl = document.getElementById('mov-filter-search');
+  if (searchEl) searchEl.value = '';
+  const clearBtn = document.getElementById('mov-search-clear-btn');
+  if (clearBtn) clearBtn.style.display = 'none';
   renderMovimientos();
 }
 
@@ -5508,13 +5520,13 @@ function updateMovResumenMobile() {
   bal.style.color = balance >= 0 ? 'var(--green)' : 'var(--red)';
 }
 
-// Show/hide FAB only on movimientos page
+// FABs: visibles en toda la app móvil EXCEPTO en movimientos (que tiene su propio bloque)
 function updateMovFABVisibility() {
   const fab = document.getElementById('mov-fab-container');
   if (!fab) return;
-  const isMov = STATE.currentPage === 'movimientos';
+  const isMov    = STATE.currentPage === 'movimientos';
   const isMobile = window.innerWidth <= 768;
-  fab.style.display = (isMov && isMobile) ? 'flex' : 'none';
+  fab.style.display = (isMobile && !isMov) ? 'flex' : 'none';
 }
 
 // Add padding div at end of mov-lista so FABs don't cover last item
@@ -5531,10 +5543,13 @@ function ensureMovFabPadding() {
 // ══════════════════════════════════════════════════════
 
 function renderMovimientos() {
-  // Sync mobile tab → desktop filter
-  if (window._movTab === 'ingresos') { const s = document.getElementById('mov-filter-tipo'); if(s) s.value = 'ingreso'; }
-  else if (window._movTab === 'gastos') { const s = document.getElementById('mov-filter-tipo'); if(s) s.value = 'gasto'; }
-  else if (window._movTab === 'todos') { const s = document.getElementById('mov-filter-tipo'); if(s && (s.value==='ingreso'||s.value==='gasto')) s.value=''; }
+  // Sync: solo aplicar tab móvil si estamos en móvil
+  const esMobile = window.innerWidth <= 768;
+  if (esMobile) {
+    if (window._movTab === 'ingresos') { const s = document.getElementById('mov-filter-tipo'); if(s) s.value = 'ingreso'; }
+    else if (window._movTab === 'gastos') { const s = document.getElementById('mov-filter-tipo'); if(s) s.value = 'gasto'; }
+    else if (window._movTab === 'todos') { const s = document.getElementById('mov-filter-tipo'); if(s) s.value = ''; }
+  }
   // Update mobile summary card
   updateMovResumenMobile();
   const filtroTipo  = document.getElementById('mov-filter-tipo')?.value || '';
@@ -5598,6 +5613,25 @@ function renderMovimientos() {
         <button onclick="clearMovFilters()" title="Limpiar filtros" style="background:none;border:1px solid var(--border);border-radius:8px;padding:3px 8px;cursor:pointer;color:var(--muted);font-size:.78rem;line-height:1;">&#x2715;</button>
       </div>
     </div>`;
+  }
+
+  // ── Resumen de búsqueda para móvil ──
+  const resumenMobileEl = document.getElementById('mov-resumen-mobile-search');
+  const searchMobileVal = (document.getElementById('mov-search-mobile')?.value || '').trim();
+  const tabActivo = window._movTab || 'todos';
+  const hayFiltro = searchMobileVal || tabActivo !== 'todos';
+  if (resumenMobileEl) {
+    if (hayFiltro && items.length > 0) {
+      const ing = items.filter(i=>i.tipo==='ingreso').reduce((a,i)=>a+Number(i.monto),0);
+      const gas = items.filter(i=>i.tipo==='gasto').reduce((a,i)=>a+Number(i.monto),0);
+      let partes = [`<span style="color:var(--muted);font-size:.75rem;font-weight:600;">${items.length} resultado${items.length!==1?'s':''}</span>`];
+      if (ing > 0) partes.push(`<span style="font-size:.78rem;color:var(--muted);">Ingresos: <strong style="color:var(--green);">${fmt(ing)}</strong></span>`);
+      if (gas > 0) partes.push(`<span style="font-size:.78rem;color:var(--muted);">Gastos: <strong style="color:var(--red);">${fmt(gas)}</strong></span>`);
+      resumenMobileEl.innerHTML = `<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);">${partes.join('')}</div>`;
+      resumenMobileEl.style.display = '';
+    } else {
+      resumenMobileEl.style.display = 'none';
+    }
   }
 
   const lista = document.getElementById('mov-lista');
