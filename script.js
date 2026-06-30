@@ -5554,13 +5554,17 @@ function updateMovResumenMobile() {
   bal.style.color = balance >= 0 ? 'var(--green)' : 'var(--red)';
 }
 
-// FABs: visibles en toda la app móvil EXCEPTO en movimientos (que tiene su propio bloque)
+// FABs móvil:
+// - .mov-fab-container (rectangulares "Nuevo ingreso"/"Nuevo gasto") → SOLO en movimientos
+// - #fab-container (circulares)                                     → en todo MENOS movimientos
 function updateMovFABVisibility() {
-  const fab = document.getElementById('mov-fab-container');
-  if (!fab) return;
-  const isMov    = STATE.currentPage === 'movimientos';
-  const isMobile = window.innerWidth <= 768;
-  fab.style.display = (isMobile && !isMov) ? 'flex' : 'none';
+  const movFab    = document.getElementById('mov-fab-container');
+  const circleFab = document.getElementById('fab-container');
+  const isMov     = STATE.currentPage === 'movimientos';
+  const isMobile  = window.innerWidth <= 768;
+
+  if (movFab)    movFab.style.display    = (isMobile && isMov) ? 'flex' : 'none';
+  if (circleFab) circleFab.style.display = isMov ? 'none' : '';
 }
 
 // Add padding div at end of mov-lista so FABs don't cover last item

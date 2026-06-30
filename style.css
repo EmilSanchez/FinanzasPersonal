@@ -1542,10 +1542,8 @@ button:active, .btn:active, [role="button"]:active,
   #mov-lista { padding-bottom: 0; }
 }
 
-/* Ocultar FABs circulares en móvil (reemplazados por barra inferior) */
-@media (max-width: 768px) {
-  #fab-container { display: none !important; }
-}
+/* Los FABs circulares ahora se controlan vía JS (updateMovFABVisibility):
+   visibles en móvil en todos los módulos EXCEPTO en movimientos. */
 
 /* ── Loading: 3 puntos saltando (reemplaza spinner circular) ── */
 .fb-dot {
