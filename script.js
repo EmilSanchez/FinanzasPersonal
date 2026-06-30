@@ -482,6 +482,32 @@ function horaActual() {
   });
 }
 
+// Convierte un valor de <input type="time"> (HH:MM, 24h) al formato interno "hh:mm a. m./p. m."
+function horaInputToInterno(hhmm) {
+  if (!hhmm) return horaActual();
+  const [hStr, mStr] = hhmm.split(':');
+  let h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  const ampm = h >= 12 ? 'p. m.' : 'a. m.';
+  let h12 = h % 12;
+  if (h12 === 0) h12 = 12;
+  return `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')} ${ampm}`;
+}
+
+// Convierte el formato interno "hh:mm a. m./p. m." al valor de <input type="time"> (HH:MM, 24h)
+function horaInternoToInput(horaStr) {
+  if (!horaStr) return '';
+  const normalizado = horaStr.replace(/a\.\s*m\./i, 'AM').replace(/p\.\s*m\./i, 'PM');
+  const match = normalizado.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+  if (!match) return '';
+  let h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  const ampm = (match[3]||'').toUpperCase();
+  if (ampm === 'PM' && h !== 12) h += 12;
+  if (ampm === 'AM' && h === 12) h = 0;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+}
+
 function formatFechaLarga(fechaStr) {
   if (!fechaStr) return '—';
   try {
@@ -5226,6 +5252,7 @@ function openModalNuevoIngreso() {
 
   if (document.getElementById('mi-fuente')) document.getElementById('mi-fuente').value = '';
   if (document.getElementById('mi-fecha')) document.getElementById('mi-fecha').value = fechaHoy();
+  if (document.getElementById('mi-hora')) document.getElementById('mi-hora').value = new Date().toTimeString().slice(0,5);
   if (document.getElementById('mi-saldo-info')) document.getElementById('mi-saldo-info').style.display = 'none';
 
   openModal('modal-nuevo-ingreso');
@@ -5235,18 +5262,24 @@ async function saveIngresoModal() {
   const monto = getMontoValue('mi-monto');
   const fuente = document.getElementById('mi-fuente').value.trim();
   const fecha = document.getElementById('mi-fecha').value;
+  const horaInput = document.getElementById('mi-hora')?.value;
   const cat = document.getElementById('mi-cat').value;
   const billeteraId = document.getElementById('mi-billetera').value;
   if (!monto || monto <= 0) return toast('El monto debe ser mayor a 0', 'error');
   if (!fuente) return toast('La descripción es obligatoria', 'error');
   if (!fecha) return toast('La fecha es obligatoria', 'error');
-  STATE.db.ingresos.push({ id:uid(), fecha, hora:horaActual(), monto, fuente, cat, billeteraId });
+
+  // Convertir hora de input type=time (HH:MM, 24h) al formato interno de la app
+  const hora = horaInput ? horaInputToInterno(horaInput) : horaActual();
+
+  STATE.db.ingresos.push({ id:uid(), fecha, hora, monto, fuente, cat, billeteraId });
+  window._lastMovId = STATE.db.ingresos[STATE.db.ingresos.length - 1].id;
+
+  // ── UI optimista: cerrar modal y pintar de inmediato; guardar en BD en segundo plano ──
   closeModal('modal-nuevo-ingreso');
-  showLoading();
-  await saveDb(['ingresos']);
-  hideLoading();
   renderAll();
-  toast('Ingreso registrado ', 'success');
+  toast('Ingreso registrado', 'success');
+  saveDb(['ingresos']); // sin await — no bloquea la interfaz
 }
 
 function openModalNuevoGasto() {
@@ -5255,6 +5288,7 @@ function openModalNuevoGasto() {
   const montoEl = document.getElementById('mg-monto');
 
   if (fechaEl) fechaEl.value = fechaHoy();
+  if (document.getElementById('mg-hora')) document.getElementById('mg-hora').value = new Date().toTimeString().slice(0,5);
   if (montoEl) {
     montoEl.value = '';
     // Recarga el select cada vez que cambia el monto
@@ -5660,7 +5694,8 @@ function renderMovimientos() {
         const procedencia = esIng
           ? (billNombre ? `→ ${billNombre}` : '')
           : (billNombre ? `← ${billNombre}` : '');
-        return `<div style="display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--border);">
+        const esNuevo = m.id === window._lastMovId;
+        return `<div class="${esNuevo ? 'mov-item-new' : ''}" style="display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--border);border-radius:8px;">
           <div style="width:38px;height:38px;border-radius:50%;background:${esIng?'var(--green)':'var(--red)'};display:flex;align-items:center;justify-content:center;color:#fff;font-size:1rem;flex-shrink:0;">
             ${esIng?'↑':'↓'}
           </div>
@@ -5685,6 +5720,8 @@ function renderMovimientos() {
       }).join('')}
     </div>`;
   }).join('');
+
+  if (window._lastMovId) setTimeout(() => { window._lastMovId = null; }, 1200);
 }
 
 function abrirEditarMov(tipo, id) {
@@ -6229,6 +6266,7 @@ async function saveGastoModal() {
   const monto = getMontoValue('mg-monto');
   const desc = document.getElementById('mg-desc').value.trim();
   const fecha = document.getElementById('mg-fecha').value;
+  const horaInput = document.getElementById('mg-hora')?.value;
   const cat = document.getElementById('mg-cat').value;
   const billeteraId = document.getElementById('mg-billetera').value;
 
@@ -6250,20 +6288,25 @@ async function saveGastoModal() {
   const cobra4x1000 = bill?.cobra4x1000 || false;
   const gmf = cobra4x1000 ? Math.round(monto * 0.004) : 0;
 
+  // Convertir hora de input type=time (HH:MM, 24h) al formato interno de la app
+  const hora = horaInput ? horaInputToInterno(horaInput) : horaActual();
+
   const _ts = Date.now();
-  STATE.db.gastos.push({ id: uid(), fecha, hora: horaActual(), monto, desc, cat, billeteraId, ts: _ts });
+  const _nuevoGasto = { id: uid(), fecha, hora, monto, desc, cat, billeteraId, ts: _ts };
+  STATE.db.gastos.push(_nuevoGasto);
+  window._lastMovId = _nuevoGasto.id;
   if (gmf > 0) {
     STATE.db.gastos.push({
-      id: uid(), fecha, hora: horaActual(), monto: gmf,
+      id: uid(), fecha, hora, monto: gmf,
       desc: `4x1000 sobre ${fmt(monto)}`, cat: 'Impuestos', billeteraId, ts: _ts + 1
     });
   }
+
+  // ── UI optimista: cerrar modal y pintar de inmediato; guardar en BD en segundo plano ──
   closeModal('modal-nuevo-gasto');
-  showLoading();
-  await saveDb(['gastos']);
-  hideLoading();
   renderAll();
-  toast(gmf > 0 ? `Retiro registrado + 4x1000 (${fmt(gmf)}) ` : 'Retiro registrado ', 'success');
+  toast(gmf > 0 ? `Retiro registrado + 4x1000 (${fmt(gmf)})` : 'Retiro registrado', 'success');
+  saveDb(['gastos']); // sin await — no bloquea la interfaz
 }
 
 function verMovimientosBilletera(id) {

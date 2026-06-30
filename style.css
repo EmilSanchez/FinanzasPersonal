@@ -1588,3 +1588,13 @@ button:active, .btn:active, [role="button"]:active,
 @media (max-width: 768px) {
   .mov-search-mobile-wrap { display: flex; }
 }
+
+/* ── Animación de entrada para movimientos recién agregados ── */
+@keyframes movItemEnter {
+  0%   { opacity: 0; transform: translateY(-8px); background-color: rgba(16,185,129,.12); }
+  60%  { opacity: 1; transform: translateY(0); }
+  100% { background-color: transparent; }
+}
+.mov-item-new {
+  animation: movItemEnter .6s ease;
+}

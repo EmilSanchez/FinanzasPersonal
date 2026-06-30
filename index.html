@@ -764,29 +764,33 @@
             <label>Descripción *</label>
             <input type="text" class="form-control" id="mi-fuente" placeholder="Ej: Salario, venta..." style="height:44px;">
           </div>
-          <!-- Fecha + Categoría -->
+          <!-- Fecha + Hora + Categoría -->
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div class="form-group">
               <label>Fecha</label>
               <input type="date" class="form-control" id="mi-fecha" style="height:44px;">
             </div>
             <div class="form-group">
-              <label>Categoría</label>
-              <select class="form-control" id="mi-cat" style="height:44px;">
-                <option value="Salario">Salario</option>
-                <option value="Freelance">Freelance</option>
-                <option value="Negocio">Negocio</option>
-                <option value="Inversión">Inversión</option>
-                <option value="Arriendo">Arriendo</option>
-                <option value="Otro">Otro</option>
-              </select>
+              <label>Hora</label>
+              <input type="time" class="form-control" id="mi-hora" style="height:44px;font-family:var(--font-mono)">
             </div>
+          </div>
+          <div class="form-group">
+            <label>Categoría</label>
+            <select class="form-control" id="mi-cat" style="height:44px;">
+              <option value="Salario">Salario</option>
+              <option value="Freelance">Freelance</option>
+              <option value="Negocio">Negocio</option>
+              <option value="Inversión">Inversión</option>
+              <option value="Arriendo">Arriendo</option>
+              <option value="Otro">Otro</option>
+            </select>
           </div>
           </div>
         </div>
         <div class="modal-actions" style="padding:16px 24px;gap:10px;">
           <button class="btn btn-ghost" onclick="closeModal('modal-nuevo-ingreso')" style="flex:1;">Cancelar</button>
-          <button onclick="saveIngresoModal()" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <button onclick="saveIngresoModal()" id="mi-btn-guardar" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
             Registrar ingreso
           </button>
@@ -837,33 +841,37 @@
             <label>Descripción *</label>
             <input type="text" class="form-control" id="mg-desc" placeholder="Ej: Mercado, gasolina..." style="height:44px;">
           </div>
-          <!-- Fecha + Categoría -->
+          <!-- Fecha + Hora + Categoría -->
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div class="form-group">
               <label>Fecha</label>
               <input type="date" class="form-control" id="mg-fecha" style="height:44px;">
             </div>
             <div class="form-group">
-              <label>Categoría</label>
-              <select class="form-control" id="mg-cat" style="height:44px;">
-                <option value="Alimentación">Alimentación</option>
-                <option value="Transporte">Transporte</option>
-                <option value="Salud">Salud</option>
-                <option value="Servicios">Servicios</option>
-                <option value="Educación">Educación</option>
-                <option value="Entretenimiento">Entretenimiento</option>
-                <option value="Ropa">Ropa</option>
-                <option value="Hogar">Hogar</option>
-                <option value="Negocio">Negocio</option>
-                <option value="Otro">Otro</option>
-              </select>
+              <label>Hora</label>
+              <input type="time" class="form-control" id="mg-hora" style="height:44px;font-family:var(--font-mono)">
             </div>
+          </div>
+          <div class="form-group">
+            <label>Categoría</label>
+            <select class="form-control" id="mg-cat" style="height:44px;">
+              <option value="Alimentación">Alimentación</option>
+              <option value="Transporte">Transporte</option>
+              <option value="Salud">Salud</option>
+              <option value="Servicios">Servicios</option>
+              <option value="Educación">Educación</option>
+              <option value="Entretenimiento">Entretenimiento</option>
+              <option value="Ropa">Ropa</option>
+              <option value="Hogar">Hogar</option>
+              <option value="Negocio">Negocio</option>
+              <option value="Otro">Otro</option>
+            </select>
           </div>
           </div>
         </div>
         <div class="modal-actions" style="padding:16px 24px;gap:10px;">
           <button class="btn btn-ghost" onclick="closeModal('modal-nuevo-gasto')" style="flex:1;">Cancelar</button>
-          <button onclick="saveGastoModal()" style="flex:2;background:#7f0000;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <button onclick="saveGastoModal()" id="mg-btn-guardar" style="flex:2;background:#7f0000;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
             Registrar gasto
           </button>
