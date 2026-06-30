@@ -1397,6 +1397,11 @@ button:active, .btn:active, [role="button"]:active,
 #fab-gasto:hover   { transform: scale(1.12); box-shadow: 0 6px 20px rgba(220,38,38,.5) !important; }
 #fab-ingreso:active, #fab-gasto:active { transform: scale(.92) !important; }
 
+/* Separación extra entre los FABs circulares solo en móvil */
+@media (max-width: 768px) {
+  #fab-gasto { margin-top: 14px; }
+}
+
 /* Ocultar FABs en movimientos (ya tienen los botones inline) */
 .page-movimientos-active #fab-container { display: none !important; }
 
