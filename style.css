@@ -1601,3 +1601,60 @@ button:active, .btn:active, [role="button"]:active,
 .mov-item-new {
   animation: movItemEnter .6s ease;
 }
+
+/* ── Deudas: grid 3 col desktop → 2 col tablet → 1 col móvil ── */
+#deudas-lista {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  #deudas-lista { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  #deudas-lista { grid-template-columns: 1fr; }
+}
+
+/* ── Inversiones: grid 3 col desktop → 2 tablet → 1 móvil ── */
+#inv-lista-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  #inv-lista-cards { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  #inv-lista-cards { grid-template-columns: 1fr; }
+}
+
+/* ── Movimientos móvil: filtro de mes ── */
+.mov-mes-mobile-wrap {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 20px 0;
+  padding: 0 14px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--muted);
+}
+.mov-mes-mobile-sel {
+  flex: 1;
+  border: none;
+  background: none;
+  outline: none;
+  font-size: .85rem;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .mov-mes-mobile-wrap { display: flex; }
+}

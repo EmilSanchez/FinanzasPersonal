@@ -1002,6 +1002,7 @@ const PAGE_TITLES = {
 
 function navigate(page, param=null) {
   setTimeout(updateMovFABVisibility, 50);
+  if (page === 'movimientos') setTimeout(poblarMovMesMobile, 60);
   STATE.currentPage = page;
   STATE.navParam = param;
   // Persistir página actual en sessionStorage
@@ -2229,6 +2230,7 @@ function renderDeudas() {
     return;
   }
   empty.style.display = 'none';
+  container.style.cssText = '';  // let CSS grid handle layout
 
   container.innerHTML = lista.map((d, i) => {
     const realIdx  = STATE.db.deudas.indexOf(d);
@@ -3656,7 +3658,9 @@ function renderInversiones() {
   }
   if(empty) empty.style.display='none';
 
-  if(listaCards) listaCards.innerHTML = lista.map(p => {
+  if(listaCards) {
+    listaCards.style.cssText = ''; // let CSS grid handle it
+    listaCards.innerHTML = lista.map(p => {
     const idx = STATE.db.inversiones.indexOf(STATE.db.inversiones.find(i=>i.id===p.id));
     const ganColor = p.ganancia>=0?'var(--green)':'var(--red)';
     const stockColor = p.estadoStock==='agotado'?'var(--red)':p.estadoStock==='bajo'?'var(--yellow)':'var(--text)';
@@ -3665,7 +3669,7 @@ function renderInversiones() {
       ? `<img src="${p.imagen}" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:10px;flex-shrink:0;" onerror="this.style.display='none'">`
       : `<div style="width:44px;height:44px;border-radius:10px;background:var(--accent-light);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;flex-shrink:0;">${letra}</div>`;
     return `
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;margin-bottom:10px;">
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;">
       <!-- Cabecera -->
       <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;">
         ${avatar}
@@ -3723,6 +3727,7 @@ function renderInversiones() {
       </div>
     </div>`;
   }).join('');
+  }
 }
 
 // ── Dashboard de movimientos globales de inversiones ──
@@ -5510,6 +5515,53 @@ function clearMovSearchMobile() {
   renderMovimientos();
 }
 
+// ── Filtro de mes móvil ──────────────────────────────────────
+function poblarMovMesMobile() {
+  const sel = document.getElementById('mov-mes-mobile');
+  if (!sel) return;
+  // Recopilar todos los meses presentes en ingresos y gastos
+  const meses = new Set();
+  [...(STATE.db.ingresos || []), ...(STATE.db.gastos || [])].forEach(m => {
+    if (m.fecha) meses.add(m.fecha.slice(0, 7)); // "YYYY-MM"
+  });
+  const ordenados = [...meses].sort().reverse();
+
+  // Mes actual predefinido
+  const mesActual = fechaHoy().slice(0, 7);
+
+  sel.innerHTML = '<option value="todo">Todo el tiempo</option>' +
+    ordenados.map(m => {
+      const [y, mo] = m.split('-');
+      const label = new Date(Number(y), Number(mo) - 1, 1)
+        .toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
+      const sel_ = m === mesActual ? ' selected' : '';
+      return `<option value="${m}"${sel_}>${label.charAt(0).toUpperCase() + label.slice(1)}</option>`;
+    }).join('');
+
+  // Aplicar el mes actual al filtro de fechas del desktop
+  syncMovMesAlDesktop(mesActual);
+}
+
+function onMovMesMobile(valor) {
+  syncMovMesAlDesktop(valor);
+  renderMovimientos();
+}
+
+function syncMovMesAlDesktop(valor) {
+  const desdeEl = document.getElementById('mov-filter-desde');
+  const hastaEl = document.getElementById('mov-filter-hasta');
+  if (!desdeEl || !hastaEl) return;
+  if (valor === 'todo') {
+    desdeEl.value = '';
+    hastaEl.value = '';
+  } else {
+    const [y, m] = valor.split('-').map(Number);
+    const ultimo = new Date(y, m, 0).getDate(); // último día del mes
+    desdeEl.value = `${valor}-01`;
+    hastaEl.value = `${valor}-${String(ultimo).padStart(2, '0')}`;
+  }
+}
+
 function setMovTab(tab) {
   window._movTab = tab;
   // Update tab styles
@@ -5581,6 +5633,14 @@ function ensureMovFabPadding() {
 // ══════════════════════════════════════════════════════
 
 function renderMovimientos() {
+  // En móvil: si no hay filtro de fechas activo, aplicar el mes actual por defecto
+  const esMob = window.innerWidth <= 768;
+  if (esMob) {
+    const desdeEl = document.getElementById('mov-filter-desde');
+    if (desdeEl && !desdeEl.value) {
+      syncMovMesAlDesktop(fechaHoy().slice(0, 7));
+    }
+  }
   // Sync: solo aplicar tab móvil si estamos en móvil
   const esMobile = window.innerWidth <= 768;
   if (esMobile) {
@@ -7233,4 +7293,4 @@ window.addEventListener('resize', () => {
 
 })();
 window.addEventListener('resize', updateMovFABVisibility);
-window.addEventListener('load', () => { updateMovFABVisibility(); updateMovResumenMobile(); });
+window.addEventListener('load', () => { updateMovFABVisibility(); updateMovResumenMobile(); poblarMovMesMobile(); });
