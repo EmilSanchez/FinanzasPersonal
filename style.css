@@ -125,10 +125,10 @@ body {
   background: var(--bg); border: 1px solid var(--border);
   color: var(--text); font-size: 1.2rem; font-weight: 600;
   border-radius: var(--radius-sm); padding: 14px;
-  cursor: pointer; transition: all var(--transition);
+  cursor:default; transition: all var(--transition);
   user-select: none;
 }
-.pin-btn:hover { background: var(--bg2); border-color: var(--accent); transform: scale(1.04); }
+.pin-btn:hover { background: var(--bg2); border-color: var(--accent); }
 .pin-btn:active { transform: scale(.96); }
 .pin-btn.delete { font-size: .9rem; color: var(--muted); }
 .pin-btn.enter { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -170,7 +170,7 @@ body {
   padding: 10px 20px; border-radius: 0;
   background: none; border: none; border-left: 3px solid transparent;
   color: var(--sidebar-text);
-  font-size: .88rem; cursor: pointer; transition: all var(--transition);
+  font-size: .88rem; cursor:default; transition: all var(--transition);
   text-align: left; font-family: var(--font-body);
 }
 .nav-btn:hover { color: #fff; background: rgba(255,255,255,.05); }
@@ -186,7 +186,7 @@ body {
   width: 100%; display: flex; align-items: center; gap: 10px;
   padding: 9px 20px; border-radius: 0;
   background: none; border: none; color: #475569;
-  font-size: .84rem; cursor: pointer; transition: all var(--transition);
+  font-size: .84rem; cursor:default; transition: all var(--transition);
   text-align: left; font-family: var(--font-body); border-left: 3px solid transparent;
 }
 .sidebar-bottom button:hover { background: rgba(255,255,255,.05); color: #94a3b8; }
@@ -219,7 +219,7 @@ body {
 /* HAMBURGER (mobile) */
 .hamburger {
   display: none; background: none; border: none; color: var(--text);
-  font-size: 1.4rem; cursor: pointer;
+  font-size: 1.4rem; cursor:default;
 }
 .sidebar-brand-mobile { display: none; }
 @media (max-width: 768px) {
@@ -272,7 +272,7 @@ body {
   transition: transform var(--transition), box-shadow var(--transition);
   border-top: 3px solid currentColor;
 }
-.stat-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.stat-card:hover { box-shadow: var(--shadow-md); }
 .stat-card.blue { color: var(--accent); }
 .stat-card.green { color: var(--green); }
 .stat-card.red { color: var(--red); }
@@ -361,7 +361,7 @@ body {
 textarea.form-control { height: auto; padding: 10px 12px; min-height: 80px; resize: vertical; }
 .form-control:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
 .form-control::placeholder { color: var(--light); }
-select.form-control { cursor: pointer; }
+select.form-control { cursor:default; }
 .form-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
 .modal-body-wrap .form-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 @media (max-width: 768px) {
@@ -373,7 +373,7 @@ select.form-control { cursor: pointer; }
 .btn {
   padding: 8px 18px; border-radius: var(--radius-sm);
   border: none; font-size: .875rem; font-weight: 600;
-  cursor: pointer; transition: all var(--transition);
+  cursor:default; transition: all var(--transition);
   display: inline-flex; align-items: center; gap: 7px;
   white-space: nowrap; font-family: var(--font-body);
   min-height: 38px;
@@ -492,6 +492,17 @@ canvas { max-width: 100%; display: block; }
 @keyframes toastIn { from { opacity:0; transform: translateX(20px); } to { opacity:1; transform: translateX(0); } }
 @keyframes toastOut { to { opacity:0; transform: translateX(20px); } }
 
+/* Toast de "Guardando..." — no bloqueante, con spinner */
+.toast-spinner {
+  width: 14px; height: 14px; flex-shrink: 0;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin-loader .6s linear infinite;
+}
+
+/* Tabla de Inversiones — paginación */
+#inv-pag-prev:disabled, #inv-pag-next:disabled { opacity: .35; cursor: default; }
+#inv-pag-prev:not(:disabled):hover, #inv-pag-next:not(:disabled):hover { border-color: var(--accent); color: var(--accent); }
+
 /* ============================================================
    CHARTS (Canvas)
    ============================================================ */
@@ -583,7 +594,7 @@ canvas { max-width: 100%; display: block; }
   display: flex; flex-direction: column; gap: 10px;
   transition: transform var(--transition), box-shadow var(--transition);
 }
-.gf-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.gf-card:hover { box-shadow: var(--shadow); }
 .gf-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .gf-nombre { font-weight: 700; font-size: .95rem; }
 .gf-cat { font-size: .75rem; color: var(--muted); margin-top: 2px; }
@@ -592,7 +603,7 @@ canvas { max-width: 100%; display: block; }
 .gf-actions { display: flex; gap: 7px; }
 .toggle-pago {
   flex: 1; padding: 7px; border-radius: var(--radius-sm);
-  border: 1.5px solid var(--border); cursor: pointer;
+  border: 1.5px solid var(--border); cursor:default;
   font-size: .82rem; font-weight: 600; transition: all var(--transition);
   background: none; color: var(--muted);
 }
@@ -656,14 +667,14 @@ canvas { max-width: 100%; display: block; }
   transition: transform var(--transition), box-shadow var(--transition);
   min-width: 0;
 }
-.bill-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.bill-card:hover { box-shadow: var(--shadow-md); }
 .bill-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .bill-icon-wrap { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .bill-info { flex: 1; min-width: 0; }
 .bill-nombre { font-weight: 700; font-size: .9rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bill-meta  { font-size: .7rem; color: var(--muted); margin-top: 1px; }
 .bill-card-btns { display: flex; gap: 4px; flex-shrink: 0; }
-.bill-card-btn { width: 26px; height: 26px; border: 1px solid var(--border); border-radius: 6px; background: none; cursor: pointer; color: var(--muted); display: flex; align-items: center; justify-content: center; transition: color .15s; }
+.bill-card-btn { width: 26px; height: 26px; border: 1px solid var(--border); border-radius: 6px; background: none; cursor:default; color: var(--muted); display: flex; align-items: center; justify-content: center; transition: color .15s; }
 .bill-card-btn:hover { color: var(--accent); }
 .bill-card-btn.danger:hover { color: var(--red); }
 .bill-saldo { font-size: 1.5rem; font-weight: 800; margin: 6px 0 12px; line-height: 1; }
@@ -705,7 +716,7 @@ canvas { max-width: 100%; display: block; }
   font-size: .62rem;
   font-weight: 600;
   font-family: var(--font-body);
-  cursor: pointer;
+  cursor:default;
   transition: color var(--transition);
   text-transform: uppercase;
   letter-spacing: .02em;
@@ -753,7 +764,7 @@ canvas { max-width: 100%; display: block; }
   border: none; background: none;
   width: 100%; text-align: left;
   font-family: var(--font-body); font-size: .9rem;
-  color: var(--text); cursor: pointer;
+  color: var(--text); cursor:default;
   transition: background var(--transition);
 }
 .drawer-item:hover { background: var(--bg2); }
@@ -992,7 +1003,7 @@ canvas { max-width: 100%; display: block; }
   padding: 8px 16px;
   font-size: .82rem;
   font-weight: 600;
-  cursor: pointer;
+  cursor:default;
   transition: all var(--transition);
   white-space: nowrap;
   font-family: var(--font-body);
@@ -1042,7 +1053,7 @@ canvas { max-width: 100%; display: block; }
 .mov-quick-btn {
   background: none;
   border: none;
-  cursor: pointer;
+  cursor:default;
   font-size: .81rem;
   font-weight: 500;
   color: var(--text);
@@ -1059,7 +1070,7 @@ canvas { max-width: 100%; display: block; }
   font-size: .75rem;
   padding: 4px 2px;
   border-radius: 6px;
-  cursor: pointer;
+  cursor:default;
   color: var(--text);
   transition: background .12s, color .12s;
   user-select: none;
@@ -1080,7 +1091,7 @@ canvas { max-width: 100%; display: block; }
   display: flex; align-items: center; gap: 6px;
   padding: 0 14px; height: 36px;
   border: none; border-radius: 8px;
-  cursor: pointer; white-space: nowrap;
+  cursor:default; white-space: nowrap;
   font-size: .82rem; font-weight: 700; color: #fff;
   transition: background .15s;
   flex-shrink: 0;
@@ -1240,7 +1251,7 @@ canvas { max-width: 100%; display: block; }
   align-items: center;
   gap: 14px;
   padding: 14px 4px;
-  cursor: pointer;
+  cursor:default;
   border-radius: 10px;
   transition: background var(--transition);
   user-select: none;
@@ -1274,28 +1285,24 @@ canvas { max-width: 100%; display: block; }
   #modal-eliminar-mov .modal::before { display: none; }
 }
 
-/* ── Animaciones globales de botones ── */
+/* ── Botones: solo cambio de color/sombra al pasar el cursor, sin animación ── */
 button, .btn, [role="button"],
 .user-btn, .user-item, .nav-btn, .bnav-btn,
 .drawer-item, .config-item, .mov-btn-ingreso,
 .mov-btn-gasto, .pin-btn, .num, .mov-quick-btn {
-  transition: transform .12s cubic-bezier(.34,1.56,.64,1), box-shadow .12s ease, background .15s ease, color .15s ease !important;
+  transition: box-shadow .12s ease, background .15s ease, color .15s ease, filter .12s ease !important;
 }
-button:hover, .btn:hover, .user-btn:hover,
-.mov-btn-ingreso:hover, .mov-btn-gasto:hover,
-.drawer-item:hover, .config-item:hover {
-  transform: scale(1.03);
+
+/* ── Hover universal: TODO botón (o elemento clicable) se oscurece un poco
+   al pasar el cursor, aunque no tenga un hover propio ya definido. Así
+   siempre hay una señal visual, sin importar de qué color sea el botón. ── */
+button:not(:disabled):hover,
+[role="button"]:hover,
+[onclick]:hover {
+  filter: brightness(.92);
 }
-/* Nav buttons: sin escala en hover, solo color */
-.nav-btn:hover { transform: none; }
-button:active, .btn:active, [role="button"]:active,
-.user-btn:active, .user-item:active, .nav-btn:active,
-.mov-btn-ingreso:active, .mov-btn-gasto:active,
-.drawer-item:active, .config-item:active,
-.pin-btn:active, .num:active, .mov-quick-btn:active {
-  transform: scale(0.94) !important;
-  transition: transform .08s ease !important;
-}
+/* Los campos de formulario no son botones — se excluyen del oscurecido */
+input:hover, select:hover, textarea:hover, label:hover { filter: none; }
 
 /* ── Reload dots animation ── */
 .rdot {
@@ -1324,6 +1331,27 @@ button:active, .btn:active, [role="button"]:active,
   }
 }
 
+/* ── Aire a los lados: Movimientos con 6× el padding normal de página
+   (28px × 6), Detalle de Inversión con un poco más ── */
+@media (min-width: 769px) {
+  #page-movimientos { padding-left: 168px; padding-right: 168px; }
+  #page-detalle-inv { padding-left: 44px; padding-right: 44px; }
+}
+
+/* Inversiones: un poco más de aire arriba de la página */
+#page-inversiones { padding-top: 36px; }
+
+/* (la tarjeta de filtros de Movimientos usa el padding normal de ".section") */
+
+/* Inversiones: tarjeta de la tabla con altura fija más compacta (no se
+   encoge al tamaño de los resultados); si hay más filas de las que caben,
+   se desplazan dentro de la tarjeta. */
+@media (min-width: 769px) {
+  #inv-tabla-card { display: flex; flex-direction: column; height: 50vh; }
+  #inv-tabla-wrap { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
+  #inv-tabla-wrap thead th { position: sticky; top: 0; z-index: 2; }
+}
+
 
 
 /* ── Billeteras bar buttons responsive ── */
@@ -1335,7 +1363,7 @@ button:active, .btn:active, [role="button"]:active,
 }
 .bill-bar-btn-sec, .bill-bar-btn-pri {
   height: 34px; padding: 0 12px;
-  border-radius: 8px; cursor: pointer;
+  border-radius: 8px; cursor:default;
   font-size: .78rem; font-weight: 600;
   display: flex; align-items: center; gap: 5px;
   white-space: nowrap;
@@ -1393,8 +1421,8 @@ button:active, .btn:active, [role="button"]:active,
   transition: opacity .2s;
   z-index: 200 !important; /* debajo de modals (500) y topbar (50) */
 }
-#fab-ingreso:hover { transform: scale(1.12); box-shadow: 0 6px 20px rgba(5,150,105,.5) !important; }
-#fab-gasto:hover   { transform: scale(1.12); box-shadow: 0 6px 20px rgba(220,38,38,.5) !important; }
+#fab-ingreso:hover { box-shadow: 0 6px 20px rgba(5,150,105,.5) !important; }
+#fab-gasto:hover   { box-shadow: 0 6px 20px rgba(220,38,38,.5) !important; }
 #fab-ingreso:active, #fab-gasto:active { transform: scale(.92) !important; }
 
 /* Separación extra entre los FABs circulares solo en móvil */
@@ -1483,7 +1511,7 @@ button:active, .btn:active, [role="button"]:active,
   padding: 12px 0 11px;
   border: none;
   background: none;
-  cursor: pointer;
+  cursor:default;
   font-size: .9rem;
   font-weight: 700;
   color: var(--muted);
@@ -1519,7 +1547,7 @@ button:active, .btn:active, [role="button"]:active,
   height: 50px;
   border: none;
   border-radius: 14px;
-  cursor: pointer;
+  cursor:default;
   font-size: .88rem;
   font-weight: 700;
   color: #fff;
@@ -1652,7 +1680,7 @@ button:active, .btn:active, [role="button"]:active,
   font-weight: 600;
   color: var(--text);
   font-family: var(--font-body);
-  cursor: pointer;
+  cursor:default;
 }
 
 @media (max-width: 768px) {

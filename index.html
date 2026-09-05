@@ -268,19 +268,23 @@
   <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand" style="display:flex;flex-direction:column;gap:12px;padding-bottom:16px;">
-      <span id="sidebar-date" style="font-size:.72rem;"></span>
+    <div class="sidebar-brand" style="display:flex;flex-direction:column;gap:10px;padding-bottom:16px;">
       <!-- Perfil -->
       <div style="display:flex;align-items:center;gap:10px;">
         <div id="sidebar-avatar" style="width:42px;height:42px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;border:2px solid rgba(255,255,255,.15);">
           <svg id="sidebar-avatar-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.8)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           <img id="sidebar-avatar-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%;">
         </div>
-        <div style="min-width:0;">
+        <div style="min-width:0;flex:1;">
           <div id="sidebar-user-name" style="font-weight:700;font-size:.9rem;color:var(--sidebar-text, rgba(255,255,255,.95));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Mi perfil</div>
           <div id="sidebar-user-role" style="font-size:.7rem;color:rgba(255,255,255,.45);">Administrador</div>
         </div>
       </div>
+      <!-- "Salir" siempre visible -->
+      <button onclick="lockApp()" style="width:100%;height:32px;border:1px solid rgba(255,255,255,.15);border-radius:7px;background:rgba(255,255,255,.06);color:rgba(255,255,255,.85);font-size:.78rem;font-weight:600;cursor:default;display:flex;align-items:center;justify-content:center;gap:6px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Salir
+      </button>
     </div>
     <ul class="nav-list">
       <li class="nav-item">
@@ -333,38 +337,32 @@
           <span class="nav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span> Recordatorios
           <span id="rec-badge" style="display:none;margin-left:auto;background:var(--red);color:#fff;font-size:.6rem;font-weight:700;border-radius:10px;padding:1px 6px;min-width:18px;text-align:center;"></span>
         </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-btn" onclick="navigate('pendientes')" data-page="pendientes">
+          <span class="nav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="8 12 11 15 16 9"/></svg></span> Pendientes
+          <span id="pend-badge" style="display:none;margin-left:auto;background:#64748b;color:#fff;font-size:.6rem;font-weight:700;border-radius:10px;padding:1px 6px;min-width:18px;text-align:center;"></span>
+        </button>
         <button class="nav-btn" onclick="navigate('config')" data-page="config">
           <span class="nav-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> Configuración
         </button>
       </li>
     </ul>
 
+    <!-- Fecha + recargar, hasta abajo del todo del navegador de módulos -->
+    <div class="sidebar-bottom" style="flex-direction:row;align-items:center;justify-content:space-between;padding:12px 20px 20px;">
+      <span id="sidebar-date" style="font-size:.7rem;color:#64748b;"></span>
+      <button id="fab-recargar" title="Actualizar datos" onclick="recargarApp()"
+        style="width:32px;height:32px;padding:0;flex-shrink:0;border-radius:50%;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;color:#fff;cursor:default;"
+        onmouseover="this.style.background='rgba(255,255,255,.18)'" onmouseout="this.style.background='rgba(255,255,255,.1)'">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      </button>
+    </div>
+
   </aside>
 
   <!-- MAIN -->
   <main class="main">
-    <div class="topbar">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <div class="sidebar-brand-mobile">
-          <span style="font-size:1rem;font-weight:700;color:var(--accent)"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M9 9h6a1 1 0 0 1 0 3H9a1 1 0 0 0 0 3h6"/></svg></span>
-        </div>
-        <h3 id="topbar-title">Dashboard</h3>
-      </div>
-      <div class="topbar-right">
-        <span class="topbar-date" id="topbar-date"></span>
-        <div id="fb-badge-topbar" title="Estado Firebase"
-          style="display:none;align-items:center;gap:5px;font-size:.72rem;color:var(--muted);font-weight:600;">
-          <span id="fb-badge-dot" style="width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;"></span>
-          <span id="fb-badge-txt">Firebase</span>
-        </div>
-        <button title="Actualizar datos" onclick="recargarApp()" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:4px 6px;border-radius:6px;transition:color .15s;display:flex;align-items:center;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
-          <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-        </button>
-        <button title="Bloquear" onclick="lockApp()" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:4px 6px;border-radius:6px;transition:color .15s;display:flex;align-items:center;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
-          <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        </button>
-      </div>
-    </div>
 
     <!-- ====== DASHBOARD ====== -->
     <div class="page active" id="page-dashboard">
@@ -534,7 +532,7 @@
 
       <!-- Análisis por categoría (ocultable) -->
       <div class="section" id="gas-analysis-wrapper" style="margin-bottom:20px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:4px 0;" onclick="toggleAnalisisCat()">
+        <div style="display:flex;align-items:center;justify-content:space-between;cursor:default;padding:4px 0;" onclick="toggleAnalisisCat()">
           <span class="section-title">Análisis por categoría</span>
           <button class="btn btn-ghost btn-sm" id="btn-toggle-cat">▼ Ver análisis</button>
         </div>
@@ -629,7 +627,7 @@
       <div class="mov-search-mobile-wrap">
         <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input type="text" id="mov-search-mobile" class="mov-search-mobile-input" placeholder="Buscar movimiento..." oninput="onMovSearchMobile(this.value)">
-        <button id="mov-search-clear-btn" onclick="clearMovSearchMobile()" style="display:none;background:none;border:none;cursor:pointer;color:var(--muted);padding:2px 4px;font-size:1rem;line-height:1;">&#x2715;</button>
+        <button id="mov-search-clear-btn" onclick="clearMovSearchMobile()" style="display:none;background:none;border:none;cursor:default;color:var(--muted);padding:2px 4px;font-size:1rem;line-height:1;">&#x2715;</button>
       </div>
       <!-- MÓVIL: Resumen de búsqueda -->
       <div id="mov-resumen-mobile-search" style="display:none;padding:8px 20px 2px;"></div>
@@ -663,7 +661,7 @@
           </select>
           <!-- Selector de período tipo pill -->
           <div style="position:relative;">
-            <button id="mov-periodo-btn" onclick="toggleMovPeriodoPicker()" style="display:flex;align-items:center;gap:6px;padding:0 14px;height:36px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer;font-size:.82rem;font-weight:600;color:var(--text);white-space:nowrap;box-shadow:var(--shadow);">
+            <button id="mov-periodo-btn" onclick="toggleMovPeriodoPicker()" style="display:flex;align-items:center;gap:6px;padding:0 14px;height:36px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:default;font-size:.82rem;font-weight:600;color:var(--text);white-space:nowrap;box-shadow:var(--shadow);">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
               <span id="mov-periodo-label">Este mes</span>
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
@@ -689,7 +687,7 @@
                     <!-- Mes izquierdo -->
                     <div style="flex:1;">
                       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-                        <button onclick="movCalNav(-1)" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:2px 6px;border-radius:4px;font-size:1rem;line-height:1;">‹</button>
+                        <button onclick="movCalNav(-1)" style="background:none;border:none;cursor:default;color:var(--muted);padding:2px 6px;border-radius:4px;font-size:1rem;line-height:1;">‹</button>
                         <span id="mov-cal-title-l" style="font-size:.82rem;font-weight:700;color:var(--text);"></span>
                         <div style="width:24px;"></div>
                       </div>
@@ -700,7 +698,7 @@
                       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
                         <div style="width:24px;"></div>
                         <span id="mov-cal-title-r" style="font-size:.82rem;font-weight:700;color:var(--text);"></span>
-                        <button onclick="movCalNav(1)" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:2px 6px;border-radius:4px;font-size:1rem;line-height:1;">›</button>
+                        <button onclick="movCalNav(1)" style="background:none;border:none;cursor:default;color:var(--muted);padding:2px 6px;border-radius:4px;font-size:1rem;line-height:1;">›</button>
                       </div>
                       <div id="mov-cal-right" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;"></div>
                     </div>
@@ -709,8 +707,8 @@
                   <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">
                     <span id="mov-cal-range-label" style="font-size:.78rem;color:var(--accent);font-weight:600;"></span>
                     <div style="display:flex;gap:6px;">
-                      <button onclick="cancelMovPicker()" style="padding:5px 14px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;font-size:.78rem;color:var(--muted);font-weight:600;">Cancelar</button>
-                      <button onclick="applyMovPicker()" style="padding:5px 14px;border:none;border-radius:7px;background:var(--teal);color:#fff;cursor:pointer;font-size:.78rem;font-weight:700;">Aplicar</button>
+                      <button onclick="cancelMovPicker()" style="padding:5px 14px;border:1px solid var(--border);border-radius:7px;background:none;cursor:default;font-size:.78rem;color:var(--muted);font-weight:600;">Cancelar</button>
+                      <button onclick="applyMovPicker()" style="padding:5px 14px;border:none;border-radius:7px;background:var(--teal);color:#fff;cursor:default;font-size:.78rem;font-weight:700;">Aplicar</button>
                     </div>
                   </div>
                 </div>
@@ -741,7 +739,7 @@
             <div style="font-size:1rem;font-weight:700;color:var(--text)">Registrar ingreso</div>
             <div style="font-size:.75rem;color:var(--muted);font-weight:400">El dinero entrará a la billetera seleccionada</div>
           </div>
-          <button onclick="closeModal('modal-nuevo-ingreso')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;line-height:1;">✕</button>
+          <button onclick="closeModal('modal-nuevo-ingreso')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:default;line-height:1;">✕</button>
         </div>
         <div class="modal-body-wrap" style="padding:0;">
           <!-- Monto grande sin fondo de color -->
@@ -798,7 +796,7 @@
         </div>
         <div class="modal-actions" style="padding:16px 24px;gap:10px;">
           <button class="btn btn-ghost" onclick="closeModal('modal-nuevo-ingreso')" style="flex:1;">Cancelar</button>
-          <button onclick="saveIngresoModal()" id="mi-btn-guardar" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <button onclick="saveIngresoModal()" id="mi-btn-guardar" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:default;display:flex;align-items:center;justify-content:center;gap:8px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
             Registrar ingreso
           </button>
@@ -817,7 +815,7 @@
             <div style="font-size:1rem;font-weight:700;color:var(--text)">Registrar gasto</div>
             <div style="font-size:.75rem;color:var(--muted);font-weight:400">El dinero saldrá de la billetera seleccionada</div>
           </div>
-          <button onclick="closeModal('modal-nuevo-gasto')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;line-height:1;">✕</button>
+          <button onclick="closeModal('modal-nuevo-gasto')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:default;line-height:1;">✕</button>
         </div>
         <div class="modal-body-wrap" style="padding:0;">
           <!-- Monto grande sin fondo de color -->
@@ -879,7 +877,7 @@
         </div>
         <div class="modal-actions" style="padding:16px 24px;gap:10px;">
           <button class="btn btn-ghost" onclick="closeModal('modal-nuevo-gasto')" style="flex:1;">Cancelar</button>
-          <button onclick="saveGastoModal()" id="mg-btn-guardar" style="flex:2;background:#7f0000;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <button onclick="saveGastoModal()" id="mg-btn-guardar" style="flex:2;background:#7f0000;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:default;display:flex;align-items:center;justify-content:center;gap:8px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
             Registrar gasto
           </button>
@@ -898,7 +896,7 @@
             <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px;">Deuda total pendiente</div>
             <div style="display:flex;align-items:center;gap:10px;">
               <div id="deudas-total-valor" style="font-weight:800;font-size:1.4rem;color:var(--text);transition:filter .15s;">$0</div>
-              <button id="deudas-eye-btn" onclick="toggleDeudaTotalVisible()" title="Mostrar / ocultar valor" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:4px;display:flex;align-items:center;flex-shrink:0;">
+              <button id="deudas-eye-btn" onclick="toggleDeudaTotalVisible()" title="Mostrar / ocultar valor" style="background:none;border:none;cursor:default;color:var(--muted);padding:4px;display:flex;align-items:center;flex-shrink:0;">
                 <svg id="deudas-eye-icon" xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
             </div>
@@ -937,7 +935,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Nuevo préstamo
           </button>
-          <button onclick="togglePrestStats()" id="prest-stats-toggle" style="height:38px;padding:0 12px;background:none;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:.78rem;color:var(--muted);white-space:nowrap;">
+          <button onclick="togglePrestStats()" id="prest-stats-toggle" style="height:38px;padding:0 12px;background:none;border:1px solid var(--border);border-radius:8px;cursor:default;font-size:.78rem;color:var(--muted);white-space:nowrap;">
             Ver resumen
           </button>
         </div>
@@ -976,11 +974,11 @@
       <!-- Tabs sticky -->
       <div id="gf-tabs-bar" style="position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--border);display:flex;gap:0;padding:4px 20px 0;">
         <button id="gf-tab-activos" onclick="setGFTab('activos')"
-          style="padding:14px 24px 13px;border:none;background:none;cursor:pointer;font-size:.88rem;font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-1px;letter-spacing:.01em;transition:color .15s,border-color .15s;">
+          style="padding:14px 24px 13px;border:none;background:none;cursor:default;font-size:.88rem;font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-1px;letter-spacing:.01em;transition:color .15s,border-color .15s;">
           Activos
         </button>
         <button id="gf-tab-completados" onclick="setGFTab('completados')"
-          style="padding:14px 24px 13px;border:none;background:none;cursor:pointer;font-size:.88rem;font-weight:700;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;letter-spacing:.01em;transition:color .15s,border-color .15s;">
+          style="padding:14px 24px 13px;border:none;background:none;cursor:default;font-size:.88rem;font-weight:700;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;letter-spacing:.01em;transition:color .15s,border-color .15s;">
           Completados
         </button>
       </div>
@@ -1022,15 +1020,15 @@
           <div class="stat-body"><div class="stat-label">Total recuperado</div><div class="stat-value" id="inv-valor">$0</div></div>
         </div>
         <div class="stat-card teal">
-          <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+          <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg></div>
           <div class="stat-body"><div class="stat-label">Ganancia acumulada</div><div class="stat-value" id="inv-ganancia">$0</div><div class="stat-sub" id="inv-ganancia-pct"></div></div>
         </div>
         <div class="stat-card purple">
-          <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
+          <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
           <div class="stat-body"><div class="stat-label">Productos activos</div><div class="stat-value" id="inv-activas">0</div><div class="stat-sub" id="inv-cerradas-sub"></div></div>
         </div>
         <div class="stat-card orange">
-          <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
+          <div class="stat-icon-box"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></div>
           <div class="stat-body"><div class="stat-label">Stock disponible</div><div class="stat-value" id="inv-stock-total">0</div><div class="stat-sub">unidades</div></div>
         </div>
         <div class="stat-card blue">
@@ -1042,34 +1040,76 @@
       <!-- Buscador + acciones -->
       <div class="section" style="overflow:visible;padding:14px 18px;">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <input type="text" class="form-control" style="flex:1;min-width:140px;height:38px;" placeholder="Buscar producto o SKU..." id="inv-search" oninput="renderInversiones()">
-          <select class="form-control" style="height:38px;width:auto;" id="inv-filter-estado" onchange="renderInversiones()">
+          <input type="text" class="form-control" style="flex:1;min-width:140px;height:38px;" placeholder="Buscar producto o SKU..." id="inv-search" oninput="invFiltroCambio()">
+          <select class="form-control" style="height:38px;width:auto;" id="inv-filter-estado" onchange="invFiltroCambio()">
             <option value="">Todos los estados</option>
             <option value="activa">Activas</option>
             <option value="cerrada">Cerradas</option>
             <option value="pausada">Pausadas</option>
           </select>
-          <select class="form-control" style="height:38px;width:auto;" id="inv-filter-tipo" onchange="renderInversiones()">
+          <select class="form-control" style="height:38px;width:auto;" id="inv-filter-tipo" onchange="invFiltroCambio()">
             <option value="">Todos los tipos</option>
           </select>
-          <button onclick="openModalNuevaInversion()" style="height:38px;padding:0 16px;border:none;border-radius:8px;background:#0f2d6b;color:#fff;font-size:.82rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;flex-shrink:0;">
+          <button onclick="openModalNuevaInversion()" style="height:38px;padding:0 16px;border:none;border-radius:8px;background:#0f2d6b;color:#fff;font-size:.82rem;font-weight:700;cursor:default;display:flex;align-items:center;gap:6px;flex-shrink:0;">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Nueva inversión
           </button>
         </div>
+        <div id="inv-agotadas-banner" style="display:none;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;padding:8px 12px;background:var(--bg);border:1px dashed var(--border);border-radius:8px;font-size:.78rem;"></div>
       </div>
 
-      <!-- Lista de inversiones (cards) -->
-      <div id="inv-lista-cards"></div>
+      <!-- Lista de inversiones (tabla) -->
+      <div class="section" id="inv-tabla-card" style="padding:0;overflow:hidden;">
+        <div id="inv-tabla-wrap" class="table-wrap">
+          <table class="data-table" id="inv-tabla">
+            <thead>
+              <tr>
+                <th style="width:32px;"><input type="checkbox" id="inv-check-all" onchange="toggleTodasInvSeleccion(this)" style="width:15px;height:15px;cursor:default;"></th>
+                <th>Producto</th>
+                <th>SKU</th>
+                <th>Estado</th>
+                <th>Inversión</th>
+                <th>Recuperado</th>
+                <th>Ganancia</th>
+                <th>Stock</th>
+                <th>Vendidas</th>
+                <th>Tipo</th>
+                <th style="text-align:right;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="inv-tbody"></tbody>
+          </table>
+        </div>
+
+        <!-- Barra de acciones en lote (aparece solo si hay filas seleccionadas) -->
+        <div id="inv-bulk-bar" style="display:none;align-items:center;gap:10px;padding:10px 18px;border-top:1px solid var(--border);background:var(--bg2);">
+          <span id="inv-bulk-count" style="font-size:.8rem;color:var(--muted);"></span>
+          <button onclick="eliminarInversionesSeleccionadas()" class="btn btn-danger btn-sm" style="margin-left:auto;">Eliminar seleccionadas</button>
+        </div>
+
+        <!-- Paginación -->
+        <div id="inv-pag-bar" style="display:none;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 18px;border-top:1px solid var(--border);">
+          <span id="inv-pag-info" style="font-size:.78rem;color:var(--muted);"></span>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <button id="inv-pag-prev" onclick="cambiarPaginaInv(-1)" style="width:28px;height:28px;border:1px solid var(--border);background:none;border-radius:6px;cursor:default;color:var(--muted);">&lsaquo;</button>
+            <div id="inv-pag-numeros" style="display:flex;gap:4px;"></div>
+            <button id="inv-pag-next" onclick="cambiarPaginaInv(1)" style="width:28px;height:28px;border:1px solid var(--border);background:none;border-radius:6px;cursor:default;color:var(--muted);">&rsaquo;</button>
+          </div>
+          <select class="form-control" id="inv-pag-size" onchange="cambiarTamPaginaInv(this.value)" style="height:32px;width:auto;font-size:.78rem;">
+            <option value="6">Mostrar 6 por página</option>
+            <option value="10" selected>Mostrar 10 por página</option>
+            <option value="20">Mostrar 20 por página</option>
+            <option value="50">Mostrar 50 por página</option>
+          </select>
+        </div>
+      </div>
+
       <div id="inversiones-empty" class="empty-state" style="display:none;">
         <div style="font-size:2rem;margin-bottom:12px;color:var(--border);">
           <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
         </div>
         <p>Sin inversiones registradas aún.</p>
       </div>
-
-      <!-- Tabla oculta para compatibilidad -->
-      <table id="inv-tabla" style="display:none;"><tbody id="inv-tbody"></tbody></table>
     </div>
 
     <!-- ====== REPORTES ====== -->
@@ -1221,7 +1261,7 @@
             <option value="vencido">Vencidos</option>
             <option value="completado">Completados</option>
           </select>
-          <button onclick="openModalRecordatorio()" style="height:38px;padding:0 16px;border:none;border-radius:8px;background:#0f2d6b;color:#fff;font-size:.82rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;flex-shrink:0;">
+          <button onclick="openModalRecordatorio()" style="height:38px;padding:0 16px;border:none;border-radius:8px;background:#0f2d6b;color:#fff;font-size:.82rem;font-weight:700;cursor:default;display:flex;align-items:center;gap:6px;flex-shrink:0;">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Nuevo recordatorio
           </button>
@@ -1232,6 +1272,51 @@
       <div id="rec-empty" class="empty-state" style="display:none;">
         <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--border)" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         <p>Sin recordatorios. Crea uno para empezar.</p>
+      </div>
+    </div>
+
+    <!-- ====== PENDIENTES ====== -->
+    <div class="page" id="page-pendientes">
+
+      <!-- Alta rápida: escribe y Enter, listo -->
+      <div class="section" style="padding:16px 18px;margin-bottom:16px;overflow:visible;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <input type="text" class="form-control" id="pend-input" placeholder="Escribe un pendiente y presiona Enter..."
+            onkeydown="if(event.key==='Enter'){agregarPendiente();}" style="flex:1;min-width:180px;height:42px;font-size:.92rem;">
+          <select class="form-control" id="pend-prioridad" title="Prioridad" style="height:42px;width:auto;">
+            <option value="alta">🔴 Alta</option>
+            <option value="media" selected>🟡 Media</option>
+            <option value="baja">🔵 Baja</option>
+          </select>
+          <input type="date" class="form-control" id="pend-fecha" title="Fecha límite (opcional)" style="height:42px;width:auto;">
+          <button onclick="agregarPendiente()" style="height:42px;padding:0 18px;border:none;border-radius:8px;background:#0f2d6b;color:#fff;font-size:.85rem;font-weight:700;cursor:default;display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Agregar
+          </button>
+        </div>
+      </div>
+
+      <!-- Tabs Pendientes / Realizados -->
+      <div id="pend-tabs-bar" style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--border);">
+        <button id="pend-tab-btn-activos" onclick="setPendTab('activos')"
+          style="padding:8px 20px;font-size:.88rem;font-weight:600;border:none;background:none;cursor:default;border-bottom:3px solid var(--accent);margin-bottom:-2px;color:var(--accent);transition:all .2s">
+          Pendientes
+        </button>
+        <button id="pend-tab-btn-hechos" onclick="setPendTab('hechos')"
+          style="padding:8px 20px;font-size:.88rem;font-weight:600;border:none;background:none;cursor:default;border-bottom:3px solid transparent;margin-bottom:-2px;color:var(--muted);transition:all .2s">
+          Realizados
+        </button>
+      </div>
+
+      <!-- Búsqueda -->
+      <div class="section" style="padding:10px 18px;margin-bottom:16px;">
+        <input type="text" class="form-control" id="pend-search" placeholder="Buscar en pendientes..." oninput="renderPendientes()" style="height:38px;">
+      </div>
+
+      <div id="pend-lista"></div>
+      <div id="pend-empty" class="empty-state" style="display:none;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--border)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="8 12 11 15 16 9"/></svg>
+        <p>No tienes pendientes. ¡Vas al día!</p>
       </div>
     </div>
 
@@ -1251,7 +1336,7 @@
                 <svg id="config-avatar-icon" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 <img id="config-avatar-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%;">
               </div>
-              <button onclick="document.getElementById('config-foto-input').click()" style="position:absolute;bottom:-2px;right:-2px;width:26px;height:26px;border-radius:50%;background:var(--accent);border:2px solid var(--card);display:flex;align-items:center;justify-content:center;cursor:pointer;">
+              <button onclick="document.getElementById('config-foto-input').click()" style="position:absolute;bottom:-2px;right:-2px;width:26px;height:26px;border-radius:50%;background:var(--accent);border:2px solid var(--card);display:flex;align-items:center;justify-content:center;cursor:default;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
               </button>
               <input type="file" id="config-foto-input" accept="image/*" style="display:none;" onchange="subirFotoPerfil(this)">
@@ -1396,6 +1481,9 @@
   <button class="drawer-item" data-page="recordatorios" onclick="mobileNav('recordatorios');closeDrawer()">
     <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span> Recordatorios
   </button>
+  <button class="drawer-item" data-page="pendientes" onclick="mobileNav('pendientes');closeDrawer()">
+    <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="8 12 11 15 16 9"/></svg></span> Pendientes
+  </button>
   <button class="drawer-item" data-page="config" onclick="mobileNav('config');closeDrawer()">
     <span class="di-icon svg-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> Configuración
   </button>
@@ -1446,7 +1534,7 @@
         <div style="font-size:1rem;font-weight:700;color:var(--text);">Transferir dinero</div>
         <div style="font-size:.75rem;color:var(--muted);">Mueve saldo entre tus billeteras</div>
       </div>
-      <button onclick="closeModal('modal-transferencia')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+      <button onclick="closeModal('modal-transferencia')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:default;">✕</button>
     </div>
     <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:12px;">
       <div class="form-group">
@@ -1485,7 +1573,7 @@
     </div>
     <div class="modal-actions" style="padding:16px 24px;gap:10px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-transferencia')" style="flex:1;">Cancelar</button>
-      <button onclick="ejecutarTransferencia()" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;">Transferir</button>
+      <button onclick="ejecutarTransferencia()" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:default;">Transferir</button>
     </div>
   </div>
 </div>
@@ -1776,7 +1864,7 @@
         <div style="font-size:1rem;font-weight:700;color:var(--text)">Eliminar movimiento</div>
         <div style="font-size:.75rem;color:var(--muted)">Ingresa el código de seguridad para confirmar</div>
       </div>
-      <button onclick="cancelarEliminarMov()" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+      <button onclick="cancelarEliminarMov()" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:default;">✕</button>
     </div>
     <div class="modal-body-wrap" style="padding:20px 24px;">
       <div class="form-group">
@@ -1806,7 +1894,7 @@
         <div style="font-size:1rem;font-weight:700;color:var(--text);" id="em-titulo">Editar movimiento</div>
         <div style="font-size:.75rem;color:var(--muted);font-weight:400;" id="em-subtitulo">Los cambios afectan el saldo de la billetera</div>
       </div>
-      <button onclick="closeModal('modal-editar-mov')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;line-height:1;">✕</button>
+      <button onclick="closeModal('modal-editar-mov')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:default;line-height:1;">✕</button>
     </div>
     <div class="modal-body-wrap" style="padding:0;">
       <input type="hidden" id="em-id">
@@ -1855,7 +1943,7 @@
     </div>
     <div class="modal-actions" style="padding:16px 24px;gap:10px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-editar-mov')" style="flex:1;">Cancelar</button>
-      <button onclick="guardarEdicionMov()" id="em-btn-guardar" style="flex:2;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
+      <button onclick="guardarEdicionMov()" id="em-btn-guardar" style="flex:2;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:default;display:flex;align-items:center;justify-content:center;gap:8px;">
         <svg id="em-btn-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></svg>
         Guardar cambios
       </button>
@@ -1871,7 +1959,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
       </div>
       <div style="font-size:1rem;font-weight:700;color:var(--text);">Editar usuario</div>
-      <button onclick="closeModal('modal-editar-usuario')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+      <button onclick="closeModal('modal-editar-usuario')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:default;">✕</button>
     </div>
     <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:16px;">
       <div class="form-group">
@@ -1898,7 +1986,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
       </div>
       <div style="font-size:.95rem;font-weight:700;color:var(--text);" id="du-titulo">Desactivar usuario</div>
-      <button onclick="closeModal('modal-desactivar-usuario')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+      <button onclick="closeModal('modal-desactivar-usuario')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:default;">✕</button>
     </div>
     <div class="modal-body-wrap" style="padding:20px 24px;">
       <div class="form-group">
@@ -1927,7 +2015,7 @@
         <div style="font-size:1rem;font-weight:700;color:var(--text);">Nuevo usuario</div>
         <div style="font-size:.75rem;color:var(--muted);">Tendrá sus propios datos en la misma BD</div>
       </div>
-      <button onclick="closeModal('modal-nuevo-usuario')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+      <button onclick="closeModal('modal-nuevo-usuario')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:default;">✕</button>
     </div>
     <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:14px;">
       <div class="form-group">
@@ -1958,7 +2046,7 @@
         <div style="font-size:1rem;font-weight:700;color:var(--text);">Nuevo gasto fijo</div>
         <div style="font-size:.75rem;color:var(--muted);">Compromiso mensual recurrente</div>
       </div>
-      <button onclick="closeModal('modal-nuevo-gasto-fijo')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+      <button onclick="closeModal('modal-nuevo-gasto-fijo')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:default;">✕</button>
     </div>
     <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:14px;">
       <div class="form-group">
@@ -2011,7 +2099,7 @@
     </div>
     <div class="modal-actions" style="padding:16px 24px;gap:10px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-nuevo-gasto-fijo')" style="flex:1;">Cancelar</button>
-      <button onclick="saveGastoFijo()" style="flex:2;background:#7f0000;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;">Agregar gasto fijo</button>
+      <button onclick="saveGastoFijo()" style="flex:2;background:#7f0000;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:default;">Agregar gasto fijo</button>
     </div>
   </div>
 </div>
@@ -2027,7 +2115,7 @@
         <div style="font-size:1rem;font-weight:700;color:var(--text);">Nuevo préstamo</div>
         <div style="font-size:.75rem;color:var(--muted);">Registra dinero que prestaste a alguien</div>
       </div>
-      <button onclick="closeModal('modal-nuevo-prestamo')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+      <button onclick="closeModal('modal-nuevo-prestamo')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:default;">✕</button>
     </div>
     <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:14px;">
       <div class="form-group">
@@ -2073,7 +2161,7 @@
     </div>
     <div class="modal-actions" style="padding:16px 24px;gap:10px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-nuevo-prestamo')" style="flex:1;">Cancelar</button>
-      <button onclick="savePrestamo()" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;">Registrar préstamo</button>
+      <button onclick="savePrestamo()" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:default;">Registrar préstamo</button>
     </div>
   </div>
 </div>
@@ -2089,7 +2177,7 @@
         <div style="font-size:1rem;font-weight:700;color:var(--text);">Nueva deuda</div>
         <div style="font-size:.75rem;color:var(--muted);">Registra una deuda o préstamo recibido</div>
       </div>
-      <button onclick="closeModal('modal-nueva-deuda')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+      <button onclick="closeModal('modal-nueva-deuda')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:default;">✕</button>
     </div>
     <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:14px;">
       <div class="form-group">
@@ -2137,7 +2225,7 @@
     </div>
     <div class="modal-actions" style="padding:16px 24px;gap:10px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-nueva-deuda')" style="flex:1;">Cancelar</button>
-      <button onclick="saveDeuda()" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;">Crear deuda</button>
+      <button onclick="saveDeuda()" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:default;">Crear deuda</button>
     </div>
   </div>
 </div>
@@ -2153,7 +2241,7 @@
         <div style="font-size:.95rem;font-weight:700;color:var(--text);" id="confirm-pin-titulo">Eliminar</div>
         <div style="font-size:.72rem;color:var(--muted);">Ingresa tu PIN de acceso para confirmar</div>
       </div>
-      <button onclick="closeModal('modal-confirm-pin')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+      <button onclick="closeModal('modal-confirm-pin')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:default;">✕</button>
     </div>
     <div class="modal-body-wrap" style="padding:20px 24px;">
       <div class="form-group">
@@ -2184,7 +2272,7 @@
         <div style="font-size:1rem;font-weight:700;color:var(--text);" id="rec-modal-titulo">Nuevo recordatorio</div>
         <div style="font-size:.75rem;color:var(--muted);">Programa una alerta para no olvidar nada</div>
       </div>
-      <button onclick="closeModal('modal-recordatorio')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">&#x2715;</button>
+      <button onclick="closeModal('modal-recordatorio')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:default;">&#x2715;</button>
     </div>
     <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:12px;">
       <div class="form-group">
@@ -2218,7 +2306,7 @@
     </div>
     <div class="modal-actions" style="padding:16px 24px;gap:10px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-recordatorio')" style="flex:1;">Cancelar</button>
-      <button onclick="guardarRecordatorio()" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;">Guardar</button>
+      <button onclick="guardarRecordatorio()" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:default;">Guardar</button>
     </div>
   </div>
 </div>
@@ -2228,15 +2316,15 @@
 
 <script src="script.js"></script>
 <!-- Botones flotantes de acceso rápido -->
-<div id="fab-container" style="position:fixed;bottom:90px;right:20px;display:flex;flex-direction:column;gap:10px;z-index:200;">
+<div id="fab-container" style="position:fixed;bottom:90px;right:20px;display:flex;flex-direction:column;gap:18px;z-index:200;">
   <!-- Ingreso (verde, flecha abajo) -->
   <button id="fab-ingreso" onclick="openModalIngresoRapido()" title="Registrar ingreso"
-    style="width:50px;height:50px;border-radius:50%;border:none;background:#059669;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(5,150,105,.4);transition:transform .15s cubic-bezier(.34,1.56,.64,1),box-shadow .15s;">
+    style="width:50px;height:50px;border-radius:14px;border:none;background:#059669;color:#fff;cursor:default;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(5,150,105,.4);transition:box-shadow .15s;">
     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
   </button>
   <!-- Gasto (rojo, flecha arriba) -->
   <button id="fab-gasto" onclick="openModalGastoRapido()" title="Registrar gasto"
-    style="width:50px;height:50px;border-radius:50%;border:none;background:#dc2626;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(220,38,38,.4);transition:transform .15s cubic-bezier(.34,1.56,.64,1),box-shadow .15s;">
+    style="width:50px;height:50px;border-radius:14px;border:none;background:#dc2626;color:#fff;cursor:default;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(220,38,38,.4);transition:box-shadow .15s;">
     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
   </button>
 </div>

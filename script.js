@@ -55,7 +55,8 @@ function loadDbLocal() {
   const raw = localStorage.getItem(dbKey());
   STATE.db = raw ? JSON.parse(raw) : {
     ingresos: [], gastos: [], deudas: [], pass: [],
-    prestamos: [], gastosFijos: [], inversiones: [], ventasInv: [], billeteras: [], transferencias: []
+    prestamos: [], gastosFijos: [], inversiones: [], ventasInv: [], billeteras: [], transferencias: [],
+    recordatorios: [], pendientes: []
   };
   if (!STATE.db.prestamos)      STATE.db.prestamos      = [];
   if (!STATE.db.gastosFijos)    STATE.db.gastosFijos    = [];
@@ -64,6 +65,7 @@ function loadDbLocal() {
   if (!STATE.db.billeteras)     STATE.db.billeteras     = [];
   if (!STATE.db.transferencias) STATE.db.transferencias = [];
   if (!STATE.db.recordatorios)  STATE.db.recordatorios  = [];
+  if (!STATE.db.pendientes)     STATE.db.pendientes     = [];
 }
 
 // ── Cargar datos: espera sincronización real antes de pintar (evita ver datos de otro usuario) ──
@@ -121,6 +123,7 @@ async function _sincronizarFirebase(silent = false) {
       billeteras:     data.billeteras     || [],
       transferencias: data.transferencias || [],
       recordatorios:  data.recordatorios  || [],
+      pendientes:     data.pendientes     || [],
     };
     // Solo re-renderizar si hay diferencias
     if (JSON.stringify(STATE.db) !== JSON.stringify(dbRemote)) {
@@ -177,6 +180,11 @@ function hideLoading() {
 }
 
 async function saveDb(coleccionesEspecificas = null) {
+  // ── Aviso inmediato y NO bloqueante: "Guardando..." ──
+  // Esto se muestra ANTES de tocar la red, así el usuario ve feedback al instante
+  // y puede seguir usando la app mientras se guarda en segundo plano.
+  showSavingToast();
+
   // Siempre guardar en localStorage primero (respaldo inmediato)
   localStorage.setItem(dbKey(), JSON.stringify(STATE.db));
 
@@ -189,7 +197,7 @@ async function saveDb(coleccionesEspecificas = null) {
       // Guardar en cola pendiente para sincronizar cuando vuelva la conexión
       _pendingSync = true;
       showSaveError({ message: 'Sin conexión — datos guardados localmente' });
-      toast('⚠️ Guardado localmente. Se sincronizará al conectarse.', 'info');
+      resolveSavingToast(true, '⚠️ Guardado localmente (sin conexión)');
       return false;
     }
   }
@@ -197,19 +205,56 @@ async function saveDb(coleccionesEspecificas = null) {
   showSavingDot();
   try {
     const toSave = coleccionesEspecificas ||
-      ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras','transferencias'];
+      ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras','transferencias','recordatorios','pendientes'];
     await Promise.all(
       toSave.map(col => window.__FB.saveCollection(col, STATE.db[col] || []))
     );
     _pendingSync = false;
     showSaveSuccess();
+    resolveSavingToast(true);
     return true;
   } catch (err) {
     console.error('Error guardando en Firebase:', err);
     _pendingSync = true;
     showSaveError(err);
+    resolveSavingToast(false);
     return false;
   }
+}
+
+/* ============================================================
+   TOAST DE GUARDADO — no bloqueante
+   Se muestra al instante ("Guardando...") y se transforma en
+   "Guardado" (o "Error al guardar") cuando la operación termina.
+   Mientras tanto la app sigue 100% usable — esto es solo un aviso,
+   no una capa que bloquee la pantalla.
+   ============================================================ */
+let _savingToastEl = null;
+let _savingToastCount = 0; // soporta varios guardados encimados sin duplicar el toast
+function showSavingToast() {
+  _savingToastCount++;
+  if (_savingToastEl) return; // ya hay uno visible, no duplicar
+  const c = document.getElementById('toast-container');
+  if (!c) return;
+  const el = document.createElement('div');
+  el.className = 'toast info toast-saving';
+  el.innerHTML = `<span class="toast-spinner"></span><span>Guardando...</span>`;
+  c.appendChild(el);
+  _savingToastEl = el;
+}
+function resolveSavingToast(ok = true, customMsg = null) {
+  _savingToastCount = Math.max(0, _savingToastCount - 1);
+  if (_savingToastCount > 0) return; // todavía hay otro guardado en curso, esperar a que termine
+  const el = _savingToastEl;
+  _savingToastEl = null;
+  if (!el) return;
+  el.className = `toast ${ok ? 'success' : 'error'}`;
+  const ico = ok ? '&#10003;' : '&#10007;';
+  el.innerHTML = `<span>${ico}</span><span>${customMsg || (ok ? 'Guardado' : 'Error al guardar')}</span>`;
+  setTimeout(() => {
+    el.style.animation = 'toastOut .3s ease forwards';
+    setTimeout(() => el.remove(), 300);
+  }, ok ? 1300 : 3000);
 }
 
 // Espera a que Firebase esté listo, con timeout en ms
@@ -231,7 +276,7 @@ window.addEventListener('firebase-auth-ready', async () => {
     console.log('Firebase conectado — sincronizando datos pendientes...');
     toast('☁️ Sincronizando datos con la nube...', 'info');
     try {
-      const cols = ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras','transferencias'];
+      const cols = ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras','transferencias','recordatorios','pendientes'];
       await Promise.all(cols.map(col => window.__FB.saveCollection(col, STATE.db[col] || [])));
       _pendingSync = false;
       toast(' Datos sincronizados correctamente', 'success');
@@ -335,12 +380,12 @@ function mostrarAvisoSinConexion() {
         <button onclick="intentarReconectar()" style="
           background:#3b82f6;color:white;border:none;
           padding:10px 20px;border-radius:8px;
-          font-size:.9rem;font-weight:600;cursor:pointer;
+          font-size:.9rem;font-weight:600;cursor:default;
         ">🔄 Reintentar</button>
         <button onclick="document.getElementById('offline-block-modal').remove()" style="
           background:#334155;color:#94a3b8;border:none;
           padding:10px 20px;border-radius:8px;
-          font-size:.9rem;cursor:pointer;
+          font-size:.9rem;cursor:default;
         ">Cerrar</button>
       </div>
     </div>
@@ -801,10 +846,25 @@ function sessionUpdateTimer() {
 
 
 
+// Evita que clics repetidos en "Actualizar" disparen varias recargas en paralelo
+// (eso era lo que dejaba la app "recargando" en bucle antes)
+let _recargandoApp = false;
+
 async function recargarApp() {
+  if (_recargandoApp) return; // ya hay una recarga en curso: ignorar clics extra
+  _recargandoApp = true;
+
   const page  = STATE.currentPage || 'dashboard';
   const param = STATE.navParam    || null;
   const btn   = document.querySelector('[onclick="recargarApp()"]');
+
+  // Deshabilitar el botón visualmente hasta que termine
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '.45';
+    btn.style.pointerEvents = 'none';
+    btn.style.cursor = 'default';
+  }
 
   // Mostrar 3 puntitos saltando
   let dotsEl = null;
@@ -820,7 +880,7 @@ async function recargarApp() {
 
   try {
     await loadDb(true);
-    renderAll();
+    renderAllCompleto();
     // Forzar animación de entrada al actualizar
     const pageEl2 = document.getElementById('page-' + page);
     if (pageEl2) { pageEl2.classList.remove('page-enter'); void pageEl2.offsetWidth; pageEl2.classList.add('page-enter'); pageEl2.addEventListener('animationend', () => pageEl2.classList.remove('page-enter'), { once: true }); }
@@ -833,7 +893,12 @@ async function recargarApp() {
       const svg = btn.querySelector('svg');
       if (svg) svg.style.display = '';
       if (dotsEl) dotsEl.remove();
+      btn.disabled = false;
+      btn.style.opacity = '';
+      btn.style.pointerEvents = '';
+      btn.style.cursor = '';
     }
+    _recargandoApp = false; // vuelve a habilitar el botón para el próximo clic
   }
 }
 
@@ -975,8 +1040,8 @@ function setDateLabels() {
   const now  = new Date();
   const opts = { weekday:'long', year:'numeric', month:'long', day:'numeric' };
   const str  = now.toLocaleDateString('es-CO', opts);
-  document.getElementById('topbar-date').textContent = str;
-  document.getElementById('sidebar-date').textContent = str;
+  const sidebarDateEl = document.getElementById('sidebar-date');
+  if (sidebarDateEl) sidebarDateEl.textContent = str.charAt(0).toUpperCase() + str.slice(1);
 
   const monthName = now.toLocaleDateString('es-CO', { month:'long', year:'numeric' });
   document.getElementById('dash-month-label').textContent =
@@ -998,6 +1063,7 @@ const PAGE_TITLES = {
   gastos: 'Gastos', deudas: 'Deudas', claves: 'Contraseñas', config: 'Configuración',
   prestamos: 'Préstamos a Terceros', fijos: 'Gastos Fijos',
   inversiones: 'Inversiones', 'detalle-inv': 'Detalle de Inversión', billeteras: 'Billeteras',
+  pendientes: 'Pendientes', recordatorios: 'Recordatorios',
 };
 
 function navigate(page, param=null) {
@@ -1027,7 +1093,8 @@ function navigate(page, param=null) {
                  document.querySelector(`.nav-btn[data-page="${basePage}"]`) ||
                  document.querySelector(`.nav-btn[data-page="inversiones"]`);
   if(navBtn) navBtn.classList.add('active');
-  document.getElementById('topbar-title').textContent = PAGE_TITLES[page] || page;
+  // Ya no hay tarjeta con el título arriba; lo dejamos como título de la pestaña del navegador.
+  document.title = (PAGE_TITLES[page] || page) + ' — Finanzas PRO';
   closeSidebar();
   if(typeof updateBottomNav === 'function') updateBottomNav(page);
   if(page === 'detalle-inv') {
@@ -1242,35 +1309,69 @@ function populateCatFilters() {
    RENDER ALL
    ============================================================ */
 function renderAll() {
+  // Estos son baratos (solo llenan <select>) y varias páginas/modales los
+  // necesitan aunque no sean la página activa, así que siempre corren.
   populateMonthFilters();
   populateCatFilters();
   populateBilleteraSelects();
   populateGFBilletera();
-  renderDashboard();
-  renderIngresos();
-  renderGastos();
-  renderDeudas();
-  renderPrestamos();
-  renderGastosFijos();
-  renderRecordatorios();
+
+  // Badges del sidebar: deben reflejar el estado siempre, sin importar la página activa.
   actualizarBadgeRecordatorios();
-  renderInversiones();
-  renderBilleteras();
-  renderBilleterasDashWidget();
-  renderReportes();
-  renderPass();
-  // Inicializar rango de movimientos al mes actual si no hay valor
-  const movDesde = document.getElementById('mov-filter-desde');
-  const movHasta = document.getElementById('mov-filter-hasta');
-  if (movDesde && movHasta && !movDesde.value && !movHasta.value) {
-    const hoy = new Date();
-    const y = hoy.getFullYear();
-    const mPad = String(hoy.getMonth()+1).padStart(2,'0');
-    movDesde.value = `${y}-${mPad}-01`;
-    const ultDia = new Date(y, hoy.getMonth()+1, 0);
-    movHasta.value = `${y}-${mPad}-${String(ultDia.getDate()).padStart(2,'0')}`;
+  actualizarBadgePendientes();
+
+  // ── Solo se redibuja a fondo la página que el usuario está viendo ──
+  // Antes, CADA registro/edición/borrado en cualquier módulo volvía a
+  // renderizar las 12 páginas completas (listas, tablas, la gráfica de
+  // Reportes, etc.) aunque no se estuvieran mostrando — eso era lo que
+  // "congelaba" la app en cada acción. Al navegar, navigate() ya vuelve a
+  // llamar renderAll() con la página nueva, así que esa sí se pinta fresca.
+  const cur = STATE.currentPage || 'dashboard';
+
+  if (cur === 'dashboard') {
+    renderDashboard();
+    renderBilleterasDashWidget();
   }
-  renderMovimientos();
+  if (cur === 'ingresos')     renderIngresos();
+  if (cur === 'gastos')       renderGastos();
+  if (cur === 'deudas')       renderDeudas();
+  if (cur === 'prestamos')    renderPrestamos();
+  if (cur === 'fijos')        renderGastosFijos();
+  if (cur === 'recordatorios')renderRecordatorios();
+  if (cur === 'pendientes')   renderPendientes();
+  if (cur === 'inversiones')  renderInversiones();
+  if (cur === 'detalle-inv')  renderDetalleInv(STATE.navParam);
+  if (cur === 'billeteras')   renderBilleteras();
+  if (cur === 'reportes')     renderReportes();
+  if (cur === 'claves')       renderPass();
+
+  if (cur === 'movimientos') {
+    // Inicializar rango de movimientos al mes actual si no hay valor
+    const movDesde = document.getElementById('mov-filter-desde');
+    const movHasta = document.getElementById('mov-filter-hasta');
+    if (movDesde && movHasta && !movDesde.value && !movHasta.value) {
+      const hoy = new Date();
+      const y = hoy.getFullYear();
+      const mPad = String(hoy.getMonth()+1).padStart(2,'0');
+      movDesde.value = `${y}-${mPad}-01`;
+      const ultDia = new Date(y, hoy.getMonth()+1, 0);
+      movHasta.value = `${y}-${mPad}-${String(ultDia.getDate()).padStart(2,'0')}`;
+    }
+    renderMovimientos();
+  }
+}
+
+// Vuelve a renderizar TODAS las páginas de una vez (más costoso). Se usa solo
+// donde de verdad hace falta: justo después de cargar/recargar toda la base
+// de datos, para que cualquier página a la que el usuario navegue enseguida
+// ya tenga sus datos listos.
+function renderAllCompleto() {
+  const cur = STATE.currentPage;
+  ['dashboard','ingresos','gastos','deudas','prestamos','fijos','recordatorios',
+   'pendientes','inversiones','billeteras','reportes','claves','movimientos'
+  ].forEach(p => { STATE.currentPage = p; renderAll(); });
+  STATE.currentPage = cur;
+  renderAll();
 }
 
 // Populate GF billetera select
@@ -2031,7 +2132,7 @@ function renderTablaAmortFilas(cuotas) {
         <span style="font-size:1rem;" title="${c.pagada ? 'Pagada' : 'Pendiente'}">${c.pagada ? '✓' : '—'}</span>
       </td>
       <td style="padding:4px;">
-        <button onclick="tablaAmortEliminarFila(${i})" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:.85rem;padding:4px 6px;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--muted)'">✕</button>
+        <button onclick="tablaAmortEliminarFila(${i})" style="background:none;border:none;cursor:default;color:var(--muted);font-size:.85rem;padding:4px 6px;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--muted)'">✕</button>
       </td>
     </tr>
   `).join('');
@@ -2248,7 +2349,7 @@ function renderDeudas() {
     return `
     <div class="debt-card" style="padding:0;overflow:hidden;">
       <!-- Cabecera siempre visible: click para expandir -->
-      <div onclick="toggleDeudaExpand('${expandId}')" style="display:flex;align-items:center;gap:14px;padding:16px 18px;cursor:pointer;user-select:none;">
+      <div onclick="toggleDeudaExpand('${expandId}')" style="display:flex;align-items:center;gap:14px;padding:16px 18px;cursor:default;user-select:none;">
         <!-- Indicador progreso circular mini -->
         <div style="position:relative;width:44px;height:44px;flex-shrink:0;">
           <svg width="44" height="44" viewBox="0 0 44 44">
@@ -2328,7 +2429,7 @@ function renderDeudas() {
                 ${p.autoGastoFijoId ? `<div style="font-size:.7rem;color:var(--accent);">Abono automático desde gasto fijo</div>` : ''}
               </div>
               <span style="font-weight:700;color:var(--green);font-size:.9rem;flex-shrink:0;">${fmt(p.monto)}</span>
-              ${!p.autoGastoFijoId ? `<button onclick="deleteAbono(${realIdx},'${p.id}')" style="background:none;border:none;cursor:pointer;color:var(--light);padding:2px 5px;border-radius:4px;font-size:.8rem;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--light)'">✕</button>` : ''}
+              ${!p.autoGastoFijoId ? `<button onclick="deleteAbono(${realIdx},'${p.id}')" style="background:none;border:none;cursor:default;color:var(--light);padding:2px 5px;border-radius:4px;font-size:.8rem;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--light)'">✕</button>` : ''}
             </div>`).join('')}
         </div>` : ''}
 
@@ -2344,7 +2445,7 @@ function renderDeudas() {
                 ${des.desc ? `<div style="font-size:.73rem;color:var(--muted);">${des.desc}</div>` : ''}
               </div>
               <span style="font-weight:700;color:var(--accent);font-size:.9rem;flex-shrink:0;">+${fmt(des.monto)}</span>
-              <button onclick="deleteDesembolso(${realIdx},'${des.id}')" style="background:none;border:none;cursor:pointer;color:var(--light);padding:2px 5px;border-radius:4px;font-size:.8rem;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--light)'">✕</button>
+              <button onclick="deleteDesembolso(${realIdx},'${des.id}')" style="background:none;border:none;cursor:default;color:var(--light);padding:2px 5px;border-radius:4px;font-size:.8rem;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--light)'">✕</button>
             </div>`).join('')}
         </div>` : ''}
       </div>
@@ -2763,7 +2864,7 @@ function renderPrestamos() {
 
     return `
     <div class="debt-card" style="padding:0;overflow:hidden;">
-      <div onclick="toggleDeudaExpand('${expandId}')" style="display:flex;align-items:center;gap:14px;padding:16px 18px;cursor:pointer;user-select:none;">
+      <div onclick="toggleDeudaExpand('${expandId}')" style="display:flex;align-items:center;gap:14px;padding:16px 18px;cursor:default;user-select:none;">
         <div style="position:relative;width:44px;height:44px;flex-shrink:0;">
           <svg width="44" height="44" viewBox="0 0 44 44">
             <circle cx="22" cy="22" r="18" fill="none" stroke="var(--border)" stroke-width="3"/>
@@ -2827,7 +2928,7 @@ function renderPrestamos() {
                 ${c.nota?`<div style="font-size:.73rem;color:var(--muted);">${c.nota}</div>`:''}
               </div>
               <span style="font-weight:700;color:var(--green);font-size:.9rem;">${fmt(c.monto)}</span>
-              <button onclick="deleteCobro(${i},'${c.id}')" style="background:none;border:none;cursor:pointer;color:var(--light);padding:2px 5px;font-size:.8rem;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--light)'">✕</button>
+              <button onclick="deleteCobro(${i},'${c.id}')" style="background:none;border:none;cursor:default;color:var(--light);padding:2px 5px;font-size:.8rem;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--light)'">✕</button>
             </div>`).join('')}
         </div>` : ''}
 
@@ -2965,7 +3066,6 @@ function openEditGastoFijo(id) {
         <input type="hidden" id="mgf-id">
       </div>`;
     document.body.appendChild(modal);
-    modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
   }
 
   document.getElementById('mgf-id').value     = id;
@@ -3043,14 +3143,14 @@ async function togglePagoGF(id) {
                 <div style="font-size:1rem;font-weight:700;color:var(--text);">Desmarcar pago</div>
                 <div style="font-size:.75rem;color:var(--muted);" id="dgf-sub"></div>
               </div>
-              <button onclick="document.getElementById('modal-desmarcar-gf').classList.remove('open');window._dgfResolve&&window._dgfResolve(false);" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">&#x2715;</button>
+              <button onclick="document.getElementById('modal-desmarcar-gf').classList.remove('open');window._dgfResolve&&window._dgfResolve(false);" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:default;">&#x2715;</button>
             </div>
             <div class="modal-body-wrap" style="padding:16px 24px;">
               <p style="font-size:.88rem;color:var(--muted);line-height:1.6;" id="dgf-msg"></p>
             </div>
             <div class="modal-actions" style="padding:16px 24px;gap:10px;">
               <button class="btn btn-ghost" onclick="document.getElementById('modal-desmarcar-gf').classList.remove('open');window._dgfResolve&&window._dgfResolve(false);" style="flex:1;">Cancelar</button>
-              <button onclick="document.getElementById('modal-desmarcar-gf').classList.remove('open');window._dgfResolve&&window._dgfResolve(true);" style="flex:2;background:#b45309;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;">Desmarcar</button>
+              <button onclick="document.getElementById('modal-desmarcar-gf').classList.remove('open');window._dgfResolve&&window._dgfResolve(true);" style="flex:2;background:#b45309;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:default;">Desmarcar</button>
             </div>
           </div>`;
         document.body.appendChild(m);
@@ -3132,7 +3232,7 @@ function openModalPagoFijo(gfId, mesKey) {
             <div style="font-size:1rem;font-weight:700;color:var(--text);">Registrar pago</div>
             <div style="font-size:.75rem;color:var(--muted);" id="mpf-desc"></div>
           </div>
-          <button onclick="closeModal('modal-pago-fijo-billetera')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+          <button onclick="closeModal('modal-pago-fijo-billetera')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:default;">✕</button>
         </div>
         <div class="modal-body-wrap" style="padding:20px 24px;">
           <div class="form-group">
@@ -3146,11 +3246,10 @@ function openModalPagoFijo(gfId, mesKey) {
         </div>
         <div class="modal-actions" style="padding:16px 24px;gap:10px;">
           <button class="btn btn-ghost" onclick="closeModal('modal-pago-fijo-billetera')" style="flex:1;">Cancelar</button>
-          <button id="mpf-confirmar" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;">Confirmar pago</button>
+          <button id="mpf-confirmar" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:default;">Confirmar pago</button>
         </div>
       </div>`;
     document.body.appendChild(modal);
-    modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
   }
 
   // Poblar datos
@@ -3349,8 +3448,8 @@ function renderGastosFijos() {
   // ── Tab styles ──
   const tabA = document.getElementById('gf-tab-activos');
   const tabC = document.getElementById('gf-tab-completados');
-  const activeStyle   = 'padding:14px 24px 13px;border:none;background:none;cursor:pointer;font-size:.88rem;font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-1px;letter-spacing:.01em;transition:color .15s,border-color .15s;';
-  const inactiveStyle = 'padding:14px 24px 13px;border:none;background:none;cursor:pointer;font-size:.88rem;font-weight:700;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;letter-spacing:.01em;transition:color .15s,border-color .15s;';
+  const activeStyle   = 'padding:14px 24px 13px;border:none;background:none;cursor:default;font-size:.88rem;font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-1px;letter-spacing:.01em;transition:color .15s,border-color .15s;';
+  const inactiveStyle = 'padding:14px 24px 13px;border:none;background:none;cursor:default;font-size:.88rem;font-weight:700;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;letter-spacing:.01em;transition:color .15s,border-color .15s;';
   if (tabA) tabA.style.cssText = !isCompletados ? activeStyle : inactiveStyle;
   if (tabC) tabC.style.cssText =  isCompletados ? activeStyle : inactiveStyle;
 
@@ -3397,7 +3496,7 @@ function renderGastosFijos() {
       </div>
       <span style="font-size:.78rem;color:var(--muted);flex-shrink:0;">${pct}%</span>
       <!-- Botón ojo -->
-      <button onclick="toggleGFStats()" title="${gfStatsVisible?'Ocultar montos':'Mostrar montos'}" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:2px 4px;flex-shrink:0;display:flex;align-items:center;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
+      <button onclick="toggleGFStats()" title="${gfStatsVisible?'Ocultar montos':'Mostrar montos'}" style="background:none;border:none;cursor:default;color:var(--muted);padding:2px 4px;flex-shrink:0;display:flex;align-items:center;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
         ${gfStatsVisible
           ? '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
           : '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'
@@ -3461,21 +3560,21 @@ function renderGastosFijos() {
       <!-- Fila 2: monto + botones -->
       <div style="display:flex;align-items:center;gap:8px;">
         <div style="font-weight:800;font-size:1.05rem;color:${pagado?'var(--green)':'var(--text)'};flex:1;">${fmt(montoMostrar)}</div>
-        <button onclick="togglePagoGF('${g.id}')" style="height:32px;padding:0 14px;border:none;border-radius:7px;background:${pagado?'var(--bg2)':'#0f2d6b'};color:${pagado?'var(--muted)':'#fff'};font-size:.75rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">
+        <button onclick="togglePagoGF('${g.id}')" style="height:32px;padding:0 14px;border:none;border-radius:7px;background:${pagado?'var(--bg2)':'#0f2d6b'};color:${pagado?'var(--muted)':'#fff'};font-size:.75rem;font-weight:600;cursor:default;white-space:nowrap;flex-shrink:0;">
           ${pagado ? 'Desmarcar' : 'Pagar'}
         </button>
-        <button onclick="openEditGastoFijo('${g.id}')" style="height:32px;width:32px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <button onclick="openEditGastoFijo('${g.id}')" style="height:32px;width:32px;border:1px solid var(--border);border-radius:7px;background:none;cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
         ${!esCompletado ? `
-        <button onclick="archivarGastoFijo('${g.id}')" title="Marcar como completado" style="height:32px;width:32px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--muted)'">
+        <button onclick="archivarGastoFijo('${g.id}')" title="Marcar como completado" style="height:32px;width:32px;border:1px solid var(--border);border-radius:7px;background:none;cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--muted)'">
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
         </button>
-        <button onclick="deleteGastoFijo('${g.id}')" style="height:32px;width:32px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <button onclick="deleteGastoFijo('${g.id}')" style="height:32px;width:32px;border:1px solid var(--border);border-radius:7px;background:none;cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
         </button>` : `
-        <button onclick="reactivarGastoFijo('${g.id}')" style="height:32px;padding:0 12px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);font-size:.75rem;font-weight:600;flex-shrink:0;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Reactivar</button>
-        <button onclick="deleteGastoFijo('${g.id}')" style="height:32px;width:32px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <button onclick="reactivarGastoFijo('${g.id}')" style="height:32px;padding:0 12px;border:1px solid var(--border);border-radius:7px;background:none;cursor:default;color:var(--muted);font-size:.75rem;font-weight:600;flex-shrink:0;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Reactivar</button>
+        <button onclick="deleteGastoFijo('${g.id}')" style="height:32px;width:32px;border:1px solid var(--border);border-radius:7px;background:none;cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
         </button>`}
       </div>
@@ -3545,9 +3644,12 @@ const fmtNum = n => Number(n||0).toLocaleString('es-CO');
 // ─── Storage helpers ─────────────────────────────────────────
 function getInversiones()     { return STATE.db.inversiones || []; }
 function getVentasInv(id)     { return (STATE.db.ventasInv||[]).filter(v=>v.invId===id); }
-function saveVentasInv(arr)   { STATE.db.ventasInv = arr; saveDb(); }
-function addVentaInv(v)       { if(!STATE.db.ventasInv) STATE.db.ventasInv=[]; v.id=uid(); v.creadoEn=new Date().toISOString(); STATE.db.ventasInv.push(v); saveDb(); }
-function deleteVentaInv(id)   { STATE.db.ventasInv=(STATE.db.ventasInv||[]).filter(v=>v.id!==id); saveDb(); }
+function saveVentasInv(arr)   { STATE.db.ventasInv = arr; }
+// OJO: si "v" ya trae un id (ej. para poder vincular el ingreso generado por la venta
+// con "origenVentaId"), lo respetamos — antes se sobreescribía con un uid() nuevo y
+// el ingreso quedaba apuntando a un id que nunca existió, rompiendo el borrado en cascada.
+function addVentaInv(v)       { if(!STATE.db.ventasInv) STATE.db.ventasInv=[]; if(!v.id) v.id=uid(); v.creadoEn=new Date().toISOString(); STATE.db.ventasInv.push(v); }
+function deleteVentaInv(id)   { STATE.db.ventasInv=(STATE.db.ventasInv||[]).filter(v=>v.id!==id); }
 
 // ─── Calculations ─────────────────────────────────────────────
 function calcInversion(inv) {
@@ -3609,6 +3711,98 @@ function invBadgeStock(e) {
   return `<span class="badge ${cls}">${lbl}</span>`;
 }
 
+// Estado visual combinado de la fila: el stock manda si está agotado o bajo,
+// si no, se muestra el estado propio del producto (activa/cerrada/pausada).
+function invEstadoVisual(p) {
+  if (p.estadoStock === 'agotado') return { color: 'var(--red)',   label: 'Agotado'    };
+  if (p.estadoStock === 'bajo')    return { color: '#b45309',      label: 'Stock bajo' };
+  const m = { activa: ['var(--green)', 'Activa'], cerrada: ['var(--muted)', 'Cerrada'], pausada: ['#b45309', 'Pausada'] };
+  const [color, label] = m[p.estado] || ['var(--muted)', p.estado || '—'];
+  return { color, label };
+}
+
+// Paleta sobria y constante por tipo (mismo tipo = mismo color siempre)
+const INV_TIPO_PALETTE = [
+  { bg: '#eff6ff', color: '#2563eb' },
+  { bg: '#fff7ed', color: '#c2410c' },
+  { bg: '#fef2f2', color: '#b91c1c' },
+  { bg: '#f0fdf4', color: '#15803d' },
+  { bg: '#faf5ff', color: '#7e22ce' },
+];
+function invTipoColor(tipo) {
+  if (!tipo) return { bg: '#f8fafc', color: '#64748b' };
+  let hash = 0;
+  for (let i = 0; i < tipo.length; i++) hash = (hash * 31 + tipo.charCodeAt(i)) >>> 0;
+  return INV_TIPO_PALETTE[hash % INV_TIPO_PALETTE.length];
+}
+
+// ─── Selección de filas (checkboxes) para acciones en lote ─────
+window._invSeleccion = window._invSeleccion || new Set();
+function toggleInvSeleccion(id, checked) {
+  if (checked) window._invSeleccion.add(id); else window._invSeleccion.delete(id);
+  actualizarInvBulkBar();
+  const all = document.getElementById('inv-check-all');
+  if (all) all.checked = document.querySelectorAll('.inv-row-check').length > 0 &&
+    document.querySelectorAll('.inv-row-check:checked').length === document.querySelectorAll('.inv-row-check').length;
+}
+function toggleTodasInvSeleccion(checkboxEl) {
+  document.querySelectorAll('.inv-row-check').forEach(cb => {
+    cb.checked = checkboxEl.checked;
+    if (checkboxEl.checked) window._invSeleccion.add(cb.dataset.id);
+    else window._invSeleccion.delete(cb.dataset.id);
+  });
+  actualizarInvBulkBar();
+}
+function actualizarInvBulkBar() {
+  const bar = document.getElementById('inv-bulk-bar');
+  const cnt = document.getElementById('inv-bulk-count');
+  if (!bar) return;
+  const n = window._invSeleccion.size;
+  if (n > 0) {
+    bar.style.display = 'flex';
+    if (cnt) cnt.textContent = `${n} inversión${n===1?'':'es'} seleccionada${n===1?'':'s'}`;
+  } else {
+    bar.style.display = 'none';
+  }
+}
+// Quita del estado la inversión y todo lo que depende de ella (ventas + los
+// ingresos que esas ventas generaron), sin guardar ni renderizar todavía —
+// así se puede reusar tanto para borrar una sola como para borrar en lote.
+function _eliminarInversionInterna(invId) {
+  const ventaIds = (STATE.db.ventasInv||[]).filter(v=>v.invId===invId).map(v=>v.id);
+  STATE.db.ventasInv = (STATE.db.ventasInv||[]).filter(v=>v.invId!==invId);
+  if (ventaIds.length) STATE.db.ingresos = STATE.db.ingresos.filter(i => !ventaIds.includes(i.origenVentaId));
+  STATE.db.inversiones = STATE.db.inversiones.filter(i => i.id !== invId);
+}
+function eliminarInversionesSeleccionadas() {
+  const ids = [...window._invSeleccion];
+  if (!ids.length) return;
+  pedirPinParaAccion(`Eliminar ${ids.length} inversión${ids.length===1?'':'es'}`, async () => {
+    ids.forEach(_eliminarInversionInterna);
+    window._invSeleccion.clear();
+    renderAll();
+    await saveDb(['inversiones','ventasInv','ingresos']);
+    toast(`${ids.length} inversión${ids.length===1?'':'es'} eliminada${ids.length===1?'':'s'}`, 'info');
+  });
+}
+
+// ─── Paginación de la tabla ─────────────────────────────────────
+window._invPage = window._invPage || 1;
+window._invPageSize = window._invPageSize || 10;
+function cambiarPaginaInv(delta) { window._invPage = (window._invPage||1) + delta; renderInversiones(); }
+function irAPaginaInv(n) { window._invPage = n; renderInversiones(); }
+function cambiarTamPaginaInv(val) { window._invPageSize = Number(val)||10; window._invPage = 1; renderInversiones(); }
+function invFiltroCambio() { window._invPage = 1; renderInversiones(); }
+
+// ─── Menú de más acciones (⋮) por fila ─────────────────────────
+function toggleInvMenu(id, ev) {
+  ev?.stopPropagation();
+  document.querySelectorAll('.inv-dropdown').forEach(m => { if (m.id !== 'inv-menu-'+id) m.style.display = 'none'; });
+  const menu = document.getElementById('inv-menu-'+id);
+  if (menu) menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+}
+document.addEventListener('click', () => document.querySelectorAll('.inv-dropdown').forEach(m => m.style.display = 'none'));
+
 // ─── Render principal ──────────────────────────────────────────
 function renderInversiones() {
   populateInvTipoFilter();
@@ -3641,9 +3835,10 @@ function renderInversiones() {
   // Solo renderizar contenido de productos si ese tab está activo
   if ((window._invTab || 'productos') !== 'productos') return;
 
-  // Asegurar que el contenedor del listado tenga ID correcto
-  const listaCards = document.getElementById('inv-lista-cards');
+  const tbody = document.getElementById('inv-tbody');
   const empty = document.getElementById('inversiones-empty');
+  const tableWrap = document.getElementById('inv-tabla-wrap');
+  const pagBar = document.getElementById('inv-pag-bar');
 
   // Filtrar
   let lista = r.lista.slice();
@@ -3651,83 +3846,141 @@ function renderInversiones() {
   if(fEst)   lista = lista.filter(p=>p.estado===fEst);
   if(fTipo)  lista = lista.filter(p=>p.tipo===fTipo);
 
+  // ── Ocultar agotadas por defecto: si ya no hay stock, no tiene sentido
+  // verlas siempre mezcladas con las que sí tienen. Un único control (el
+  // aviso de abajo) permite mostrarlas u ocultarlas de nuevo.
+  window._invVerAgotadas = window._invVerAgotadas || false;
+  const verAgotadas = window._invVerAgotadas;
+  const totalAgotadas = lista.filter(p=>p.estadoStock==='agotado').length;
+  if(!verAgotadas) lista = lista.filter(p=>p.estadoStock!=='agotado');
+
+  const banner = document.getElementById('inv-agotadas-banner');
+  if(banner) {
+    if(verAgotadas && totalAgotadas > 0) {
+      banner.style.display = 'flex';
+      banner.innerHTML = `
+        <span style="color:var(--muted);">
+          Mostrando ${totalAgotadas} inversión${totalAgotadas===1?'':'es'} agotada${totalAgotadas===1?'':'s'}
+        </span>
+        <button onclick="window._invVerAgotadas=false;invFiltroCambio();" style="border:none;background:none;color:var(--accent);font-weight:700;cursor:default;font-size:.78rem;padding:0;">Ocultar agotadas</button>`;
+    } else if (!verAgotadas && totalAgotadas > 0) {
+      banner.style.display = 'flex';
+      banner.innerHTML = `
+        <span style="color:var(--muted);">
+          ${totalAgotadas} inversión${totalAgotadas===1?'':'es'} agotada${totalAgotadas===1?'':'s'} oculta${totalAgotadas===1?'':'s'}
+        </span>
+        <button onclick="window._invVerAgotadas=true;invFiltroCambio();" style="border:none;background:none;color:var(--accent);font-weight:700;cursor:default;font-size:.78rem;padding:0;">Ver agotadas</button>`;
+    } else {
+      banner.style.display = 'none';
+      banner.innerHTML = '';
+    }
+  }
+
   if(!lista.length) {
-    if(listaCards) listaCards.innerHTML = '';
-    if(empty) empty.style.display='';
+    if(tbody) tbody.innerHTML = '';
+    if(tableWrap) tableWrap.style.display = 'none';
+    if(pagBar) pagBar.style.display = 'none';
+    if(empty) {
+      empty.style.display='';
+      empty.querySelector('p') && (empty.querySelector('p').textContent = (!verAgotadas && totalAgotadas > 0) ? 'Todas tus inversiones están agotadas. Usa el aviso de arriba para verlas.' : 'Sin inversiones registradas aún.');
+    }
     return;
   }
   if(empty) empty.style.display='none';
+  if(tableWrap) tableWrap.style.display='';
+  if(pagBar) pagBar.style.display='flex';
 
-  if(listaCards) {
-    listaCards.style.cssText = ''; // let CSS grid handle it
-    listaCards.innerHTML = lista.map(p => {
-    const idx = STATE.db.inversiones.indexOf(STATE.db.inversiones.find(i=>i.id===p.id));
-    const ganColor = p.ganancia>=0?'var(--green)':'var(--red)';
-    const stockColor = p.estadoStock==='agotado'?'var(--red)':p.estadoStock==='bajo'?'var(--yellow)':'var(--text)';
-    const letra = (p.nombre||'?')[0].toUpperCase();
-    const avatar = p.imagen
-      ? `<img src="${p.imagen}" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:10px;flex-shrink:0;" onerror="this.style.display='none'">`
-      : `<div style="width:44px;height:44px;border-radius:10px;background:var(--accent-light);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;flex-shrink:0;">${letra}</div>`;
-    return `
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;">
-      <!-- Cabecera -->
-      <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;">
-        ${avatar}
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:700;font-size:.95rem;color:var(--text);">${p.nombre}</div>
-          <div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap;">
-            ${p.sku?`<code style="font-size:.7rem;background:var(--bg2);border:1px solid var(--border);padding:1px 6px;border-radius:4px;color:var(--muted);">${p.sku}</code>`:''}
-            <span style="font-size:.72rem;color:var(--muted);">${p.tipo||''}</span>
-            ${invBadgeEstado(p.estado)}
+  // ── Paginación ──
+  const pageSize   = window._invPageSize || 10;
+  const totalItems = lista.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  if (!window._invPage || window._invPage > totalPages) window._invPage = totalPages;
+  if (window._invPage < 1) window._invPage = 1;
+  const startIdx  = (window._invPage - 1) * pageSize;
+  const pageItems = lista.slice(startIdx, startIdx + pageSize);
+
+  if (tbody) {
+    tbody.innerHTML = pageItems.map(p => {
+      const idx = STATE.db.inversiones.indexOf(STATE.db.inversiones.find(i=>i.id===p.id));
+      const estado = invEstadoVisual(p);
+      const tipoColor = invTipoColor(p.tipo);
+      const letra = (p.nombre||'?')[0].toUpperCase();
+      const avatar = p.imagen
+        ? `<img src="${p.imagen}" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:8px;flex-shrink:0;" onerror="this.style.display='none'">`
+        : `<div style="width:36px;height:36px;border-radius:8px;background:var(--bg2);border:1px solid var(--border);color:var(--muted);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;flex-shrink:0;">${letra}</div>`;
+      const sel = window._invSeleccion.has(p.id);
+      const ganColor = p.ganancia>=0?'var(--green)':'var(--red)';
+
+      return `
+      <tr>
+        <td><input type="checkbox" class="inv-row-check" data-id="${p.id}" ${sel?'checked':''} onchange="toggleInvSeleccion('${p.id}', this.checked)" style="width:15px;height:15px;cursor:default;"></td>
+        <td>
+          <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+            ${avatar}
+            <div style="min-width:0;">
+              <div style="font-weight:600;font-size:.85rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">${p.nombre}</div>
+              ${p.descripcion ? `<div style="font-size:.72rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">${p.descripcion}</div>` : ''}
+            </div>
           </div>
-        </div>
-        <!-- Acciones -->
-        <div style="display:flex;gap:4px;flex-shrink:0;">
-          <button onclick="openDetalleInv('${p.id}')" title="Ver detalle" style="width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
-            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          </button>
-          <button onclick="openModalNuevaInversion('${p.id}')" title="Editar" style="width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
-            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          </button>
-          <button onclick="deleteInversion(${idx})" title="Eliminar" style="width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--muted)'">
-            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
-          </button>
-        </div>
-      </div>
-      <!-- Stats en grid -->
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px;">
-        <div style="padding:10px 12px;border-right:1px solid var(--border);">
-          <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px;">Inversión</div>
-          <div style="font-weight:700;font-size:.9rem;">${fmtCOP(p.inversionTotal)}</div>
-        </div>
-        <div style="padding:10px 12px;border-right:1px solid var(--border);">
-          <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px;">Recuperado</div>
-          <div style="font-weight:700;font-size:.9rem;color:var(--green);">${fmtCOP(p.totalRecuperado)}</div>
-        </div>
-        <div style="padding:10px 12px;">
-          <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:3px;">Ganancia</div>
-          <div style="font-weight:700;font-size:.9rem;color:${ganColor};">${p.ganancia>=0?'+':''}${fmtCOP(p.ganancia)}</div>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-        <span style="font-size:.78rem;color:var(--muted);">Stock: <strong style="color:${stockColor};">${fmtNum(p.stockActual)}</strong> ${invBadgeStock(p.estadoStock)}</span>
-        <span style="color:var(--border);">·</span>
-        <span style="font-size:.78rem;color:var(--muted);">Vendidas: <strong>${fmtNum(p.unidadesVendidas)}</strong></span>
-      </div>
-      <!-- Acciones operativas -->
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button onclick="openModalVentaInv('${p.id}')" style="height:32px;padding:0 12px;border:1px solid var(--border);border-radius:7px;background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
-          Registrar venta
-        </button>
-        <button onclick="openModalRenovarStock('${p.id}')" style="height:32px;padding:0 12px;border:1px solid var(--border);border-radius:7px;background:var(--card);color:var(--text);font-size:.75rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.46"/></svg>
-          Renovar stock
-        </button>
-      </div>
-    </div>`;
-  }).join('');
+        </td>
+        <td style="color:var(--muted);font-size:.78rem;white-space:nowrap;">${p.sku||'—'}</td>
+        <td>
+          <span style="display:inline-flex;align-items:center;gap:6px;font-size:.82rem;color:var(--text);white-space:nowrap;">
+            <span style="width:7px;height:7px;border-radius:50%;background:${estado.color};flex-shrink:0;"></span>${estado.label}
+          </span>
+        </td>
+        <td style="font-weight:600;font-size:.85rem;white-space:nowrap;">${fmtCOP(p.inversionTotal)}</td>
+        <td style="color:var(--green);font-weight:600;font-size:.85rem;white-space:nowrap;">${fmtCOP(p.totalRecuperado)}</td>
+        <td style="color:${ganColor};font-weight:600;font-size:.85rem;white-space:nowrap;">${p.ganancia>=0?'+':''}${fmtCOP(p.ganancia)}</td>
+        <td><span style="display:inline-block;min-width:26px;text-align:center;padding:2px 9px;border-radius:6px;background:#fef3c7;color:#92400e;font-size:.78rem;font-weight:600;">${fmtNum(p.stockActual)}</span></td>
+        <td><span style="display:inline-block;min-width:26px;text-align:center;padding:2px 9px;border-radius:6px;background:#eff6ff;color:#2563eb;font-size:.78rem;font-weight:600;">${fmtNum(p.unidadesVendidas)}</span></td>
+        <td><span style="display:inline-block;padding:2px 10px;border-radius:6px;background:${tipoColor.bg};color:${tipoColor.color};font-size:.76rem;font-weight:600;white-space:nowrap;">${p.tipo||'—'}</span></td>
+        <td>
+          <div class="actions" style="justify-content:flex-end;position:relative;">
+            <button onclick="openDetalleInv('${p.id}')" title="Ver detalle" style="width:28px;height:28px;border:none;background:none;cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;border-radius:6px;" onmouseover="this.style.color='var(--accent)';this.style.background='var(--bg2)'" onmouseout="this.style.color='var(--muted)';this.style.background='none'">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+            <button onclick="openModalNuevaInversion('${p.id}')" title="Editar" style="width:28px;height:28px;border:none;background:none;cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;border-radius:6px;" onmouseover="this.style.color='var(--accent)';this.style.background='var(--bg2)'" onmouseout="this.style.color='var(--muted)';this.style.background='none'">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            <button onclick="toggleInvMenu('${p.id}', event)" title="Más acciones" style="width:28px;height:28px;border:none;background:none;cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;border-radius:6px;" onmouseover="this.style.color='var(--accent)';this.style.background='var(--bg2)'" onmouseout="this.style.color='var(--muted)';this.style.background='none'">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+            </button>
+            <div id="inv-menu-${p.id}" class="inv-dropdown" style="display:none;position:absolute;top:32px;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-md);z-index:20;min-width:170px;overflow:hidden;text-align:left;">
+              <button onclick="openModalVentaInv('${p.id}');toggleInvMenu('${p.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;border:none;background:none;cursor:default;font-size:.8rem;color:var(--text);" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='none'">Registrar venta</button>
+              <button onclick="openModalRenovarStock('${p.id}');toggleInvMenu('${p.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;border:none;background:none;cursor:default;font-size:.8rem;color:var(--text);" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='none'">Renovar stock</button>
+              <button onclick="deleteInversion(${idx});toggleInvMenu('${p.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;border:none;background:none;cursor:default;font-size:.8rem;color:var(--red);border-top:1px solid var(--border-light);" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='none'">Eliminar</button>
+            </div>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
   }
+
+  // ── Barra de paginación ──
+  const infoEl = document.getElementById('inv-pag-info');
+  if (infoEl) infoEl.textContent = `Mostrando ${pageItems.length} de ${totalItems} inversión${totalItems===1?'':'es'}`;
+  const numsEl = document.getElementById('inv-pag-numeros');
+  if (numsEl) {
+    let paginas = [];
+    for (let i=1;i<=totalPages;i++) paginas.push(i);
+    if (paginas.length > 7) {
+      const cur = window._invPage;
+      paginas = [...new Set([1, 2, cur-1, cur, cur+1, totalPages-1, totalPages].filter(n=>n>=1&&n<=totalPages))].sort((a,b)=>a-b);
+    }
+    let prev = 0;
+    numsEl.innerHTML = paginas.map(n => {
+      const gap = (n - prev > 1) ? `<span style="padding:0 4px;color:var(--muted);">…</span>` : '';
+      prev = n;
+      return gap + `<button onclick="irAPaginaInv(${n})" style="min-width:28px;height:28px;padding:0 6px;border:1px solid ${n===window._invPage?'var(--accent)':'var(--border)'};background:${n===window._invPage?'var(--accent)':'none'};color:${n===window._invPage?'#fff':'var(--text)'};border-radius:6px;font-size:.78rem;font-weight:600;cursor:default;">${n}</button>`;
+    }).join('');
+  }
+  const prevBtn = document.getElementById('inv-pag-prev');
+  const nextBtn = document.getElementById('inv-pag-next');
+  if (prevBtn) prevBtn.disabled = window._invPage <= 1;
+  if (nextBtn) nextBtn.disabled = window._invPage >= totalPages;
+
+  actualizarInvBulkBar();
 }
 
 // ── Dashboard de movimientos globales de inversiones ──
@@ -3742,11 +3995,11 @@ function renderInvTabs() {
     tabBar.style.cssText = 'display:flex;gap:4px;margin-bottom:20px;border-bottom:2px solid var(--border);padding-bottom:0;';
     tabBar.innerHTML = `
       <button id="inv-tab-btn-productos" onclick="setInvTab('productos')"
-        style="padding:8px 20px;font-size:.88rem;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;color:var(--muted);transition:all .2s">
+        style="padding:8px 20px;font-size:.88rem;font-weight:600;border:none;background:none;cursor:default;border-bottom:3px solid transparent;margin-bottom:-2px;color:var(--muted);transition:all .2s">
         Productos
       </button>
       <button id="inv-tab-btn-movimientos" onclick="setInvTab('movimientos')"
-        style="padding:8px 20px;font-size:.88rem;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;color:var(--muted);transition:all .2s">
+        style="padding:8px 20px;font-size:.88rem;font-weight:600;border:none;background:none;cursor:default;border-bottom:3px solid transparent;margin-bottom:-2px;color:var(--muted);transition:all .2s">
         Movimientos
       </button>`;
     const statsGrid = page.querySelector('.stats-grid');
@@ -3980,7 +4233,7 @@ function openModalNuevaInversion(id=null) {
   overlay.innerHTML = `
     <div class="modal" style="max-width:620px;width:100%;">
       <div class="modal-title">${titulo}
-        <button onclick="closeInvModal()" style="float:right;background:none;border:none;font-size:1rem;color:var(--muted);cursor:pointer;">✕</button>
+        <button onclick="closeInvModal()" style="float:right;background:none;border:none;font-size:1rem;color:var(--muted);cursor:default;">✕</button>
       </div>
       <div class="modal-body-wrap">
         <div style="margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border-light);">
@@ -4221,7 +4474,7 @@ function openModalVentaInv(invId) {
   overlay.innerHTML = `
     <div class="modal" style="max-width:440px;width:100%;">
       <div class="modal-title">Registrar venta
-        <button onclick="closeInvModal()" style="float:right;background:none;border:none;font-size:1rem;color:var(--muted);cursor:pointer;">✕</button>
+        <button onclick="closeInvModal()" style="float:right;background:none;border:none;font-size:1rem;color:var(--muted);cursor:default;">✕</button>
       </div>
       <div class="modal-body-wrap">
         <div style="display:flex;align-items:center;gap:12px;padding-bottom:16px;margin-bottom:16px;border-bottom:1px solid var(--border-light);">
@@ -4372,7 +4625,7 @@ function renderDetalleInv(invId) {
   document.getElementById('page-detalle-inv').innerHTML = `
     <!-- Header -->
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
-      <button onclick="navigate('inversiones')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer;font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:5px;">
+      <button onclick="navigate('inversiones')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:default;font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:5px;">
         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg> Volver
       </button>
       <div style="flex:1;min-width:0;">
@@ -4380,10 +4633,10 @@ function renderDetalleInv(invId) {
         <div style="font-size:.73rem;color:var(--muted);">${p.tipo||''}${p.plataforma?' · '+p.plataforma:''}${p.sku?' · '+p.sku:''}</div>
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;">
-        <button onclick="openModalVentaInv('${p.id}')" style="height:34px;padding:0 12px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:.78rem;font-weight:700;cursor:pointer;">+ Venta</button>
-        <button onclick="openModalRenovarStock('${p.id}')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:.78rem;font-weight:600;cursor:pointer;">+ Stock</button>
-        <button onclick="openModalGastoAdicionalInv('${p.id}')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:.78rem;font-weight:600;cursor:pointer;">+ Gasto</button>
-        <button onclick="openModalNuevaInversion('${p.id}')" style="height:34px;width:34px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;">
+        <button onclick="openModalVentaInv('${p.id}')" style="height:34px;padding:0 12px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:.78rem;font-weight:700;cursor:default;">+ Venta</button>
+        <button onclick="openModalRenovarStock('${p.id}')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:.78rem;font-weight:600;cursor:default;">+ Stock</button>
+        <button onclick="openModalGastoAdicionalInv('${p.id}')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:.78rem;font-weight:600;cursor:default;">+ Gasto</button>
+        <button onclick="openModalNuevaInversion('${p.id}')" style="height:34px;width:34px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;">
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
       </div>
@@ -4396,9 +4649,9 @@ function renderDetalleInv(invId) {
         <div style="width:100%;aspect-ratio:1;overflow:hidden;border-radius:8px;background:var(--bg2);">${avatarImg}</div>
         <div style="display:flex;flex-direction:column;gap:4px;">${invBadgeEstado(p.estado)}${invBadgeStock(p.estadoStock)}</div>
         ${p.estado!=='cerrada'?`<div style="display:flex;flex-direction:column;gap:4px;margin-top:auto;">
-          ${p.estado==='activa'?`<button onclick="cambiarEstadoInv(${invIdx},'cerrada')" style="height:26px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;font-size:.68rem;color:var(--muted);">Cerrar</button>`:''}
-          ${p.estado==='activa'?`<button onclick="cambiarEstadoInv(${invIdx},'pausada')" style="height:26px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;font-size:.68rem;color:var(--muted);">Pausar</button>`:''}
-          ${p.estado==='pausada'?`<button onclick="cambiarEstadoInv(${invIdx},'activa')" style="height:26px;border:none;border-radius:6px;background:#0f2d6b;color:#fff;cursor:pointer;font-size:.68rem;">Activar</button>`:''}
+          ${p.estado==='activa'?`<button onclick="cambiarEstadoInv(${invIdx},'cerrada')" style="height:26px;border:1px solid var(--border);border-radius:6px;background:none;cursor:default;font-size:.68rem;color:var(--muted);">Cerrar</button>`:''}
+          ${p.estado==='activa'?`<button onclick="cambiarEstadoInv(${invIdx},'pausada')" style="height:26px;border:1px solid var(--border);border-radius:6px;background:none;cursor:default;font-size:.68rem;color:var(--muted);">Pausar</button>`:''}
+          ${p.estado==='pausada'?`<button onclick="cambiarEstadoInv(${invIdx},'activa')" style="height:26px;border:none;border-radius:6px;background:#0f2d6b;color:#fff;cursor:default;font-size:.68rem;">Activar</button>`:''}
         </div>`:''}
       </div>
       <!-- Info -->
@@ -4504,22 +4757,26 @@ function renderDetalleInv(invId) {
       </div>
       <div class="table-wrap">
         <table class="data-table">
-          <thead><tr><th>Fecha</th><th>Cantidad</th><th>Precio unit.</th><th>Total</th><th>Cliente</th><th>Observación</th><th></th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Cantidad</th><th>Precio unit.</th><th>Total</th><th>Ganancia</th><th>Cliente</th><th>Observación</th><th></th></tr></thead>
           <tbody>
             ${!p.ventas.length
-              ? '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:28px;font-style:italic">Sin ventas registradas</td></tr>'
-              : [...p.ventas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).map(v=>`
+              ? '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:28px;font-style:italic">Sin ventas registradas</td></tr>'
+              : [...p.ventas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).map(v=>{
+                  const totalVenta   = (v.cantidad||0)*(v.precioUnitario||0);
+                  const gananciaVenta = ((v.precioUnitario||0) - p.costoUnitario) * (v.cantidad||0);
+                  return `
                 <tr>
                   <td>${v.fecha||'—'}</td>
                   <td style="font-weight:600">${v.cantidad}</td>
                   <td>${fmtCOP(v.precioUnitario)}</td>
-                  <td style="font-weight:700;color:var(--green)">${fmtCOP((v.cantidad||0)*(v.precioUnitario||0))}</td>
+                  <td style="font-weight:700;color:var(--green)">${fmtCOP(totalVenta)}</td>
+                  <td style="font-weight:700;color:${gananciaVenta>=0?'var(--green)':'var(--red)'}">${gananciaVenta>=0?'+':''}${fmtCOP(gananciaVenta)}</td>
                   <td style="color:var(--muted)">${v.cliente||'—'}</td>
                   <td style="color:var(--muted)">${v.obs||'—'}</td>
                   <td><button class="btn btn-danger btn-sm" onclick="eliminarVentaInv('${v.id}','${p.id}')">
                     <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
                   </button></td>
-                </tr>`).join('')}
+                </tr>`;}).join('')}
           </tbody>
         </table>
       </div>
@@ -4544,10 +4801,17 @@ async function deleteInversion(idx) {
   const inv = STATE.db.inversiones[idx];
   if (!inv) return;
   pedirPinParaAccion(`Eliminar "${inv.nombre}"`, async () => {
+    // Borrado en cascada: al eliminar el producto, también se eliminan sus ventas
+    // y los ingresos que esas ventas generaron (si no, quedan movimientos "huérfanos"
+    // en el historial apuntando a una inversión que ya no existe).
+    const ventaIds = (STATE.db.ventasInv||[]).filter(v=>v.invId===inv.id).map(v=>v.id);
     STATE.db.ventasInv = (STATE.db.ventasInv||[]).filter(v=>v.invId!==inv.id);
+    if (ventaIds.length) {
+      STATE.db.ingresos = STATE.db.ingresos.filter(i => !ventaIds.includes(i.origenVentaId));
+    }
     STATE.db.inversiones.splice(idx,1);
     renderAll();
-    await saveDb(['inversiones','ventasInv']);
+    await saveDb(['inversiones','ventasInv','ingresos']);
     toast('Inversión eliminada','info');
   });
 }
@@ -4596,7 +4860,7 @@ function openModalRenovarStock(invId) {
   overlay.innerHTML = `
     <div class="modal" style="max-width:480px;width:100%;">
       <div class="modal-title"> Renovar stock — ${inv.nombre}
-        <button onclick="closeInvModal()" style="float:right;background:none;border:none;font-size:1rem;color:var(--muted);cursor:pointer;">✕</button>
+        <button onclick="closeInvModal()" style="float:right;background:none;border:none;font-size:1rem;color:var(--muted);cursor:default;">✕</button>
       </div>
       <div class="modal-body-wrap">
         <div style="background:var(--bg2);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;font-size:.85rem;color:var(--muted)">
@@ -4773,7 +5037,7 @@ function openModalGastoAdicionalInv(invId) {
   overlay.innerHTML = `
     <div class="modal" style="max-width:440px;width:100%;">
       <div class="modal-title">Gasto adicional — ${inv.nombre}
-        <button onclick="closeInvModal()" style="float:right;background:none;border:none;font-size:1rem;color:var(--muted);cursor:pointer;">✕</button>
+        <button onclick="closeInvModal()" style="float:right;background:none;border:none;font-size:1rem;color:var(--muted);cursor:default;">✕</button>
       </div>
       <div class="modal-body-wrap">
         <p style="color:var(--muted);font-size:.85rem;margin-bottom:16px;">
@@ -4938,7 +5202,6 @@ function openModalBilletera(id=null) {
     mo.className = 'modal-overlay';
     mo.id = 'modal-billetera';
     document.body.appendChild(mo);
-    mo.addEventListener('click', e => { if (e.target === mo) mo.classList.remove('open'); });
   }
 
   mo.innerHTML = `
@@ -4951,7 +5214,7 @@ function openModalBilletera(id=null) {
           <div style="font-size:1rem;font-weight:700;color:var(--text);">${b?'Editar billetera':'Nueva billetera'}</div>
           <div style="font-size:.75rem;color:var(--muted);">${b?'Modifica los datos de tu cuenta':'Registra una cuenta o método de pago'}</div>
         </div>
-        <button onclick="closeModal('modal-billetera')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:pointer;">✕</button>
+        <button onclick="closeModal('modal-billetera')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:default;">✕</button>
       </div>
       <div class="modal-body-wrap" style="padding:20px 24px;display:flex;flex-direction:column;gap:12px;">
         <div class="form-group">
@@ -4981,8 +5244,8 @@ function openModalBilletera(id=null) {
           <input type="number" class="form-control" id="fb-saldo" value="${b?.saldoInicial||0}" placeholder="0" style="height:44px;width:100%;">
           <small style="color:var(--muted);font-size:.72rem;">Cuánto tienes actualmente en esta cuenta</small>
         </div>
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--bg2);">
-          <input type="checkbox" id="fb-cobra4x1000" ${b?.cobra4x1000?'checked':''} style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:default;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--bg2);">
+          <input type="checkbox" id="fb-cobra4x1000" ${b?.cobra4x1000?'checked':''} style="width:18px;height:18px;accent-color:var(--accent);cursor:default;flex-shrink:0;">
           <div>
             <div style="font-weight:600;font-size:.88rem;">Cobra 4x1000 (GMF)</div>
             <div style="font-size:.72rem;color:var(--muted);margin-top:2px;">Para cuentas bancarias. El impuesto se registra automáticamente en cada retiro.</div>
@@ -4991,7 +5254,7 @@ function openModalBilletera(id=null) {
       </div>
       <div class="modal-actions" style="padding:16px 24px;gap:10px;">
         <button class="btn btn-ghost" onclick="closeModal('modal-billetera')" style="flex:1;">Cancelar</button>
-        <button onclick="guardarBilletera('${id||''}')" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:pointer;">
+        <button onclick="guardarBilletera('${id||''}')" style="flex:2;background:#0f2d6b;color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:.92rem;font-weight:700;cursor:default;">
           ${b?'Guardar cambios':'Crear billetera'}
         </button>
       </div>
@@ -5705,10 +5968,10 @@ function renderMovimientos() {
       <span style="font-size:.8rem;color:var(--muted);">Ingresos: <strong style="color:var(--green);">${_movBalancesVisible ? fmt(totalIng) : mask}</strong></span>
       <span style="font-size:.8rem;color:var(--muted);">Gastos: <strong style="color:var(--red);">${_movBalancesVisible ? fmt(totalGas) : mask}</strong></span>
       <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
-        <button onclick="toggleMovBalances()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:3px 10px;cursor:pointer;color:var(--muted);display:flex;align-items:center;gap:5px;font-size:.78rem;">
+        <button onclick="toggleMovBalances()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:3px 10px;cursor:default;color:var(--muted);display:flex;align-items:center;gap:5px;font-size:.78rem;">
           ${_movBalancesVisible ? eyeOpen : eyeClosed} ${_movBalancesVisible ? 'Ocultar' : 'Mostrar'}
         </button>
-        <button onclick="clearMovFilters()" title="Limpiar filtros" style="background:none;border:1px solid var(--border);border-radius:8px;padding:3px 8px;cursor:pointer;color:var(--muted);font-size:.78rem;line-height:1;">&#x2715;</button>
+        <button onclick="clearMovFilters()" title="Limpiar filtros" style="background:none;border:1px solid var(--border);border-radius:8px;padding:3px 8px;cursor:default;color:var(--muted);font-size:.78rem;line-height:1;">&#x2715;</button>
       </div>
     </div>`;
   }
@@ -5774,10 +6037,10 @@ function renderMovimientos() {
           <div style="font-weight:700;font-size:.95rem;color:${esIng?'var(--green)':'var(--red)'};white-space:nowrap;flex-shrink:0;">
             ${montoMostrar}
           </div>
-          <button onclick="abrirEditarMov('${m.tipo}','${m.id}')" title="Editar" style="background:none;border:none;cursor:pointer;color:var(--light);padding:4px 6px;border-radius:6px;flex-shrink:0;transition:color .15s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--light)'">
+          <button onclick="abrirEditarMov('${m.tipo}','${m.id}')" title="Editar" style="background:none;border:none;cursor:default;color:var(--light);padding:4px 6px;border-radius:6px;flex-shrink:0;transition:color .15s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--light)'">
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
-          <button onclick="pedirCodigoEliminarMov('${m.tipo}','${m.id}')" title="Eliminar" style="background:none;border:none;cursor:pointer;color:var(--light);padding:4px 6px;border-radius:6px;flex-shrink:0;transition:color .15s;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--light)'">
+          <button onclick="pedirCodigoEliminarMov('${m.tipo}','${m.id}')" title="Eliminar" style="background:none;border:none;cursor:default;color:var(--light);padding:4px 6px;border-radius:6px;flex-shrink:0;transition:color .15s;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--light)'">
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
           </button>
         </div>`;
@@ -5888,22 +6151,21 @@ async function guardarEdicionMov() {
   if (!desc)                return toast('La descripción es obligatoria', 'error');
 
   closeModal('modal-editar-mov');
-  showLoading();
 
   if (tipo === 'ingreso') {
     const idx = STATE.db.ingresos.findIndex(i => i.id === id);
-    if (idx === -1) { hideLoading(); return; }
+    if (idx === -1) return;
     STATE.db.ingresos[idx] = { ...STATE.db.ingresos[idx], monto, fuente: desc, fecha, cat, billeteraId: billId, ...(hora && { hora }) };
+    renderAll();
     await saveDb(['ingresos']);
   } else {
     const idx = STATE.db.gastos.findIndex(g => g.id === id);
-    if (idx === -1) { hideLoading(); return; }
+    if (idx === -1) return;
     STATE.db.gastos[idx] = { ...STATE.db.gastos[idx], monto, desc, fecha, cat, billeteraId: billId, ...(hora && { hora }) };
+    renderAll();
     await saveDb(['gastos']);
   }
 
-  hideLoading();
-  renderAll();
   toast('Movimiento actualizado ', 'success');
 }
 
@@ -5950,16 +6212,15 @@ async function confirmarEliminarMov() {
   const id   = modal.dataset.id;
   modal.classList.remove('open');
 
-  showLoading();
   if (tipo === 'ingreso') {
     STATE.db.ingresos = STATE.db.ingresos.filter(i => i.id !== id);
+    renderAll();
     await saveDb(['ingresos']);
   } else {
     STATE.db.gastos = STATE.db.gastos.filter(g => g.id !== id);
+    renderAll();
     await saveDb(['gastos']);
   }
-  hideLoading();
-  renderAll();
   toast('Movimiento eliminado', 'info');
 }
 
@@ -6073,16 +6334,16 @@ function renderRecordatorios() {
         <!-- Acciones -->
         <div style="display:flex;gap:4px;flex-shrink:0;">
           ${estado !== 'completado' ? `
-          <button onclick="completarRecordatorio('${r.id}')" title="Marcar completado" style="width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--muted)'">
+          <button onclick="completarRecordatorio('${r.id}')" title="Marcar completado" style="width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:none;cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--muted)'">
             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
           </button>` : `
-          <button onclick="completarRecordatorio('${r.id}')" title="Marcar pendiente" style="width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--green);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--muted)'" onmouseout="this.style.color='var(--green)'">
+          <button onclick="completarRecordatorio('${r.id}')" title="Marcar pendiente" style="width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:none;cursor:default;color:var(--green);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--muted)'" onmouseout="this.style.color='var(--green)'">
             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
           </button>`}
-          <button onclick="openModalRecordatorio('${r.id}')" title="Editar" style="width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
+          <button onclick="openModalRecordatorio('${r.id}')" title="Editar" style="width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:none;cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
-          <button onclick="eliminarRecordatorio('${r.id}')" title="Eliminar" style="width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--muted)'">
+          <button onclick="eliminarRecordatorio('${r.id}')" title="Eliminar" style="width:30px;height:30px;border:1px solid var(--border);border-radius:7px;background:none;cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--muted)'">
             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
           </button>
         </div>
@@ -6151,6 +6412,245 @@ async function eliminarRecordatorio(id) {
 }
 
 /* ============================================================
+   PENDIENTES — anotador rápido de tareas
+   Pensado para registrar algo al vuelo (un pendiente, un recado,
+   una idea) y marcarlo como hecho cuando se resuelva, guardando
+   la hora exacta en la que se completó.
+   ============================================================ */
+const PEND_PRIORIDAD_PESO = { alta: 3, media: 2, baja: 1 };
+const PEND_PRIORIDAD_LABEL = {
+  alta:  { label: 'Alta',  color: 'var(--red)',    badge: 'badge-red'    },
+  media: { label: 'Media', color: '#d97706',       badge: 'badge-yellow' },
+  baja:  { label: 'Baja',  color: 'var(--muted)',  badge: 'badge-blue'   },
+};
+
+function getPendientes() { return STATE.db.pendientes || []; }
+
+// ¿Está vencido? (tiene fecha límite y ya pasó, y sigue sin hacerse)
+function pendVencido(p) {
+  if (p.hecho || !p.fechaLimite) return false;
+  const hoy = fechaHoy();
+  return p.fechaLimite < hoy;
+}
+function pendEsHoy(p) {
+  if (p.hecho || !p.fechaLimite) return false;
+  return p.fechaLimite === fechaHoy();
+}
+
+// ── Badge del sidebar: cuántos pendientes activos hay (rojo si hay vencidos) ──
+function actualizarBadgePendientes() {
+  const badge = document.getElementById('pend-badge');
+  if (!badge) return;
+  const activos  = getPendientes().filter(p => !p.hecho);
+  const vencidos = activos.filter(pendVencido).length;
+  if (activos.length > 0) {
+    badge.textContent = activos.length;
+    badge.style.display = '';
+    badge.style.background = vencidos > 0 ? 'var(--red)' : '#64748b';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function setPendTab(tab) {
+  window._pendTab = tab;
+  ['activos','hechos'].forEach(t => {
+    const btn = document.getElementById(`pend-tab-btn-${t}`);
+    if (!btn) return;
+    btn.style.borderBottomColor = t === tab ? 'var(--accent)' : 'transparent';
+    btn.style.color = t === tab ? 'var(--accent)' : 'var(--muted)';
+  });
+  renderPendientes();
+}
+
+// ── Alta rápida: un texto + Enter, o el botón "Agregar" ──
+async function agregarPendiente() {
+  const input = document.getElementById('pend-input');
+  const texto = (input?.value || '').trim();
+  if (!texto) { input?.focus(); return toast('Escribe algo primero', 'error'); }
+
+  const prioridad    = document.getElementById('pend-prioridad')?.value || 'media';
+  const fechaLimite  = document.getElementById('pend-fecha')?.value || '';
+
+  if (!STATE.db.pendientes) STATE.db.pendientes = [];
+  STATE.db.pendientes.push({
+    id: uid(),
+    texto,
+    prioridad,
+    fechaLimite,
+    hecho: false,
+    fechaHecho: '',
+    horaHecho: '',
+    creadoEn: new Date().toISOString(),
+  });
+
+  // Limpiar solo el texto — dejamos la prioridad/fecha por si va a registrar varios seguidos
+  if (input) input.value = '';
+  const fechaEl = document.getElementById('pend-fecha');
+  if (fechaEl) fechaEl.value = '';
+  input?.focus();
+
+  renderPendientes();
+  actualizarBadgePendientes();
+  await saveDb(['pendientes']);
+  toast('Pendiente agregado', 'success');
+}
+
+// ── Marcar como hecho / reabrir — guarda la hora exacta al completarlo ──
+async function togglePendienteHecho(id) {
+  const p = getPendientes().find(x => x.id === id);
+  if (!p) return;
+  p.hecho = !p.hecho;
+  if (p.hecho) {
+    const ahora = new Date();
+    p.fechaHecho = fechaHoy();
+    p.horaHecho  = horaActual();
+    p._tsHecho   = ahora.getTime();
+  } else {
+    p.fechaHecho = '';
+    p.horaHecho  = '';
+    p._tsHecho   = null;
+  }
+  renderPendientes();
+  actualizarBadgePendientes();
+  await saveDb(['pendientes']);
+  toast(p.hecho ? 'Marcado como hecho ' : 'Reabierto', 'info');
+}
+
+async function eliminarPendiente(id) {
+  if (!confirm('¿Eliminar este pendiente?')) return;
+  STATE.db.pendientes = getPendientes().filter(p => p.id !== id);
+  renderPendientes();
+  actualizarBadgePendientes();
+  await saveDb(['pendientes']);
+  toast('Pendiente eliminado', 'info');
+}
+
+// ── Edición rápida en línea (clic en el lápiz → se convierte en input) ──
+function editarPendienteInline(id) {
+  window._pendEditId = id;
+  renderPendientes();
+  setTimeout(() => {
+    const el = document.getElementById('pend-edit-input-' + id);
+    if (el) { el.focus(); el.select(); }
+  }, 0);
+}
+async function guardarPendienteInline(id, valor) {
+  const p = getPendientes().find(x => x.id === id);
+  window._pendEditId = null;
+  if (!p) return renderPendientes();
+  const nuevo = (valor || '').trim();
+  if (nuevo && nuevo !== p.texto) {
+    p.texto = nuevo;
+    renderPendientes();
+    await saveDb(['pendientes']);
+    toast('Pendiente actualizado', 'success');
+  } else {
+    renderPendientes();
+  }
+}
+function cancelarEdicionPendiente() {
+  window._pendEditId = null;
+  renderPendientes();
+}
+
+function renderPendientes() {
+  const lista = document.getElementById('pend-lista');
+  const empty = document.getElementById('pend-empty');
+  if (!lista) return;
+
+  const tab = window._pendTab || 'activos';
+  const q   = (document.getElementById('pend-search')?.value || '').toLowerCase().trim();
+
+  let items = getPendientes().slice();
+  items = tab === 'hechos' ? items.filter(p => p.hecho) : items.filter(p => !p.hecho);
+  if (q) items = items.filter(p => (p.texto || '').toLowerCase().includes(q));
+
+  if (tab === 'activos') {
+    // Lógica de orden: primero lo vencido, luego por prioridad, luego lo más reciente
+    items.sort((a, b) => {
+      const va = pendVencido(a) ? 1 : 0, vb = pendVencido(b) ? 1 : 0;
+      if (va !== vb) return vb - va;
+      const pa = PEND_PRIORIDAD_PESO[a.prioridad] || 2, pb = PEND_PRIORIDAD_PESO[b.prioridad] || 2;
+      if (pa !== pb) return pb - pa;
+      return (b.creadoEn || '').localeCompare(a.creadoEn || '');
+    });
+  } else {
+    // Completados: el más reciente primero
+    items.sort((a, b) => (b._tsHecho || 0) - (a._tsHecho || 0) || (b.creadoEn||'').localeCompare(a.creadoEn||''));
+  }
+
+  if (!items.length) {
+    lista.innerHTML = '';
+    if (empty) {
+      empty.style.display = '';
+      const p = empty.querySelector('p');
+      if (p) p.textContent = tab === 'hechos' ? 'Aún no has marcado nada como hecho.' : 'No tienes pendientes. ¡Vas al día!';
+    }
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  lista.innerHTML = items.map(p => {
+    const pr = PEND_PRIORIDAD_LABEL[p.prioridad] || PEND_PRIORIDAD_LABEL.media;
+    const vencido = pendVencido(p);
+    const esHoy   = pendEsHoy(p);
+    const editando = window._pendEditId === p.id;
+
+    let borderColor = pr.color;
+    if (p.hecho) borderColor = 'var(--green)';
+    else if (vencido) borderColor = 'var(--red)';
+
+    let fechaBadge = '';
+    if (p.fechaLimite && !p.hecho) {
+      if (vencido) fechaBadge = `<span class="badge badge-red" style="font-size:.68rem;">Vencido · ${formatFechaLarga(p.fechaLimite)}</span>`;
+      else if (esHoy) fechaBadge = `<span class="badge" style="background:#fef3c7;color:#92400e;font-size:.68rem;">Vence hoy</span>`;
+      else fechaBadge = `<span class="badge" style="background:#eff6ff;color:#2563eb;font-size:.68rem;">Vence ${formatFechaLarga(p.fechaLimite)}</span>`;
+    }
+
+    const textoHtml = editando
+      ? `<input type="text" id="pend-edit-input-${p.id}" class="form-control" value="${(p.texto||'').replace(/"/g,'&quot;')}"
+           style="height:32px;font-size:.9rem;font-weight:600;"
+           onkeydown="if(event.key==='Enter'){guardarPendienteInline('${p.id}', this.value);} if(event.key==='Escape'){cancelarEdicionPendiente();}"
+           onblur="guardarPendienteInline('${p.id}', this.value)">`
+      : `<span style="font-weight:600;font-size:.93rem;color:var(--text);${p.hecho?'text-decoration:line-through;opacity:.65;':''}">${p.texto}</span>`;
+
+    return `
+    <div style="background:var(--card);border:1px solid var(--border);border-left:3px solid ${borderColor};border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 16px;margin-bottom:8px;display:flex;align-items:flex-start;gap:12px;${p.hecho?'opacity:.7;':''}">
+      <!-- Checkbox circular -->
+      <button onclick="togglePendienteHecho('${p.id}')" title="${p.hecho ? 'Reabrir' : 'Marcar como hecho'}"
+        style="width:24px;height:24px;border-radius:50%;flex-shrink:0;margin-top:2px;cursor:default;display:flex;align-items:center;justify-content:center;
+        border:2px solid ${p.hecho ? 'var(--green)' : 'var(--border)'};background:${p.hecho ? 'var(--green)' : 'transparent'};transition:all .15s;">
+        ${p.hecho ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+      </button>
+
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+          ${textoHtml}
+          ${!p.hecho ? `<span class="badge ${pr.badge}" style="font-size:.68rem;">${pr.label}</span>` : ''}
+          ${fechaBadge}
+        </div>
+        <div style="font-size:.72rem;color:var(--muted);">
+          ${p.hecho
+            ? `Hecho el ${formatFechaLarga(p.fechaHecho)} a las ${p.horaHecho || '—'}`
+            : `Agregado ${formatFechaLarga((p.creadoEn||'').slice(0,10))}`}
+        </div>
+      </div>
+
+      <div style="display:flex;gap:4px;flex-shrink:0;">
+        ${!p.hecho ? `
+        <button onclick="editarPendienteInline('${p.id}')" title="Editar" style="width:28px;height:28px;border:1px solid var(--border);border-radius:7px;background:none;cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>` : ''}
+        <button onclick="eliminarPendiente('${p.id}')" title="Eliminar" style="width:28px;height:28px;border:1px solid var(--border);border-radius:7px;background:none;cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--muted)'">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ============================================================
    MULTI-USUARIO
    ============================================================ */
 const MODULOS_DISPONIBLES = [
@@ -6162,6 +6662,7 @@ const MODULOS_DISPONIBLES = [
   { id: 'billeteras',  label: 'Billeteras' },
   { id: 'reportes',    label: 'Reportes' },
   { id: 'claves',      label: 'Contraseñas' },
+  { id: 'pendientes',  label: 'Pendientes' },
 ];
 
 function renderConfigUsuarios() {
@@ -6191,8 +6692,8 @@ function renderConfigUsuarios() {
           <div style="font-size:.72rem;color:var(--muted);">${activo?'Activo':'Desactivado'} · ${(u.modulos||[]).length||'Todos'} módulos</div>
         </div>
         <div style="display:flex;gap:6px;">
-          <button onclick="abrirEditarUsuario('${u.id}')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer;color:var(--accent);font-size:.75rem;font-weight:600;">Editar</button>
-          <button onclick="pedirCodigoDesactivar('${u.id}','${u.nombre}',${activo})" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer;color:${activo?'var(--red)':'var(--green)'};font-size:.75rem;font-weight:600;">${activo?'Desactivar':'Activar'}</button>
+          <button onclick="abrirEditarUsuario('${u.id}')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:default;color:var(--accent);font-size:.75rem;font-weight:600;">Editar</button>
+          <button onclick="pedirCodigoDesactivar('${u.id}','${u.nombre}',${activo})" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:default;color:${activo?'var(--red)':'var(--green)'};font-size:.75rem;font-weight:600;">${activo?'Desactivar':'Activar'}</button>
         </div>
       </div>`;
     }).join('');
@@ -6212,15 +6713,12 @@ async function guardarNuevoUsuario() {
   if (pin.length !== 4 || !/^\d+$/.test(pin)) return toast('El PIN debe ser 4 dígitos', 'error');
   const id = 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
   const pinHash = await sha256(pin);
-  showLoading();
   try {
     await window.__FB.createUsuario(id, nombre, pinHash);
-    hideLoading();
     closeModal('modal-nuevo-usuario');
     toast(`Usuario "${nombre}" creado `, 'success');
     renderConfigUsuarios();
   } catch(e) {
-    hideLoading();
     toast('Error creando usuario', 'error');
     console.error(e);
   }
@@ -6238,7 +6736,7 @@ async function abrirEditarUsuario(id) {
   const cont = document.getElementById('eu-modulos');
   const activos = u.modulos || MODULOS_DISPONIBLES.map(m => m.id); // si no tiene, todos activos
   cont.innerHTML = MODULOS_DISPONIBLES.map(m => `
-    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;font-size:.85rem;">
+    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:default;font-size:.85rem;">
       <input type="checkbox" value="${m.id}" ${activos.includes(m.id)?'checked':''} style="width:16px;height:16px;accent-color:var(--accent);">
       ${m.label}
     </label>`).join('');
@@ -6250,16 +6748,13 @@ async function guardarEdicionUsuario() {
   const nombre = document.getElementById('eu-nombre').value.trim();
   if (!nombre) return toast('El nombre es obligatorio', 'error');
   const modulosChecked = [...document.getElementById('eu-modulos').querySelectorAll('input:checked')].map(i => i.value);
-  showLoading();
   try {
     const { setDoc, doc } = window.__FB;
     await window.__FB.updateUsuario(_editUserId, { nombre, modulos: modulosChecked });
-    hideLoading();
     closeModal('modal-editar-usuario');
     toast('Usuario actualizado ', 'success');
     renderConfigUsuarios();
   } catch(e) {
-    hideLoading();
     toast('Error actualizando usuario', 'error');
     console.error(e);
   }
@@ -6292,14 +6787,11 @@ async function confirmarDesactivarUsuario() {
     return;
   }
   closeModal('modal-desactivar-usuario');
-  showLoading();
   try {
     await window.__FB.updateUsuario(_toggleUserId, { activo: !_toggleActivo });
-    hideLoading();
     toast(`Usuario "${_toggleNombre}" ${_toggleActivo ? 'desactivado' : 'activado'}`, 'info');
     renderConfigUsuarios();
   } catch(e) {
-    hideLoading();
     toast('Error actualizando usuario', 'error');
   }
 }
@@ -6636,7 +7128,7 @@ function renderBilleteras() {
     const expanded = localStorage.getItem('bill_ocultas_expanded') === 'true';
     ocultasEl.innerHTML = `
       <div style="margin-top:20px;">
-        <button onclick="toggleBillOcultas()" style="display:flex;align-items:center;gap:8px;background:none;border:none;cursor:pointer;padding:0;margin-bottom:${expanded?'12px':'0'};">
+        <button onclick="toggleBillOcultas()" style="display:flex;align-items:center;gap:8px;background:none;border:none;cursor:default;padding:0;margin-bottom:${expanded?'12px':'0'};">
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
           <span style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);">Billeteras ocultas (${ocultas.length})</span>
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2.5" style="transition:transform .2s;transform:rotate(${expanded?'180':'0'}deg)"><polyline points="6 9 12 15 18 9"/></svg>
@@ -6734,6 +7226,10 @@ function renderBilleterasDashWidget() {
    REPORTES & MÉTRICAS
    ============================================================ */
 function renderReportes() {
+  // Evita recalcular y redibujar la gráfica SVG en cada guardado si el usuario
+  // no está viendo esta página — es el cálculo más pesado de renderAll().
+  // Al navegar a "reportes", navigate() vuelve a llamar renderAll() y aquí sí se dibuja.
+  if (STATE.currentPage !== 'reportes') return;
   const periodoSel = document.getElementById('rep-periodo');
   const mesDetSel  = document.getElementById('rep-mes-detalle');
   if (!periodoSel) return;
@@ -6979,22 +7475,12 @@ function clearForm(ids) {
   });
 }
 
-// Close modals on overlay click
-const MODALES_PROTEGIDOS = ['modal-nuevo-ingreso', 'modal-nuevo-gasto'];
-
-document.querySelectorAll('.modal-overlay').forEach(overlay => {
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay && !MODALES_PROTEGIDOS.includes(overlay.id)) {
-      overlay.classList.remove('open');
-    }
-  });
-});
-
-// Close inv form overlay on backdrop click
-document.addEventListener('click', e => {
-  const overlay = document.getElementById('modal-inv-form-overlay');
-  if (overlay && e.target === overlay) closeInvModal();
-});
+// Los modales ya NO se cierran al hacer clic afuera (fuera del cuadro) —
+// esto evita perder lo que se estaba llenando en un formulario por un clic
+// accidental. Ahora solo se cierran con su botón "Cancelar", la "✕", o al
+// guardar. (Antes solo un par de modales estaban "protegidos"; ahora aplica
+// a todos por igual.)
+const MODALES_PROTEGIDOS = [];
 
 // Keyboard: Enter on PIN
 document.addEventListener('keydown', e => {
