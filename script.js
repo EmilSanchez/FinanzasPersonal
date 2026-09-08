@@ -231,6 +231,7 @@ async function saveDb(coleccionesEspecificas = null) {
    ============================================================ */
 let _savingToastEl = null;
 let _savingToastCount = 0; // soporta varios guardados encimados sin duplicar el toast
+let _savingToastShownAt = 0;
 function showSavingToast() {
   _savingToastCount++;
   if (_savingToastEl) return; // ya hay uno visible, no duplicar
@@ -241,20 +242,28 @@ function showSavingToast() {
   el.innerHTML = `<span class="toast-spinner"></span><span>Guardando...</span>`;
   c.appendChild(el);
   _savingToastEl = el;
+  _savingToastShownAt = Date.now();
 }
 function resolveSavingToast(ok = true, customMsg = null) {
   _savingToastCount = Math.max(0, _savingToastCount - 1);
   if (_savingToastCount > 0) return; // todavía hay otro guardado en curso, esperar a que termine
   const el = _savingToastEl;
-  _savingToastEl = null;
   if (!el) return;
-  el.className = `toast ${ok ? 'success' : 'error'}`;
-  const ico = ok ? '&#10003;' : '&#10007;';
-  el.innerHTML = `<span>${ico}</span><span>${customMsg || (ok ? 'Guardado' : 'Error al guardar')}</span>`;
+  // El guardado ahora es tan rápido (guarda solo lo que cambió, no toda la
+  // colección) que el aviso podía aparecer y desaparecer en menos de un
+  // parpadeo. Lo dejamos visible al menos 450ms para que siempre se note.
+  const transcurrido = Date.now() - _savingToastShownAt;
+  const espera = Math.max(0, 450 - transcurrido);
   setTimeout(() => {
-    el.style.animation = 'toastOut .3s ease forwards';
-    setTimeout(() => el.remove(), 300);
-  }, ok ? 1300 : 3000);
+    _savingToastEl = null;
+    el.className = `toast ${ok ? 'success' : 'error'}`;
+    const ico = ok ? '&#10003;' : '&#10007;';
+    el.innerHTML = `<span>${ico}</span><span>${customMsg || (ok ? 'Guardado' : 'Error al guardar')}</span>`;
+    setTimeout(() => {
+      el.style.animation = 'toastOut .3s ease forwards';
+      setTimeout(() => el.remove(), 300);
+    }, ok ? 1300 : 3000);
+  }, espera);
 }
 
 // Espera a que Firebase esté listo, con timeout en ms

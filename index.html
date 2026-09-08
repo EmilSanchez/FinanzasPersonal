@@ -87,7 +87,7 @@
   }
 
   // ── Colecciones en Firestore ──
-  const COLLECTIONS = ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras','transferencias','recordatorios'];
+  const COLLECTIONS = ['ingresos','gastos','deudas','pass','prestamos','gastosFijos','inversiones','ventasInv','billeteras','transferencias','recordatorios','pendientes'];
 
   // ── Helper: prefijo de colección según usuario activo ──
   // Admin usa colecciones raíz. Otros usuarios usan usuarios/{id}/{col}
@@ -135,11 +135,19 @@
   };
 
   // ── Cargar todos los datos del usuario activo ──
+  // De paso, guarda una "foto" de lo que hay en Firestore ahora mismo
+  // (id -> JSON del documento). saveCollection la usa después para saber
+  // qué cambió sin tener que volver a leer toda la colección cada vez.
   window.__FB.loadAll = async function() {
     const result = {};
+    window.__FB._lastSynced = {};
     for (const col of COLLECTIONS) {
       const snap = await getDocs(userCol(col));
-      result[col] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      result[col] = items;
+      const mapa = new Map();
+      items.forEach(it => mapa.set(it.id, JSON.stringify(it)));
+      window.__FB._lastSynced[col] = mapa;
     }
     return result;
   };
@@ -148,26 +156,57 @@
   window.__FB.save = async function(colName, item) {
     if (!item.id) item.id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
     await setDoc(userDoc(colName, item.id), item);
+    // Reflejar en la "foto" local para que el próximo saveCollection no lo re-escriba
+    if (!window.__FB._lastSynced) window.__FB._lastSynced = {};
+    if (!window.__FB._lastSynced[colName]) window.__FB._lastSynced[colName] = new Map();
+    window.__FB._lastSynced[colName].set(item.id, JSON.stringify(item));
     return item;
   };
 
   // ── Eliminar un documento ──
   window.__FB.remove = async function(colName, id) {
     await deleteDoc(userDoc(colName, id));
+    window.__FB._lastSynced?.[colName]?.delete(id);
   };
 
-  // ── Guardar array completo de una colección (batch) ──
+  // ── Guardar array completo de una colección ──
+  // Antes esto leía TODOS los documentos de Firestore (getDocs) y reescribía
+  // TODOS los items en cada guardado, sin importar si solo cambió uno — por
+  // eso registrar un solo gasto podía sentirse lento si ya había muchos
+  // movimientos acumulados. Ahora se compara contra la última "foto" conocida
+  // (guardada en memoria, sin red) y solo se escriben/borran los documentos
+  // que realmente cambiaron.
   window.__FB.saveCollection = async function(colName, items) {
-    const batch = writeBatch(db_firebase);
-    const snap = await getDocs(userCol(colName));
-    snap.docs.forEach(d => {
-      if (!items.find(i => i.id === d.id)) batch.delete(d.ref);
-    });
+    if (!window.__FB._lastSynced) window.__FB._lastSynced = {};
+    let previo = window.__FB._lastSynced[colName];
+
+    // Si todavía no tenemos una "foto" de esta colección (primer guardado de
+    // la sesión, antes de cualquier loadAll), la construimos una sola vez.
+    if (!previo) {
+      const snap = await getDocs(userCol(colName));
+      previo = new Map();
+      snap.docs.forEach(d => previo.set(d.id, JSON.stringify(d.data())));
+      window.__FB._lastSynced[colName] = previo;
+    }
+
     items.forEach(item => {
       if (!item.id) item.id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-      batch.set(userDoc(colName, item.id), item);
     });
+
+    const idsAhora = new Set(items.map(i => i.id));
+    const paraBorrar = [...previo.keys()].filter(id => !idsAhora.has(id));
+    const paraGuardar = items.filter(item => previo.get(item.id) !== JSON.stringify(item));
+
+    if (!paraBorrar.length && !paraGuardar.length) return; // nada cambió, no gastamos una escritura
+
+    const batch = writeBatch(db_firebase);
+    paraBorrar.forEach(id => batch.delete(userDoc(colName, id)));
+    paraGuardar.forEach(item => batch.set(userDoc(colName, item.id), item));
     await batch.commit();
+
+    // Actualizar la "foto" local con el resultado
+    paraBorrar.forEach(id => previo.delete(id));
+    paraGuardar.forEach(item => previo.set(item.id, JSON.stringify(item)));
   };
 
   // ── Gestión de usuarios (solo admin) ──
