@@ -3827,11 +3827,19 @@ function calcInversion(inv) {
 function enriquecerInversion(inv) {
   const ventas         = getVentasInv(inv.id);
   const inversionTotal = calcInversion(inv);
-  const cantidad       = Number(inv.unidades||0);
+  const cantidad       = Number(inv.unidades||0); // total pedido histórico (todas las compras/renovaciones)
   const costoUnitario  = cantidad > 0 ? inversionTotal / cantidad : 0;
   const unidadesVendidas = ventas.reduce((s,v)=>s+(v.cantidad||0), 0);
   const totalRecuperado  = ventas.reduce((s,v)=>s+((v.cantidad||0)*(v.precioUnitario||0)), 0);
-  const stockActual    = cantidad - unidadesVendidas;
+
+  // Unidades que ya llegaron físicamente a bodega. Si el campo nunca se ha
+  // usado (inversiones creadas antes de este seguimiento), se asume que ya
+  // llegó todo lo pedido, para no romper el stock de lo que ya existía.
+  const unidadesLlegadas = (inv.unidadesEnBodega !== undefined && inv.unidadesEnBodega !== null)
+    ? Number(inv.unidadesEnBodega) : cantidad;
+  const unidadesPendientesLlegar = Math.max(0, cantidad - unidadesLlegadas);
+
+  const stockActual    = Math.max(0, unidadesLlegadas - unidadesVendidas);
   const costoVendido   = costoUnitario * unidadesVendidas;
   const ganancia       = totalRecuperado - costoVendido;
   const recuperacionPct = inversionTotal > 0 ? (totalRecuperado/inversionTotal)*100 : 0;
@@ -3840,8 +3848,10 @@ function enriquecerInversion(inv) {
   else if (cantidad > 0 && stockActual <= Math.ceil(cantidad*0.2)) estadoStock = 'bajo';
   return { ...inv, inversionTotal, costoUnitario, unidadesVendidas,
     totalRecuperado, stockActual, ganancia, recuperacionPct, estadoStock, ventas,
+    unidadesPedidas: cantidad, unidadesLlegadas, unidadesPendientesLlegar,
     gastosAdicionales: inv.gastosAdicionales || [],
-    renovaciones: inv.renovaciones || [] };
+    renovaciones: inv.renovaciones || [],
+    llegadasBodega: inv.llegadasBodega || [] };
 }
 
 function getResumenInversiones() {
@@ -4087,6 +4097,8 @@ function renderInversiones() {
             <div id="inv-menu-${p.id}" class="inv-dropdown" style="display:none;position:absolute;top:32px;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-md);z-index:20;min-width:170px;overflow:hidden;text-align:left;">
               <button onclick="openModalVentaInv('${p.id}');toggleInvMenu('${p.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;border:none;background:none;cursor:default;font-size:.8rem;color:var(--text);" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='none'">Registrar venta</button>
               <button onclick="openModalRenovarStock('${p.id}');toggleInvMenu('${p.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;border:none;background:none;cursor:default;font-size:.8rem;color:var(--text);" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='none'">Renovar stock</button>
+              ${p.unidadesPendientesLlegar>0?`<button onclick="openModalLlegadaBodega('${p.id}');toggleInvMenu('${p.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;border:none;background:none;cursor:default;font-size:.8rem;color:#b45309;" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='none'">Llegó a bodega (${p.unidadesPendientesLlegar} pend.)</button>
+              <button onclick="marcarTodoRecibido('${p.id}');toggleInvMenu('${p.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;border:none;background:none;cursor:default;font-size:.8rem;color:var(--muted);" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='none'">¿Ya llegó todo? Corregir</button>`:''}
               <button onclick="deleteInversion(${idx});toggleInvMenu('${p.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;border:none;background:none;cursor:default;font-size:.8rem;color:var(--red);border-top:1px solid var(--border-light);" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='none'">Eliminar</button>
             </div>
           </div>
@@ -4366,6 +4378,7 @@ function openModalNuevaInversion(id=null) {
   const inv = id ? STATE.db.inversiones.find(i=>i.id===id) : null;
   const titulo = inv ? 'Editar inversión' : 'Nueva inversión';
   const ymd = fechaHoy();
+  window._fiModoPrecio = 'unitario';
 
   const overlay = document.getElementById('modal-inv-form-overlay');
   overlay.innerHTML = `
@@ -4406,8 +4419,13 @@ function openModalNuevaInversion(id=null) {
         <div style="margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border-light);">
           <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;margin-bottom:10px;">Costos e inversión</div>
           <div class="form-grid">
-            <div class="form-group"><label>Precio compra USD *</label>
+            <div class="form-group"><label id="fi-precio-label">Precio por unidad (USD) *</label>
+              <div style="display:flex;gap:0;margin-bottom:6px;border:1px solid var(--border);border-radius:7px;overflow:hidden;width:fit-content;">
+                <button type="button" id="fi-modo-unitario" onclick="setModoPrecioInv('unitario')" style="height:26px;padding:0 10px;border:none;font-size:.7rem;font-weight:600;cursor:default;background:#0f2d6b;color:#fff;">Por unidad</button>
+                <button type="button" id="fi-modo-total" onclick="setModoPrecioInv('total')" style="height:26px;padding:0 10px;border:none;font-size:.7rem;font-weight:600;cursor:default;background:none;color:var(--muted);">Total compra</button>
+              </div>
               <input type="number" class="form-control" id="fi-precio-usd" value="${inv?.precioUSD||''}" step="0.01" placeholder="0.00" oninput="calcPreviewInv()">
+              <small id="fi-precio-hint" style="color:var(--muted);font-size:.72rem;display:block;margin-top:4px;"></small>
             </div>
             <div class="form-group"><label>Tasa dólar (COP) *</label>
               <input type="number" class="form-control" id="fi-tasa" value="${inv?.tasa||4200}" oninput="calcPreviewInv()">
@@ -4459,8 +4477,8 @@ function openModalNuevaInversion(id=null) {
               <div id="fi-bill-aviso" style="display:none;margin-top:5px;font-size:.78rem;color:var(--red);font-weight:600;"></div>
             </div>
             <div class="form-group"><label> Unidades en bodega (recibidas)</label>
-              <input type="number" class="form-control" id="fi-bodega" value="${inv?.unidadesEnBodega||''}" placeholder="0">
-              <small style="color:var(--muted);font-size:.72rem">Cuántas ya tienes físicamente</small>
+              <input type="number" class="form-control" id="fi-bodega" value="${inv?.unidadesEnBodega??''}" placeholder="Ej: 0">
+              <small style="color:var(--muted);font-size:.72rem">Cuántas ya tienes físicamente. Si dejas menos que la cantidad comprada, el resto queda como pendiente por llegar (puedes irlo registrando después con "Llegó a bodega")</small>
             </div>
             <div class="form-group" style="grid-column:1/-1"><label>Notas / Observaciones</label>
               <input type="text" class="form-control" id="fi-notas" value="${inv?.notas||''}" placeholder="Pedido Amazon #, observaciones...">
@@ -4476,7 +4494,7 @@ function openModalNuevaInversion(id=null) {
       </div>
     </div>`;
   overlay.style.display='flex';
-  setTimeout(calcPreviewInv, 50);
+  setTimeout(() => { setModoPrecioInv('unitario'); }, 50);
 }
 
 function closeInvModal() {
@@ -4484,16 +4502,42 @@ function closeInvModal() {
   if(o) { o.style.display='none'; o.innerHTML=''; }
 }
 
+function setModoPrecioInv(modo) {
+  window._fiModoPrecio = modo;
+  const btnU = document.getElementById('fi-modo-unitario');
+  const btnT = document.getElementById('fi-modo-total');
+  if (btnU && btnT) {
+    btnU.style.background = modo==='unitario' ? '#0f2d6b' : 'none';
+    btnU.style.color      = modo==='unitario' ? '#fff' : 'var(--muted)';
+    btnT.style.background = modo==='total' ? '#0f2d6b' : 'none';
+    btnT.style.color      = modo==='total' ? '#fff' : 'var(--muted)';
+  }
+  const label = document.getElementById('fi-precio-label');
+  const inp   = document.getElementById('fi-precio-usd');
+  if (label) label.textContent = modo==='total' ? 'Precio TOTAL de la compra (USD) *' : 'Precio por unidad (USD) *';
+  if (inp)   inp.placeholder   = modo==='total' ? 'Ej: 250.00' : 'Ej: 12.50';
+  calcPreviewInv();
+}
+
 function calcPreviewInv() {
-  const usd  = parseFloat(document.getElementById('fi-precio-usd')?.value)||0;
+  const raw  = parseFloat(document.getElementById('fi-precio-usd')?.value)||0;
   const tasa = parseFloat(document.getElementById('fi-tasa')?.value)||0;
   const cant = parseFloat(document.getElementById('fi-unidades')?.value)||0;
   const env  = parseFloat(document.getElementById('fi-envio')?.value)||0;
   const otr  = parseFloat(document.getElementById('fi-otros')?.value)||0;
-  const inv  = (usd*tasa*cant)+env+otr;
+  const modo = window._fiModoPrecio || 'unitario';
+  const usdUnit = (modo === 'total' && cant > 0) ? raw / cant : raw;
+  const inv  = (usdUnit*tasa*cant)+env+otr;
   const unit = cant>0?inv/cant:0;
   const e1=document.getElementById('prev-inv-total'); if(e1) e1.textContent=fmtCOP(inv);
   const e2=document.getElementById('prev-inv-unit');  if(e2) e2.textContent=fmtCOP(unit);
+
+  const hint = document.getElementById('fi-precio-hint');
+  if (hint) {
+    if (modo === 'total' && cant > 0 && raw > 0) hint.textContent = `Equivale a $${usdUnit.toFixed(2)} USD por unidad`;
+    else if (modo === 'unitario' && cant > 0 && raw > 0) hint.textContent = `Total de la compra: $${(raw*cant).toFixed(2)} USD`;
+    else hint.textContent = '';
+  }
 
   // Actualizar aviso de saldo en tiempo real
   const billSel = document.getElementById('fi-billetera');
@@ -4515,9 +4559,14 @@ function calcPreviewInv() {
 
 async function guardarInversion(id=null) {
   const nombre    = document.getElementById('fi-nombre')?.value.trim();
-  const precioUSD = parseFloat(document.getElementById('fi-precio-usd')?.value)||0;
-  const tasa      = parseFloat(document.getElementById('fi-tasa')?.value)||0;
   const unidades  = parseInt(document.getElementById('fi-unidades')?.value)||0;
+  const precioRaw = parseFloat(document.getElementById('fi-precio-usd')?.value)||0;
+  // Si el modo es "Total compra", el número que se escribió es el total en
+  // USD de toda la compra — se convierte a precio por unidad para guardar
+  // (el resto de la app siempre trabaja con precio unitario).
+  const modoPrecio = window._fiModoPrecio || 'unitario';
+  const precioUSD = (modoPrecio === 'total' && unidades > 0) ? precioRaw / unidades : precioRaw;
+  const tasa      = parseFloat(document.getElementById('fi-tasa')?.value)||0;
   const fecha     = document.getElementById('fi-fecha')?.value;
 
   if(!nombre) return toast('El nombre es obligatorio','error');
@@ -4773,6 +4822,7 @@ function renderDetalleInv(invId) {
       <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;">
         <button onclick="openModalVentaInv('${p.id}')" style="height:34px;padding:0 12px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:.78rem;font-weight:700;cursor:default;">+ Venta</button>
         <button onclick="openModalRenovarStock('${p.id}')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:.78rem;font-weight:600;cursor:default;">+ Stock</button>
+        ${p.unidadesPendientesLlegar>0?`<button onclick="openModalLlegadaBodega('${p.id}')" style="height:34px;padding:0 12px;border:none;border-radius:8px;background:#b45309;color:#fff;font-size:.78rem;font-weight:700;cursor:default;">Llegó a bodega</button>`:''}
         <button onclick="openModalGastoAdicionalInv('${p.id}')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:.78rem;font-weight:600;cursor:default;">+ Gasto</button>
         <button onclick="openModalNuevaInversion('${p.id}')" style="height:34px;width:34px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;">
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -4818,6 +4868,20 @@ function renderDetalleInv(invId) {
         </div>`).join('')}
     </div>
 
+    <!-- Progreso de llegada a bodega (si hay pedido pendiente) -->
+    ${p.unidadesPendientesLlegar>0?`
+    <div class="section" style="padding:11px 16px;margin-bottom:12px;border-left:3px solid #b45309;">
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:.77rem;color:var(--muted);margin-bottom:4px;flex-wrap:wrap;gap:8px;">
+        <span>${fmtNum(p.unidadesLlegadas)} / ${fmtNum(p.unidadesPedidas)} unidades en bodega — faltan <strong style="color:#b45309;">${fmtNum(p.unidadesPendientesLlegar)}</strong> por llegar</span>
+        <span style="display:flex;gap:14px;">
+          <button onclick="marcarTodoRecibido('${p.id}')" style="border:none;background:none;color:var(--muted);cursor:default;font-size:.74rem;padding:0;text-decoration:underline;">¿Ya llegó todo? Corregir</button>
+          <button onclick="openModalLlegadaBodega('${p.id}')" style="border:none;background:none;color:var(--accent);font-weight:700;cursor:default;font-size:.76rem;padding:0;">Llegó a bodega</button>
+        </span>
+      </div>
+      <div class="progress-bar" style="height:7px;border-radius:10px;">
+        <div class="progress-fill" style="width:${p.unidadesPedidas>0?Math.round(p.unidadesLlegadas/p.unidadesPedidas*100):0}%;background:#b45309;border-radius:10px;"></div>
+      </div>
+    </div>`:''}
     <!-- Progreso -->
     ${p.unidades>0?`
     <div class="section" style="padding:11px 16px;margin-bottom:12px;">
@@ -4848,6 +4912,28 @@ function renderDetalleInv(invId) {
                 <td style="color:var(--orange)">${fmtCOP(r.envio||0)}</td>
                 <td style="font-weight:600">${fmtCOP(r.inversionNueva)}</td>
                 <td style="color:var(--muted);font-size:.82rem">${r.notas||'—'}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>` : ''}
+
+    <!-- Historial de llegadas a bodega -->
+    ${p.llegadasBodega && p.llegadasBodega.length ? `
+    <div class="section" style="margin-bottom:14px;">
+      <div class="section-header">
+        <span class="section-title">Llegadas a bodega (${p.llegadasBodega.length})</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Fecha</th><th>Hora</th><th>Unidades</th><th>Notas</th></tr></thead>
+          <tbody>
+            ${[...p.llegadasBodega].reverse().map(l=>`
+              <tr>
+                <td>${l.fecha||'—'}</td>
+                <td style="color:var(--muted);">${l.hora||'—'}</td>
+                <td style="color:#b45309;font-weight:600">+${l.cantidad}</td>
+                <td style="color:var(--muted);font-size:.82rem">${l.notas||'—'}</td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -4994,23 +5080,39 @@ function openModalRenovarStock(invId) {
     </option>`;
   }).join('');
 
+  const avatarImg = p.imagen
+    ? `<img src="${p.imagen}" alt="" style="width:100%;height:100%;object-fit:contain;background:var(--bg2);border-radius:10px;" onerror="this.style.display='none'">`
+    : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:1.3rem;font-weight:700;color:var(--accent);background:var(--accent-light);border-radius:10px;">${(p.nombre||'?')[0].toUpperCase()}</div>`;
+
   const overlay = document.getElementById('modal-inv-form-overlay');
   overlay.innerHTML = `
-    <div class="modal" style="max-width:480px;width:100%;">
-      <div class="modal-title"> Renovar stock — ${inv.nombre}
-        <button onclick="closeInvModal()" style="float:right;background:none;border:none;font-size:1rem;color:var(--muted);cursor:default;">✕</button>
-      </div>
-      <div class="modal-body-wrap">
-        <div style="background:var(--bg2);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;font-size:.85rem;color:var(--muted)">
-          Stock actual: <strong style="color:var(--text)">${p.stockActual} uds</strong> ·
-          Costo unitario actual: <strong style="color:var(--text)">${fmtCOP(p.costoUnitario)}</strong>
+    <div class="modal" style="max-width:640px;width:100%;max-height:88vh;display:flex;flex-direction:column;">
+      <div class="modal-title" style="display:flex;align-items:center;gap:12px;padding:18px 22px;flex-shrink:0;">
+        <div style="width:44px;height:44px;flex-shrink:0;aspect-ratio:1;">${avatarImg}</div>
+        <div style="min-width:0;">
+          <div style="font-size:.98rem;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Renovar stock</div>
+          <div style="font-size:.78rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${inv.nombre}</div>
         </div>
-        <div class="form-grid">
+        <button onclick="closeInvModal()" style="margin-left:auto;background:none;border:none;font-size:1.1rem;color:var(--muted);cursor:default;flex-shrink:0;">✕</button>
+      </div>
+      <div class="modal-body-wrap" style="overflow-y:auto;padding:18px 22px;">
+        <div style="background:var(--bg2);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;font-size:.85rem;color:var(--muted);display:flex;gap:20px;flex-wrap:wrap;">
+          <span>Stock actual: <strong style="color:var(--text)">${p.stockActual} uds</strong></span>
+          <span>Costo unitario actual: <strong style="color:var(--text)">${fmtCOP(p.costoUnitario)}</strong></span>
+        </div>
+        <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;">
           <div class="form-group"><label>Nuevas unidades *</label>
             <input type="number" class="form-control" id="rs-unidades" placeholder="Ej: 6" oninput="calcRenovarPreview()">
           </div>
-          <div class="form-group"><label>Precio compra USD *</label>
+          <div class="form-group"><label id="rs-precio-label">Precio por unidad (USD) *</label>
             <input type="number" class="form-control" id="rs-precio-usd" value="${inv.precioUSD||''}" step="0.01" oninput="calcRenovarPreview()">
+            <small id="rs-precio-hint" style="color:var(--muted);font-size:.72rem;display:block;margin-top:4px;"></small>
+          </div>
+          <div class="form-group"><label>Modo de precio</label>
+            <div style="display:flex;border:1px solid var(--border);border-radius:7px;overflow:hidden;height:38px;">
+              <button type="button" id="rs-modo-unitario" onclick="setModoPrecioRenovar('unitario')" style="flex:1;border:none;font-size:.72rem;font-weight:600;cursor:default;background:#0f2d6b;color:#fff;">Por unidad</button>
+              <button type="button" id="rs-modo-total" onclick="setModoPrecioRenovar('total')" style="flex:1;border:none;border-left:1px solid var(--border);font-size:.72rem;font-weight:600;cursor:default;background:none;color:var(--muted);">Total compra</button>
+            </div>
           </div>
           <div class="form-group"><label>Tasa dólar (COP)</label>
             <input type="number" class="form-control" id="rs-tasa" value="${inv.tasa||4200}" oninput="calcRenovarPreview()">
@@ -5021,50 +5123,81 @@ function openModalRenovarStock(invId) {
           <div class="form-group"><label>Otros costos (COP)</label>
             <input type="number" class="form-control" id="rs-otros" value="0" oninput="calcRenovarPreview()">
           </div>
-          <div class="form-group"><label>Nuevo precio sugerido venta</label>
-            <input type="number" class="form-control" id="rs-precio-venta" value="${inv.precioSugerido||''}" placeholder="0">
-          </div>
-          <div class="form-group" style="grid-column:1/-1">
-            <label> Dinero sale de *</label>
+          <div class="form-group" style="grid-column:span 2"><label> Dinero sale de *</label>
             <select class="form-control" id="rs-billetera" onchange="calcRenovarPreview()">
-              <option value="">— Selecciona billetera (obligatorio) —</option>
+              <option value="">— Selecciona billetera —</option>
               ${billeterasOpts}
             </select>
-            <div id="rs-bill-aviso" style="display:none;margin-top:5px;font-size:.78rem;font-weight:600;"></div>
           </div>
-          <div class="form-group" style="grid-column:1/-1"><label>Fecha *</label>
+          <div class="form-group"><label>Fecha *</label>
             <input type="date" class="form-control" id="rs-fecha" value="${ymd}">
+          </div>
+          <div class="form-group" style="grid-column:1/-1;">
+            <div id="rs-bill-aviso" style="display:none;font-size:.78rem;font-weight:600;"></div>
+          </div>
+          <div class="form-group" style="grid-column:span 2"><label>Nuevo precio sugerido venta</label>
+            <input type="number" class="form-control" id="rs-precio-venta" value="${inv.precioSugerido||''}" placeholder="0">
           </div>
           <div class="form-group" style="grid-column:1/-1"><label>Notas</label>
             <input type="text" class="form-control" id="rs-notas" placeholder="Ej: Segundo pedido Amazon...">
           </div>
         </div>
-        <div id="rs-preview" style="margin-top:12px;padding:10px 14px;background:var(--accent-light);border-radius:var(--radius-sm);font-size:.875rem;color:var(--accent2);display:flex;gap:20px;flex-wrap:wrap;">
+        <div id="rs-preview" style="margin-top:12px;padding:10px 14px;background:var(--accent-light);border-radius:var(--radius-sm);font-size:.86rem;color:var(--accent2);display:flex;gap:18px;flex-wrap:wrap;">
           <div>Inversión nueva: <strong id="rs-inv-total">—</strong></div>
           <div>Costo unitario nuevo: <strong id="rs-inv-unit">—</strong></div>
           <div>Stock resultante: <strong id="rs-stock-result">—</strong></div>
         </div>
+        <div style="margin-top:8px;font-size:.74rem;color:var(--muted);line-height:1.5;">
+          Estas unidades quedarán como <strong>pendientes por llegar</strong> hasta que registres su llegada con el botón "Llegó a bodega" en la ficha del producto.
+        </div>
       </div>
-      <div class="modal-actions">
+      <div class="modal-actions" style="flex-shrink:0;">
         <button class="btn btn-ghost" onclick="closeInvModal()">Cancelar</button>
         <button class="btn btn-success" onclick="confirmarRenovarStock('${invId}',${p.stockActual})"> Confirmar renovación</button>
       </div>
     </div>`;
   overlay.style.display = 'flex';
-  setTimeout(calcRenovarPreview, 50);
+  window._rsModoPrecio = 'unitario';
+  setTimeout(() => { setModoPrecioRenovar('unitario'); }, 50);
+}
+
+function setModoPrecioRenovar(modo) {
+  window._rsModoPrecio = modo;
+  const btnU = document.getElementById('rs-modo-unitario');
+  const btnT = document.getElementById('rs-modo-total');
+  if (btnU && btnT) {
+    btnU.style.background = modo==='unitario' ? '#0f2d6b' : 'none';
+    btnU.style.color      = modo==='unitario' ? '#fff' : 'var(--muted)';
+    btnT.style.background = modo==='total' ? '#0f2d6b' : 'none';
+    btnT.style.color      = modo==='total' ? '#fff' : 'var(--muted)';
+  }
+  const label = document.getElementById('rs-precio-label');
+  const inp   = document.getElementById('rs-precio-usd');
+  if (label) label.textContent = modo==='total' ? 'Precio TOTAL de la compra (USD) *' : 'Precio por unidad (USD) *';
+  if (inp)   inp.placeholder   = modo==='total' ? 'Ej: 250.00' : 'Ej: 12.50';
+  calcRenovarPreview();
 }
 
 function calcRenovarPreview() {
-  const usd    = parseFloat(document.getElementById('rs-precio-usd')?.value)||0;
+  const raw    = parseFloat(document.getElementById('rs-precio-usd')?.value)||0;
   const tasa   = parseFloat(document.getElementById('rs-tasa')?.value)||0;
   const nuevas = parseInt(document.getElementById('rs-unidades')?.value)||0;
   const env    = parseFloat(document.getElementById('rs-envio')?.value)||0;
   const otros  = parseFloat(document.getElementById('rs-otros')?.value)||0;
+  const modo   = window._rsModoPrecio || 'unitario';
+  const usd    = (modo === 'total' && nuevas > 0) ? raw / nuevas : raw;
   const inv    = (usd*tasa*nuevas)+env+otros;
   const unit   = nuevas>0?inv/nuevas:0;
   const e1=document.getElementById('rs-inv-total');  if(e1) e1.textContent=fmtCOP(inv);
   const e2=document.getElementById('rs-inv-unit');   if(e2) e2.textContent=fmtCOP(unit);
-  const e3=document.getElementById('rs-stock-result'); if(e3) e3.textContent=nuevas+' uds nuevas';
+  const e3=document.getElementById('rs-stock-result'); if(e3) e3.textContent=nuevas+' uds pendientes por llegar';
+
+  const hint = document.getElementById('rs-precio-hint');
+  if (hint) {
+    if (modo === 'total' && nuevas > 0 && raw > 0) hint.textContent = `Equivale a $${usd.toFixed(2)} USD por unidad`;
+    else if (modo === 'unitario' && nuevas > 0 && raw > 0) hint.textContent = `Total de la compra: $${(raw*nuevas).toFixed(2)} USD`;
+    else hint.textContent = '';
+  }
 
   // Aviso de saldo en tiempo real
   const billSel = document.getElementById('rs-billetera');
@@ -5087,7 +5220,10 @@ function calcRenovarPreview() {
 
 async function confirmarRenovarStock(invId, stockActual) {
   const nuevas      = parseInt(document.getElementById('rs-unidades')?.value)||0;
-  const precioUSD   = parseFloat(document.getElementById('rs-precio-usd')?.value)||0;
+  const precioRaw   = parseFloat(document.getElementById('rs-precio-usd')?.value)||0;
+  // Si el modo es "Total compra", se convierte a precio por unidad para guardar
+  const modoPrecio  = window._rsModoPrecio || 'unitario';
+  const precioUSD   = (modoPrecio === 'total' && nuevas > 0) ? precioRaw / nuevas : precioRaw;
   const tasa        = parseFloat(document.getElementById('rs-tasa')?.value)||0;
   const envio       = parseFloat(document.getElementById('rs-envio')?.value)||0;
   const otros       = parseFloat(document.getElementById('rs-otros')?.value)||0;
@@ -5120,7 +5256,14 @@ async function confirmarRenovarStock(invId, stockActual) {
     return toast(`Saldo insuficiente en ${bill?.nombre||'billetera'}. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(inversionNueva)}`, 'error');
   }
 
-  // Actualizar inversión: sumar unidades (costos se leen de renovaciones[] en calcInversion)
+  // Actualizar inversión: sumar unidades pedidas (costos se leen de renovaciones[] en calcInversion).
+  // Importante: las unidades NUEVAS quedan como "pendientes por llegar" —
+  // no se suman a "en bodega" automáticamente. Primero fijamos el punto de
+  // partida de "en bodega" (lo que había hasta ahora) para no perder el
+  // rastro de lo que ya estaba marcado como llegado.
+  const yaEnBodegaAntes = (inv.unidadesEnBodega !== undefined && inv.unidadesEnBodega !== null)
+    ? Number(inv.unidadesEnBodega) : Number(inv.unidades || 0);
+  inv.unidadesEnBodega = yaEnBodegaAntes;
   inv.unidades    = (inv.unidades || 0) + nuevas;
   inv.precioUSD   = precioUSD;
   inv.tasa        = tasa;
@@ -5150,7 +5293,112 @@ async function confirmarRenovarStock(invId, stockActual) {
   renderAll();
   await saveDb(['inversiones','gastos']);
   const bn = bill ? ` (de ${bill.nombre})` : '';
-  toast(`Stock renovado: +${nuevas} uds · ${fmtCOP(inversionNueva)} descontado${bn} `, 'success');
+  toast(`Pedido registrado: +${nuevas} uds pendientes por llegar · ${fmtCOP(inversionNueva)} descontado${bn} `, 'success');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SEGUIMIENTO DE LLEGADAS A BODEGA
+// Un pedido no llega todo de una vez — puede llegar en varias tandas
+// (ej. cada 10 días). Este modal permite ir registrando cuántas unidades
+// llegaron físicamente cada vez, sin perder de vista cuántas faltan.
+// ═══════════════════════════════════════════════════════════════
+function openModalLlegadaBodega(invId) {
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  if (!inv) return;
+  const p = enriquecerInversion(inv);
+
+  const overlay = document.getElementById('modal-inv-form-overlay');
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:440px;width:100%;">
+      <div class="modal-title"> Llegó a bodega — ${inv.nombre}
+        <button onclick="closeInvModal()" style="float:right;background:none;border:none;font-size:1rem;color:var(--muted);cursor:default;">✕</button>
+      </div>
+      <div class="modal-body-wrap">
+        <div style="background:var(--bg2);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;font-size:.85rem;color:var(--muted);display:flex;flex-direction:column;gap:5px;">
+          <span>Pedidas en total: <strong style="color:var(--text)">${fmtNum(p.unidadesPedidas)} uds</strong></span>
+          <span>Ya en bodega: <strong style="color:var(--text)">${fmtNum(p.unidadesLlegadas)} uds</strong></span>
+          <span>Faltan por llegar: <strong style="color:${p.unidadesPendientesLlegar>0?'#b45309':'var(--green)'}">${fmtNum(p.unidadesPendientesLlegar)} uds</strong></span>
+        </div>
+        <div class="form-group">
+          <label>¿Cuántas unidades llegaron ahora? *</label>
+          <input type="number" class="form-control" id="lb-cantidad" placeholder="Ej: 5" max="${p.unidadesPendientesLlegar}" oninput="calcLlegadaPreview(${p.unidadesPendientesLlegar})" autofocus>
+        </div>
+        <div class="form-group">
+          <label>Notas (opcional)</label>
+          <input type="text" class="form-control" id="lb-notas" placeholder="Ej: Segundo envío del pedido...">
+        </div>
+        <div id="lb-preview" style="margin-top:6px;font-size:.82rem;min-height:18px;"></div>
+        <small style="color:var(--muted);font-size:.72rem;display:block;margin-top:4px;">Se guarda con la fecha y hora de este momento.</small>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeInvModal()">Cancelar</button>
+        <button class="btn btn-success" onclick="confirmarLlegadaBodega('${invId}', ${p.unidadesPendientesLlegar})">Registrar llegada</button>
+      </div>
+    </div>`;
+  overlay.style.display = 'flex';
+  if (p.unidadesPendientesLlegar === 0) {
+    setTimeout(() => toast('Ya no hay unidades pendientes por llegar de este producto', 'info'), 150);
+  }
+}
+
+function calcLlegadaPreview(maxPendiente) {
+  const cant = parseInt(document.getElementById('lb-cantidad')?.value) || 0;
+  const el = document.getElementById('lb-preview');
+  if (!el) return;
+  if (cant > maxPendiente) {
+    el.style.color = 'var(--red)';
+    el.textContent = `Solo faltan ${fmtNum(maxPendiente)} uds por llegar — no puedes registrar más que eso.`;
+  } else if (cant > 0) {
+    el.style.color = 'var(--muted)';
+    el.textContent = `Quedarán ${fmtNum(maxPendiente - cant)} uds pendientes después de este registro.`;
+  } else {
+    el.textContent = '';
+  }
+}
+
+async function confirmarLlegadaBodega(invId, maxPendiente) {
+  const cantidad = parseInt(document.getElementById('lb-cantidad')?.value) || 0;
+  const notas    = document.getElementById('lb-notas')?.value.trim() || '';
+  // Fecha y hora exactas del momento en que se registra la llegada (no editable)
+  const fecha    = fechaHoy();
+  const hora     = horaActual();
+
+  if (!cantidad) return toast('Ingresa cuántas unidades llegaron', 'error');
+  if (cantidad > maxPendiente) return toast(`Solo faltan ${fmtNum(maxPendiente)} unidades por llegar`, 'error');
+
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  if (!inv) return toast('Inversión no encontrada', 'error');
+
+  const actualEnBodega = (inv.unidadesEnBodega !== undefined && inv.unidadesEnBodega !== null)
+    ? Number(inv.unidadesEnBodega) : Number(inv.unidades || 0);
+  inv.unidadesEnBodega = actualEnBodega + cantidad;
+
+  if (!inv.llegadasBodega) inv.llegadasBodega = [];
+  inv.llegadasBodega.push({ id: uid(), fecha, hora, cantidad, notas });
+
+  closeInvModal();
+  renderAll();
+  await saveDb(['inversiones']);
+  toast(`Llegada registrada: +${cantidad} uds en bodega`, 'success');
+}
+
+// ── Corrección para inversiones que ya venías manejando antes de este
+// seguimiento de llegadas: marca de una vez todo lo pedido como recibido,
+// sin tener que ir registrando llegada por llegada. ──
+async function marcarTodoRecibido(invId) {
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  if (!inv) return;
+  const pedidas = Number(inv.unidades||0);
+  const confirma = await appConfirm(
+    'Marcar todo como recibido',
+    `¿Confirmas que ya tienes en bodega las ${fmtNum(pedidas)} unidades pedidas de "${inv.nombre}"?\n\nÚsalo para corregir productos que ya manejabas antes de activar este seguimiento — de aquí en adelante, cada compra o renovación nueva sí quedará pendiente hasta que registres su llegada.`,
+    { tipo: 'info', textoConfirmar: 'Sí, ya llegó todo', textoCancelar: 'Cancelar' }
+  );
+  if (!confirma) return;
+  inv.unidadesEnBodega = pedidas;
+  renderAll();
+  await saveDb(['inversiones']);
+  toast('Inventario corregido: todo marcado como recibido', 'success');
 }
 
 // ─── These old single-file functions kept for backward compat ──
