@@ -1595,7 +1595,7 @@ function cancelEditIngreso() {
 }
 
 async function deleteIngreso(id) {
-  if (!confirm('¿Eliminar este ingreso?')) return;
+  if (!await appConfirm('Eliminar ingreso', '¿Seguro que quieres eliminar este ingreso? Esta acción no se puede deshacer.', { tipo: 'danger', textoConfirmar: 'Eliminar', textoCancelar: 'Cancelar' })) return;
   STATE.db.ingresos = STATE.db.ingresos.filter(i => i.id !== id);
   renderAll();
   await saveDb(['ingresos']);
@@ -1746,7 +1746,7 @@ function cancelEditGasto() {
 }
 
 async function deleteGasto(id) {
-  if (!confirm('¿Eliminar este gasto?')) return;
+  if (!await appConfirm('Eliminar gasto', '¿Seguro que quieres eliminar este gasto? Esta acción no se puede deshacer.', { tipo: 'danger', textoConfirmar: 'Eliminar', textoCancelar: 'Cancelar' })) return;
   STATE.db.gastos = STATE.db.gastos.filter(g => g.id !== id);
   renderAll();
   await saveDb(['gastos']);
@@ -1894,7 +1894,12 @@ async function saveDeuda() {
   if (!total)  return toast('El monto total es obligatorio', 'error');
   if (!fecha)  return toast('La fecha de inicio es obligatoria', 'error');
   if (tipo === 'prestamo' && !billeteraId) {
-    if (!confirm('No seleccionaste una billetera. El dinero del préstamo no se sumará a ninguna cuenta. ¿Continuar?')) return;
+    const continuar = await appConfirm(
+      'Sin billetera asignada',
+      'No seleccionaste una billetera. El dinero del préstamo no se sumará a ninguna cuenta.\n\n¿Deseas continuar de todas formas?',
+      { tipo: 'warning', textoConfirmar: 'Continuar', textoCancelar: 'Cancelar' }
+    );
+    if (!continuar) return;
   }
 
   STATE.db.deudas.push({ id: uid(), nombre, total, fecha, cuota, prox, interes, tipo, billeteraId, pagado: 0, pagos: [] });
@@ -1938,6 +1943,39 @@ function openAbonar(idx) {
   openModal('modal-abonar');
 }
 
+// ── Confirmación genérica reutilizable en toda la app (reemplaza confirm()) ──
+// Uso: const ok = await appConfirm('Título', 'Mensaje...', { tipo: 'warning', textoConfirmar: 'Sí', textoCancelar: 'No' });
+const APP_CONFIRM_TIPOS = {
+  warning: { bg: '#fef3c7', color: '#92400e', icon: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>' },
+  danger:  { bg: 'var(--red-light)', color: 'var(--red)', icon: '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>' },
+  info:    { bg: 'var(--accent-light)', color: 'var(--accent)', icon: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>' },
+};
+function appConfirm(titulo, mensaje, opciones = {}) {
+  const titleEl  = document.getElementById('modal-app-confirm-title');
+  const msgEl    = document.getElementById('modal-app-confirm-msg');
+  const btnOk    = document.getElementById('modal-app-confirm-btn');
+  const btnCancel= document.getElementById('modal-app-confirm-cancel');
+  const iconBox  = document.getElementById('mac-icon-box');
+  const iconEl   = document.getElementById('mac-icon');
+  if (!titleEl || !msgEl || !btnOk || !btnCancel) return Promise.resolve(confirm(mensaje)); // respaldo por si el modal no está en el DOM
+
+  titleEl.textContent = titulo;
+  msgEl.textContent   = mensaje;
+  btnOk.textContent     = opciones.textoConfirmar || 'Confirmar';
+  btnCancel.textContent = opciones.textoCancelar  || 'Cancelar';
+
+  const t = APP_CONFIRM_TIPOS[opciones.tipo] || APP_CONFIRM_TIPOS.warning;
+  if (iconBox) iconBox.style.background = t.bg;
+  if (iconEl)  { iconEl.setAttribute('stroke', t.color); iconEl.innerHTML = t.icon; }
+
+  openModal('modal-app-confirm');
+  return new Promise(resolve => {
+    const limpiar = () => { btnOk.onclick = null; btnCancel.onclick = null; };
+    btnOk.onclick = () => { limpiar(); closeModal('modal-app-confirm'); resolve(true); };
+    btnCancel.onclick = () => { limpiar(); closeModal('modal-app-confirm'); resolve(false); };
+  });
+}
+
 async function registrarAbono() {
   const idx   = Number(document.getElementById('m-abonar-idx').value);
   const monto = Number(document.getElementById('m-abonar-monto').value);
@@ -1956,11 +1994,12 @@ async function registrarAbono() {
     // (intereses u otro valor que no estaba registrado). Si confirma, la
     // deuda se cierra y el abono completo queda registrado tal cual —
     // así no descuadra la plata que realmente salió de la billetera.
-    const confirma = confirm(
-      `Este abono es ${fmt(excedente)} más de lo que falta para terminar la deuda ` +
-      `(solo faltaban ${fmt(falta)}).\n\n` +
+    const confirma = await appConfirm(
+      'Abono mayor al saldo pendiente',
+      `Este abono es ${fmt(excedente)} más de lo que falta para terminar la deuda (solo faltaban ${fmt(falta)}).\n\n` +
       `¿El excedente de ${fmt(excedente)} corresponde a intereses u otro valor que no estaba registrado en la deuda?\n\n` +
-      `Si confirmas, la deuda quedará totalmente cancelada y se registrará el abono completo, incluyendo el excedente.`
+      `Si confirmas, la deuda quedará totalmente cancelada y se registrará el abono completo, incluyendo el excedente.`,
+      { tipo: 'warning', textoConfirmar: 'Sí, cancelar deuda', textoCancelar: 'Ajustar monto' }
     );
     if (!confirma) return; // el usuario prefiere corregir el monto antes de continuar
   }
@@ -2560,7 +2599,7 @@ async function savePass() {
 }
 
 async function deletePass(id) {
-  if (!confirm('¿Eliminar esta contraseña?')) return;
+  if (!await appConfirm('Eliminar contraseña', '¿Seguro que quieres eliminar esta contraseña guardada?', { tipo: 'danger', textoConfirmar: 'Eliminar', textoCancelar: 'Cancelar' })) return;
   STATE.db.pass = STATE.db.pass.filter(p => p.id !== id);
   renderPass();
   await saveDb(['pass']);
@@ -3399,7 +3438,11 @@ function openModalPagoFijo(gfId, mesKey) {
     // Caso 2: no se eligió billetera — confirmar antes de continuar, en vez
     // de bloquear el pago (útil cuando el dinero no salió de una cuenta rastreada)
     if (!billeteraUsada) {
-      const confirma = confirm('No seleccionaste una billetera — este pago se registrará sin descontar de ninguna cuenta. ¿Confirmar así?');
+      const confirma = await appConfirm(
+        'Sin billetera asignada',
+        'No seleccionaste una billetera — este pago se registrará sin descontar de ninguna cuenta.\n\n¿Confirmar así?',
+        { tipo: 'warning', textoConfirmar: 'Confirmar', textoCancelar: 'Cancelar' }
+      );
       if (!confirma) return;
     }
     closeModal('modal-pago-fijo-billetera');
@@ -3523,7 +3566,7 @@ function autoResetGFIfNeeded() {
 
 async function resetPagosGF() {
   const mesKey = document.getElementById('gf-mes-sel').value || currentYM();
-  if (!confirm(`¿Reiniciar todos los pagos de ${monthLabel(mesKey)}?`)) return;
+  if (!await appConfirm('Reiniciar pagos', `¿Reiniciar todos los pagos de ${monthLabel(mesKey)}? Todos los gastos fijos de ese mes volverán a quedar pendientes.`, { tipo: 'warning', textoConfirmar: 'Reiniciar', textoCancelar: 'Cancelar' })) return;
   STATE.db.gastosFijos.forEach(g => {
     if (!g.pagos) g.pagos = {};
     g.pagos[mesKey] = false;
@@ -4879,7 +4922,7 @@ function renderDetalleInv(invId) {
   `;
 }
 async function eliminarVentaInv(ventaId, invId) {
-  if(!confirm('¿Eliminar esta venta?')) return;
+  if(!await appConfirm('Eliminar venta', '¿Seguro que quieres eliminar esta venta? También se eliminará el ingreso que generó.', { tipo: 'danger', textoConfirmar: 'Eliminar', textoCancelar: 'Cancelar' })) return;
 
   // Eliminar el ingreso asociado en billeteras e ingresos
   const idx = STATE.db.ingresos.findIndex(i => i.origenVentaId === ventaId);
@@ -5242,7 +5285,7 @@ async function confirmarGastoAdicionalInv(invId) {
 }
 
 async function eliminarGastoAdicionalInv(gastoId, invId) {
-  if (!confirm('¿Eliminar este gasto adicional?')) return;
+  if (!await appConfirm('Eliminar gasto adicional', '¿Seguro que quieres eliminar este gasto adicional de la inversión?', { tipo: 'danger', textoConfirmar: 'Eliminar', textoCancelar: 'Cancelar' })) return;
   const inv = STATE.db.inversiones.find(i=>i.id===invId);
   if (!inv || !inv.gastosAdicionales) return;
   inv.gastosAdicionales = inv.gastosAdicionales.filter(g=>g.id!==gastoId);
@@ -6597,6 +6640,17 @@ async function agregarPendiente() {
 async function togglePendienteHecho(id) {
   const p = getPendientes().find(x => x.id === id);
   if (!p) return;
+
+  // Al marcarlo como hecho se pide confirmación (al reabrirlo no hace falta)
+  if (!p.hecho) {
+    const confirma = await appConfirm(
+      'Marcar como hecho',
+      `¿Confirmas que ya terminaste "${p.texto}"?`,
+      { tipo: 'info', textoConfirmar: 'Sí, marcar como hecho', textoCancelar: 'Cancelar' }
+    );
+    if (!confirma) return;
+  }
+
   p.hecho = !p.hecho;
   if (p.hecho) {
     const ahora = new Date();
@@ -6615,7 +6669,7 @@ async function togglePendienteHecho(id) {
 }
 
 async function eliminarPendiente(id) {
-  if (!confirm('¿Eliminar este pendiente?')) return;
+  if (!await appConfirm('Eliminar pendiente', '¿Seguro que quieres eliminar este pendiente?', { tipo: 'danger', textoConfirmar: 'Eliminar', textoCancelar: 'Cancelar' })) return;
   STATE.db.pendientes = getPendientes().filter(p => p.id !== id);
   renderPendientes();
   actualizarBadgePendientes();
@@ -7707,7 +7761,7 @@ function importBackup() {
       if (!keys.every(k => Array.isArray(data[k]))) {
         return toast('Archivo de backup inválido', 'error');
       }
-      if (!confirm('¿Importar este backup? Se reemplazarán todos los datos actuales.')) return;
+      if (!await appConfirm('Importar backup', '¿Importar este backup? Se reemplazarán todos los datos actuales por los del archivo.', { tipo: 'warning', textoConfirmar: 'Importar', textoCancelar: 'Cancelar' })) return;
       delete data._meta; // quitar metadatos del export
       STATE.db = {
         ingresos:       data.ingresos       || [],

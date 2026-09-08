@@ -2457,6 +2457,25 @@
   </div>
 </div>
 
+<!-- Confirmación genérica reutilizable en toda la app (reemplaza al confirm() del navegador) -->
+<div class="modal-overlay" id="modal-app-confirm">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-title" style="display:flex;align-items:center;gap:12px;padding:20px 24px 8px;">
+      <div id="mac-icon-box" style="width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:#fef3c7;">
+        <svg xmlns="http://www.w3.org/2000/svg" id="mac-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="2"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <span id="modal-app-confirm-title" style="font-size:1rem;font-weight:700;color:var(--text);">Confirmar acción</span>
+    </div>
+    <div class="modal-body-wrap" style="padding:8px 24px 20px;">
+      <p id="modal-app-confirm-msg" style="color:var(--text);font-size:.86rem;line-height:1.65;margin:0;white-space:pre-line;"></p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="modal-app-confirm-cancel">Cancelar</button>
+      <button class="btn btn-primary" id="modal-app-confirm-btn">Confirmar</button>
+    </div>
+  </div>
+</div>
+
 <!-- FAB Buttons móvil — visibles en toda la app excepto en movimientos -->
 <div class="mov-fab-container" id="mov-fab-container" style="display:none;">
   <button class="mov-fab mov-fab-ingreso" onclick="openModalNuevoIngreso()">
