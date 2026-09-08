@@ -572,6 +572,33 @@ function formatFechaLarga(fechaStr) {
   } catch { return fechaStr; }
 }
 
+// ── Tiempo relativo en español (para "último ingreso": hace 6 horas, etc.) ──
+function tiempoRelativo(fechaISO) {
+  if (!fechaISO) return 'Nunca';
+  const entonces = new Date(fechaISO).getTime();
+  if (isNaN(entonces)) return 'Nunca';
+  const segundos = Math.floor((Date.now() - entonces) / 1000);
+  if (segundos < 60)   return 'Hace un momento';
+  const minutos = Math.floor(segundos / 60);
+  if (minutos < 60)    return `Hace ${minutos} minuto${minutos===1?'':'s'}`;
+  const horas = Math.floor(minutos / 60);
+  if (horas < 24)      return `Hace ${horas} hora${horas===1?'':'s'}`;
+  const dias = Math.floor(horas / 24);
+  if (dias < 30)       return `Hace ${dias} día${dias===1?'':'s'}`;
+  const meses = Math.floor(dias / 30);
+  if (meses < 12)      return `Hace ${meses} mes${meses===1?'':'es'}`;
+  const anios = Math.floor(meses / 12);
+  return `Hace ${anios} año${anios===1?'':'s'}`;
+}
+function fechaHoraCompleta(fechaISO) {
+  if (!fechaISO) return '—';
+  try {
+    const d = new Date(fechaISO);
+    return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' }) +
+      ' · ' + d.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' });
+  } catch { return '—'; }
+}
+
 /* ── Firebase UI helpers ── */
 function showLoadingOverlay(msg = 'Cargando...') {
   const el = document.getElementById('fb-loading');
@@ -1016,6 +1043,13 @@ function filtrarNavPorModulos(modulos) {
    APP INIT
    ============================================================ */
 async function initApp() {
+  // Mostrar el módulo "Gestión de usuarios" solo si es el administrador
+  const esAdmin = !window.__CURRENT_USER || window.__CURRENT_USER.isAdmin;
+  const navBtnAdmin = document.getElementById('nav-btn-admin-usuarios');
+  const drawerBtnAdmin = document.getElementById('drawer-btn-admin-usuarios');
+  if (navBtnAdmin) navBtnAdmin.style.display = esAdmin ? '' : 'none';
+  if (drawerBtnAdmin) drawerBtnAdmin.style.display = esAdmin ? '' : 'none';
+
   await loadDb();          // espera Firestore (o localStorage)
 
   // Limpiar transferencias corruptas (sin monto válido o sin billeteras)
@@ -1073,6 +1107,7 @@ const PAGE_TITLES = {
   prestamos: 'Préstamos a Terceros', fijos: 'Gastos Fijos',
   inversiones: 'Inversiones', 'detalle-inv': 'Detalle de Inversión', billeteras: 'Billeteras',
   pendientes: 'Pendientes', recordatorios: 'Recordatorios',
+  'admin-usuarios': 'Usuarios',
 };
 
 function navigate(page, param=null) {
@@ -1111,7 +1146,7 @@ function navigate(page, param=null) {
   } else {
     renderAll();
   }
-  if(page === 'config') renderConfigUsuarios();
+  if(page === 'config') { renderConfigUsuarios(); renderMisIngresos(); }
   // Verificar acceso a módulo para usuarios no-admin
   const cu = window.__CURRENT_USER;
   if (cu && !cu.isAdmin && cu.modulos && !['dashboard','config'].includes(page)) {
@@ -1348,6 +1383,7 @@ function renderAll() {
   if (cur === 'fijos')        renderGastosFijos();
   if (cur === 'recordatorios')renderRecordatorios();
   if (cur === 'pendientes')   renderPendientes();
+  if (cur === 'admin-usuarios') renderGestionUsuarios();
   if (cur === 'inversiones')  renderInversiones();
   if (cur === 'detalle-inv')  renderDetalleInv(STATE.navParam);
   if (cur === 'billeteras')   renderBilleteras();
@@ -1914,9 +1950,23 @@ async function registrarAbono() {
   if (!fecha) return toast('La fecha es requerida', 'error');
 
   const falta = d.total - (d.pagado || 0);
-  if (monto > falta) return toast('El abono supera el saldo pendiente', 'error');
+  if (monto > falta) {
+    const excedente = monto - falta;
+    // En vez de bloquear el abono, se pregunta si el excedente es real
+    // (intereses u otro valor que no estaba registrado). Si confirma, la
+    // deuda se cierra y el abono completo queda registrado tal cual —
+    // así no descuadra la plata que realmente salió de la billetera.
+    const confirma = confirm(
+      `Este abono es ${fmt(excedente)} más de lo que falta para terminar la deuda ` +
+      `(solo faltaban ${fmt(falta)}).\n\n` +
+      `¿El excedente de ${fmt(excedente)} corresponde a intereses u otro valor que no estaba registrado en la deuda?\n\n` +
+      `Si confirmas, la deuda quedará totalmente cancelada y se registrará el abono completo, incluyendo el excedente.`
+    );
+    if (!confirma) return; // el usuario prefiere corregir el monto antes de continuar
+  }
 
-  // Registrar abono en la deuda
+  // Registrar abono en la deuda (con el monto completo tal como se ingresó,
+  // incluso si supera lo que faltaba — así el excedente queda registrado)
   const abonoId = uid();
   d.pagado = (d.pagado || 0) + monto;
   d.pagos.push({ id: abonoId, fecha, monto, nota });
@@ -1936,7 +1986,7 @@ async function registrarAbono() {
   renderAll();
   closeModal('modal-abonar');
   await saveDb(['deudas','gastos']);
-  toast('Abono registrado y añadido automáticamente a gastos', 'success');
+  toast(monto > falta ? 'Deuda cancelada — abono completo registrado ' : 'Abono registrado y añadido automáticamente a gastos', 'success');
 }
 
 async function deleteDeuda(idx) {
@@ -1967,22 +2017,35 @@ function openEditDeuda(idx) {
   if (!d) return;
   document.getElementById('med-idx').value    = idx;
   document.getElementById('med-nombre').value = d.nombre || '';
+  document.getElementById('med-total').value  = d.total || '';
   document.getElementById('med-cuota').value  = d.cuota || '';
   document.getElementById('med-prox').value   = d.prox || '';
   document.getElementById('med-interes').value = d.interes || '';
+  const hint = document.getElementById('med-total-hint');
+  if (hint) {
+    const pagado = d.pagado || 0;
+    hint.textContent = pagado > 0
+      ? `Ya llevas pagado ${fmt(pagado)} de esta deuda — el nuevo valor no puede ser menor a eso.`
+      : '';
+  }
   openModal('modal-edit-deuda');
 }
 
 async function saveEditDeuda() {
   const idx     = Number(document.getElementById('med-idx').value);
   const nombre  = document.getElementById('med-nombre').value.trim();
+  const total   = Number(document.getElementById('med-total').value) || 0;
   const cuota   = Number(document.getElementById('med-cuota').value) || 0;
   const prox    = document.getElementById('med-prox').value;
   const interes = Number(document.getElementById('med-interes').value) || 0;
   const d = STATE.db.deudas[idx];
-  if (!d)    return toast('Deuda no encontrada', 'error');
+  if (!d)      return toast('Deuda no encontrada', 'error');
   if (!nombre) return toast('El nombre es obligatorio', 'error');
+  if (!total)  return toast('El valor total es obligatorio', 'error');
+  const pagado = d.pagado || 0;
+  if (total < pagado) return toast(`El valor total no puede ser menor a lo ya pagado (${fmt(pagado)})`, 'error');
   d.nombre  = nombre;
+  d.total   = total;
   d.cuota   = cuota;
   d.prox    = prox;
   d.interes = interes;
@@ -3244,8 +3307,15 @@ function openModalPagoFijo(gfId, mesKey) {
           <button onclick="closeModal('modal-pago-fijo-billetera')" style="margin-left:auto;background:none;border:none;font-size:1.2rem;color:var(--muted);cursor:default;">✕</button>
         </div>
         <div class="modal-body-wrap" style="padding:20px 24px;">
-          <div class="form-group">
-            <label>Sale de billetera *</label>
+          <div class="form-group" id="mpf-deuda-check-group" style="display:none;margin-bottom:14px;padding:10px 12px;background:var(--bg2);border-radius:var(--radius-sm);">
+            <label style="display:flex;align-items:center;gap:8px;cursor:default;font-weight:600;text-transform:none;font-size:.85rem;color:var(--text);">
+              <input type="checkbox" id="mpf-ya-pagado-deudas" style="width:16px;height:16px;cursor:default;">
+              Ya lo pagué desde Deudas este mes
+            </label>
+            <small style="color:var(--muted);font-size:.72rem;display:block;margin-top:4px;margin-left:24px;">Solo se marca como pagado — no se registra otro gasto ni otro abono</small>
+          </div>
+          <div class="form-group" id="mpf-billetera-group">
+            <label>Sale de billetera</label>
             <select class="form-control" id="mpf-billetera" style="height:44px;">
               <option value="">— Sin billetera (préstamo previo) —</option>
             </select>
@@ -3265,7 +3335,7 @@ function openModalPagoFijo(gfId, mesKey) {
   document.getElementById('mpf-desc').textContent =
     `${gf.nombre}  ·  ${fmt(gf.monto)}`;
   const sel = document.getElementById('mpf-billetera');
-  sel.innerHTML = '<option value="">— Selecciona billetera (obligatorio) —</option>';
+  sel.innerHTML = '<option value="">— Sin billetera —</option>';
 
   let hayAlguna = false;
   billeteras.forEach(b => {
@@ -3294,23 +3364,61 @@ function openModalPagoFijo(gfId, mesKey) {
   }
   sel.style.border = '';
 
+  // ── "Ya lo pagué desde Deudas" — solo aplica si este gasto fijo está
+  // vinculado a una deuda (el abono ya se pudo haber registrado allá directamente) ──
+  const checkGroup = document.getElementById('mpf-deuda-check-group');
+  const checkYaPagado = document.getElementById('mpf-ya-pagado-deudas');
+  const billGroup = document.getElementById('mpf-billetera-group');
+  checkYaPagado.checked = false;
+  if (gf.deudaId) {
+    checkGroup.style.display = '';
+    checkYaPagado.onchange = () => {
+      billGroup.style.opacity = checkYaPagado.checked ? '.4' : '';
+      billGroup.style.pointerEvents = checkYaPagado.checked ? 'none' : '';
+    };
+  } else {
+    checkGroup.style.display = 'none';
+  }
+  billGroup.style.opacity = '';
+  billGroup.style.pointerEvents = '';
+
   // Asignar handler al botón confirmar
   const btn = document.getElementById('mpf-confirmar');
   const newBtn = btn.cloneNode(true);
   btn.parentNode.replaceChild(newBtn, btn);
   newBtn.addEventListener('click', async () => {
+    // Caso 1: ya se pagó/abonó directamente desde el módulo de Deudas —
+    // solo se marca como pagado, sin registrar otro gasto ni otro abono.
+    if (checkYaPagado.checked) {
+      closeModal('modal-pago-fijo-billetera');
+      await marcarPagoFijoSinRegistro(gfId, mesKey);
+      return;
+    }
+
     const billeteraUsada = document.getElementById('mpf-billetera').value;
+    // Caso 2: no se eligió billetera — confirmar antes de continuar, en vez
+    // de bloquear el pago (útil cuando el dinero no salió de una cuenta rastreada)
     if (!billeteraUsada) {
-      const s = document.getElementById('mpf-billetera');
-      s.style.border = '2px solid var(--red)';
-      setTimeout(() => s.style.border = '', 2000);
-      return toast('Debes seleccionar de qué billetera sale el dinero', 'error');
+      const confirma = confirm('No seleccionaste una billetera — este pago se registrará sin descontar de ninguna cuenta. ¿Confirmar así?');
+      if (!confirma) return;
     }
     closeModal('modal-pago-fijo-billetera');
     await confirmarPagoFijo(gfId, mesKey, billeteraUsada);
   });
 
   openModal('modal-pago-fijo-billetera');
+}
+
+// ── Marca el gasto fijo como pagado este mes SIN registrar gasto ni abono
+// (para cuando el pago ya se hizo directamente desde el módulo de Deudas) ──
+async function marcarPagoFijoSinRegistro(gfId, mesKey) {
+  const gf = STATE.db.gastosFijos.find(g => g.id === gfId);
+  if (!gf) return;
+  if (!gf.pagos) gf.pagos = {};
+  gf.pagos[mesKey] = { pagado: true, fecha: fechaHoy(), hora: horaActual(), sinRegistro: true };
+  renderAll();
+  await saveDb(['gastosFijos']);
+  toast('Marcado como pagado (ya registrado en Deudas)', 'success');
 }
 
 async function confirmarPagoFijo(gfId, mesKey, billeteraUsada) {
@@ -3323,9 +3431,9 @@ async function confirmarPagoFijo(gfId, mesKey, billeteraUsada) {
   const cuotaRealPago = deudaParaPago ? getCuotaMesActual(deudaParaPago) : null;
   const montoAPagar   = cuotaRealPago || gf.monto;
 
-  // Validar saldo suficiente
-  const saldo = saldoBilletera(billeteraUsada);
-  if (saldo < montoAPagar) {
+  // Validar saldo suficiente (solo si se eligió una billetera de verdad)
+  const saldo = billeteraUsada ? saldoBilletera(billeteraUsada) : Infinity;
+  if (billeteraUsada && saldo < montoAPagar) {
     return toast(`Saldo insuficiente. Disponible: ${fmt(saldo)} — Necesario: ${fmt(montoAPagar)}`, 'error');
   }
 
@@ -3855,35 +3963,13 @@ function renderInversiones() {
   if(fEst)   lista = lista.filter(p=>p.estado===fEst);
   if(fTipo)  lista = lista.filter(p=>p.tipo===fTipo);
 
-  // ── Ocultar agotadas por defecto: si ya no hay stock, no tiene sentido
-  // verlas siempre mezcladas con las que sí tienen. Un único control (el
-  // aviso de abajo) permite mostrarlas u ocultarlas de nuevo.
-  window._invVerAgotadas = window._invVerAgotadas || false;
-  const verAgotadas = window._invVerAgotadas;
-  const totalAgotadas = lista.filter(p=>p.estadoStock==='agotado').length;
-  if(!verAgotadas) lista = lista.filter(p=>p.estadoStock!=='agotado');
-
-  const banner = document.getElementById('inv-agotadas-banner');
-  if(banner) {
-    if(verAgotadas && totalAgotadas > 0) {
-      banner.style.display = 'flex';
-      banner.innerHTML = `
-        <span style="color:var(--muted);">
-          Mostrando ${totalAgotadas} inversión${totalAgotadas===1?'':'es'} agotada${totalAgotadas===1?'':'s'}
-        </span>
-        <button onclick="window._invVerAgotadas=false;invFiltroCambio();" style="border:none;background:none;color:var(--accent);font-weight:700;cursor:default;font-size:.78rem;padding:0;">Ocultar agotadas</button>`;
-    } else if (!verAgotadas && totalAgotadas > 0) {
-      banner.style.display = 'flex';
-      banner.innerHTML = `
-        <span style="color:var(--muted);">
-          ${totalAgotadas} inversión${totalAgotadas===1?'':'es'} agotada${totalAgotadas===1?'':'s'} oculta${totalAgotadas===1?'':'s'}
-        </span>
-        <button onclick="window._invVerAgotadas=true;invFiltroCambio();" style="border:none;background:none;color:var(--accent);font-weight:700;cursor:default;font-size:.78rem;padding:0;">Ver agotadas</button>`;
-    } else {
-      banner.style.display = 'none';
-      banner.innerHTML = '';
-    }
-  }
+  // Siempre se muestran todos los estados (incluido "Agotado" — es un estado
+  // más, no algo que haya que ocultar). Las que tienen stock van primero.
+  lista.sort((a, b) => {
+    const aAgotado = a.estadoStock === 'agotado' ? 1 : 0;
+    const bAgotado = b.estadoStock === 'agotado' ? 1 : 0;
+    return aAgotado - bAgotado;
+  });
 
   if(!lista.length) {
     if(tbody) tbody.innerHTML = '';
@@ -3891,7 +3977,7 @@ function renderInversiones() {
     if(pagBar) pagBar.style.display = 'none';
     if(empty) {
       empty.style.display='';
-      empty.querySelector('p') && (empty.querySelector('p').textContent = (!verAgotadas && totalAgotadas > 0) ? 'Todas tus inversiones están agotadas. Usa el aviso de arriba para verlas.' : 'Sin inversiones registradas aún.');
+      empty.querySelector('p') && (empty.querySelector('p').textContent = 'Sin inversiones registradas aún.');
     }
     return;
   }
@@ -5888,7 +5974,9 @@ function updateMovFABVisibility() {
   const isMobile  = window.innerWidth <= 768;
 
   if (movFab)    movFab.style.display    = (isMobile && isMov) ? 'flex' : 'none';
-  if (circleFab) circleFab.style.display = isMov ? 'none' : '';
+  // Los FABs circulares se ocultan en Movimientos solo en móvil (ahí ya
+  // están los botones rectangulares); en escritorio también se muestran.
+  if (circleFab) circleFab.style.display = (isMobile && isMov) ? 'none' : '';
 }
 
 // Add padding div at end of mov-lista so FABs don't cover last item
@@ -6677,36 +6765,195 @@ const MODULOS_DISPONIBLES = [
 function renderConfigUsuarios() {
   cargarPerfil(); // refrescar nombre/foto al entrar a config
   const section = document.getElementById('config-usuarios-section');
-  const lista   = document.getElementById('config-usuarios-lista');
   if (!section) return;
   const user = window.__CURRENT_USER;
-  if (!user || !user.isAdmin) { section.style.display = 'none'; return; }
-  section.style.display = '';
-  if (!lista) return;
-  lista.innerHTML = '<p style="color:var(--muted);font-size:.85rem;">Cargando...</p>';
+  section.style.display = (!user || user.isAdmin) ? '' : 'none';
+}
 
-  window.__FB.getUsuarios().then(usuarios => {
-    if (!usuarios.length) {
-      lista.innerHTML = '<p style="color:var(--muted);font-size:.85rem;text-align:center;padding:16px;">No hay usuarios creados aún.</p>';
-      return;
-    }
-    lista.innerHTML = usuarios.map(u => {
-      const activo = u.activo !== false;
-      return `<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);opacity:${activo?1:.5};">
-        <div style="width:36px;height:36px;border-radius:50%;background:${activo?'var(--accent-light)':'var(--bg2)'};display:flex;align-items:center;justify-content:center;font-weight:700;color:${activo?'var(--accent)':'var(--muted)'};font-size:.9rem;flex-shrink:0;">
-          ${(u.nombre||'?')[0].toUpperCase()}
+function nombreUsuarioMostrar(u) {
+  return u.perfilNombre || u.nombre || (u.isAdmin ? 'Administrador' : 'Usuario');
+}
+function avatarUsuarioHTML(u, size) {
+  const nombre = nombreUsuarioMostrar(u);
+  const foto = u.perfilFoto || '';
+  if (foto) {
+    return `<img src="${foto}" alt="" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;">`;
+  }
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:var(--accent-light);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${Math.round(size*0.4)}px;flex-shrink:0;">${(nombre||'?')[0].toUpperCase()}</div>`;
+}
+
+// ── Gestión de usuarios (módulo aparte, solo administrador) ──
+async function renderGestionUsuarios() {
+  const cur = window.__CURRENT_USER;
+  if (cur && !cur.isAdmin) { navigate('dashboard'); return; } // seguridad: solo admin
+
+  const tbody = document.getElementById('admusr-tbody');
+  if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+      <div class="small-spinner"></div>
+      <span style="font-size:.82rem;color:var(--muted);">Cargando usuarios...</span>
+    </div>
+  </td></tr>`;
+
+  try {
+    const [usuarios, perfilAdmin] = await Promise.all([
+      window.__FB.getUsuarios(),
+      window.__FB.loadPerfil()
+    ]);
+    window._usuariosCache = usuarios;
+
+    // La cuenta admin no vive en la colección "usuarios" — se arma su fila aparte
+    const adminRow = {
+      id: '__admin__', isAdmin: true,
+      nombre: 'Administrador',
+      perfilNombre: perfilAdmin.nombre || '',
+      perfilFoto: perfilAdmin.foto || '',
+      activo: true, modulos: null,
+      ultimoIngreso: null, historialIngresos: [],
+    };
+    try {
+      const snap = await window.__FB.getDoc(window.__FB.doc('config', 'app'));
+      if (snap.exists()) {
+        adminRow.ultimoIngreso = snap.data().ultimoIngreso || null;
+        adminRow.historialIngresos = snap.data().historialIngresos || [];
+      }
+    } catch (e) {}
+
+    window._gestionUsuariosLista = [adminRow, ...usuarios];
+  } catch (e) {
+    console.error('Error cargando usuarios:', e);
+    window._gestionUsuariosLista = [];
+  }
+  renderGestionUsuariosTabla();
+}
+
+function renderGestionUsuariosTabla() {
+  const todos = window._gestionUsuariosLista || [];
+  const tbody = document.getElementById('admusr-tbody');
+  const empty = document.getElementById('admusr-empty');
+  const tableWrap = document.querySelector('#admusr-tabla')?.closest('.section');
+  if (!tbody) return;
+
+  const hoyStr = fechaHoy();
+
+  // Filtros
+  const q = (document.getElementById('admusr-search')?.value || '').toLowerCase().trim();
+  const fEstado = document.getElementById('admusr-filter-estado')?.value || '';
+  let lista = todos.slice();
+  if (q) lista = lista.filter(u => nombreUsuarioMostrar(u).toLowerCase().includes(q));
+  if (fEstado === 'activo')   lista = lista.filter(u => u.isAdmin || u.activo !== false);
+  if (fEstado === 'inactivo') lista = lista.filter(u => !u.isAdmin && u.activo === false);
+  // Más reciente primero
+  lista.sort((a, b) => new Date(b.ultimoIngreso || 0) - new Date(a.ultimoIngreso || 0));
+
+  if (!lista.length) {
+    tbody.innerHTML = '';
+    if (tableWrap) tableWrap.style.display = 'none';
+    if (empty) empty.style.display = '';
+    const info = document.getElementById('admusr-pag-info');
+    if (info) info.textContent = '';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  if (tableWrap) tableWrap.style.display = '';
+
+  tbody.innerHTML = lista.map(u => {
+    const activo = u.isAdmin || u.activo !== false;
+    const rolBadge = u.isAdmin
+      ? `<span class="badge badge-blue">Administrador</span>`
+      : `<span class="badge" style="background:var(--bg2);color:var(--text);">Usuario</span>`;
+    const dotColor = (u.ultimoIngreso || '').slice(0,10) === hoyStr ? 'var(--green)' : 'var(--muted)';
+    return `
+    <tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+          ${avatarUsuarioHTML(u, 34)}
+          <span style="font-weight:600;font-size:.85rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">${nombreUsuarioMostrar(u)}</span>
         </div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:600;font-size:.9rem;">${u.nombre}</div>
-          <div style="font-size:.72rem;color:var(--muted);">${activo?'Activo':'Desactivado'} · ${(u.modulos||[]).length||'Todos'} módulos</div>
-        </div>
-        <div style="display:flex;gap:6px;">
-          <button onclick="abrirEditarUsuario('${u.id}')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:default;color:var(--accent);font-size:.75rem;font-weight:600;">Editar</button>
-          <button onclick="pedirCodigoDesactivar('${u.id}','${u.nombre}',${activo})" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:default;color:${activo?'var(--red)':'var(--green)'};font-size:.75rem;font-weight:600;">${activo?'Desactivar':'Activar'}</button>
-        </div>
-      </div>`;
-    }).join('');
+      </td>
+      <td>${rolBadge}</td>
+      <td>
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:.82rem;color:var(--text);white-space:nowrap;">
+          <span style="width:7px;height:7px;border-radius:50%;background:${dotColor};flex-shrink:0;"></span>${tiempoRelativo(u.ultimoIngreso)}
+        </span>
+      </td>
+      <td style="color:var(--muted);font-size:.8rem;white-space:nowrap;">${u.ultimoIngreso ? fechaHoraCompleta(u.ultimoIngreso) : '—'}</td>
+      <td><span class="badge ${activo?'badge-green':'badge-red'}">${activo?'Activo':'Desactivado'}</span></td>
+      <td style="text-align:right;">
+        ${u.isAdmin
+          ? `<span style="font-size:.76rem;color:var(--muted);">Cuenta principal</span>`
+          : `<div class="actions" style="justify-content:flex-end;">
+               <button onclick="abrirEditarUsuario('${u.id}')" class="btn btn-ghost btn-sm">Editar</button>
+               <button onclick="pedirCodigoDesactivar('${u.id}','${nombreUsuarioMostrar(u).replace(/'/g,"\\'")}',${activo})" class="btn btn-sm" style="border:1px solid var(--border);background:none;color:${activo?'var(--red)':'var(--green)'};">${activo?'Desactivar':'Activar'}</button>
+             </div>`}
+      </td>
+    </tr>`;
+  }).join('');
+
+  const info = document.getElementById('admusr-pag-info');
+  if (info) info.textContent = `Mostrando ${lista.length} de ${todos.length} usuario${todos.length===1?'':'s'}`;
+}
+
+// ── Exportar la lista de usuarios a CSV ──
+function exportarUsuariosCSV() {
+  const todos = window._gestionUsuariosLista || [];
+  if (!todos.length) return toast('No hay usuarios para exportar', 'error');
+  const filas = [['Nombre', 'Rol', 'Estado', 'Último ingreso']];
+  todos.forEach(u => {
+    const activo = u.isAdmin || u.activo !== false;
+    filas.push([
+      nombreUsuarioMostrar(u),
+      u.isAdmin ? 'Administrador' : 'Usuario',
+      activo ? 'Activo' : 'Desactivado',
+      u.ultimoIngreso ? fechaHoraCompleta(u.ultimoIngreso) : 'Nunca'
+    ]);
   });
+  const csv = filas.map(f => f.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'usuarios_' + fechaHoy() + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Lista de usuarios exportada', 'success');
+}
+
+// ── "Mis ingresos al sistema" — visible para cualquiera (admin o usuario),
+// muestra el historial de accesos de la cuenta con la que se entró ──
+async function renderMisIngresos() {
+  const section = document.getElementById('config-mis-ingresos-section');
+  const lista   = document.getElementById('config-mis-ingresos-lista');
+  const ultimoEl = document.getElementById('config-mi-ultimo-ingreso');
+  if (!section) return;
+  section.style.display = '';
+  if (lista) lista.innerHTML = '<p style="color:var(--muted);font-size:.85rem;">Cargando...</p>';
+
+  const u = window.__CURRENT_USER;
+  let historial = [];
+  try {
+    if (!u || u.isAdmin) {
+      const snap = await window.__FB.getDoc(window.__FB.doc('config', 'app'));
+      historial = snap?.exists?.() ? (snap.data().historialIngresos || []) : [];
+    } else {
+      const usuarios = window._usuariosCache || await window.__FB.getUsuarios();
+      const uData = usuarios.find(x => x.id === u.id);
+      historial = uData?.historialIngresos || [];
+    }
+  } catch (e) { console.warn('No se pudo cargar el historial de ingresos:', e); }
+
+  historial = [...historial].reverse(); // más reciente primero
+  if (ultimoEl) ultimoEl.textContent = historial.length ? tiempoRelativo(historial[0]) : 'Nunca';
+  if (!lista) return;
+  if (!historial.length) {
+    lista.innerHTML = '<p style="color:var(--muted);font-size:.82rem;text-align:center;padding:12px;">Sin registros de ingreso todavía.</p>';
+    return;
+  }
+  lista.innerHTML = historial.slice(0, 10).map((h, i) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;${i>0?'border-top:1px solid var(--border-light);':''}">
+      <span style="font-size:.82rem;color:var(--text);">${fechaHoraCompleta(h)}</span>
+      <span style="font-size:.76rem;color:var(--muted);">${tiempoRelativo(h)}</span>
+    </div>`).join('');
 }
 
 function abrirModalNuevoUsuario() {
@@ -6736,7 +6983,7 @@ async function guardarNuevoUsuario() {
 // ── Editar usuario ──
 let _editUserId = null;
 async function abrirEditarUsuario(id) {
-  const usuarios = await window.__FB.getUsuarios();
+  const usuarios = window._usuariosCache || await window.__FB.getUsuarios();
   const u = usuarios.find(x => x.id === id);
   if (!u) return;
   _editUserId = id;
@@ -6749,6 +6996,19 @@ async function abrirEditarUsuario(id) {
       <input type="checkbox" value="${m.id}" ${activos.includes(m.id)?'checked':''} style="width:16px;height:16px;accent-color:var(--accent);">
       ${m.label}
     </label>`).join('');
+
+  // Actividad: último ingreso + historial de esta cuenta
+  document.getElementById('eu-ultimo-ingreso').textContent = tiempoRelativo(u.ultimoIngreso);
+  const histEl = document.getElementById('eu-historial-ingresos');
+  const historial = [...(u.historialIngresos || [])].reverse();
+  histEl.innerHTML = historial.length
+    ? historial.slice(0, 10).map((h, i) => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;${i>0?'border-top:1px solid var(--border-light);':''}">
+          <span style="font-size:.8rem;color:var(--text);">${fechaHoraCompleta(h)}</span>
+          <span style="font-size:.74rem;color:var(--muted);">${tiempoRelativo(h)}</span>
+        </div>`).join('')
+    : '<p style="color:var(--muted);font-size:.8rem;padding:8px 0;">Sin registros de ingreso todavía.</p>';
+
   openModal('modal-editar-usuario');
 }
 

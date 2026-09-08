@@ -420,6 +420,8 @@ select.form-control { cursor:default; }
 }
 .data-table tr:last-child td { border-bottom: none; }
 .data-table tr:hover td { background: var(--bg2); }
+/* Hover muy sutil en Inversiones y Usuarios — apenas se nota, no el gris normal de las demás tablas */
+#inv-tabla tr:hover td, #admusr-tabla tr:hover td { background: rgba(128,128,128,.07); }
 .data-table .actions { display: flex; gap: 4px; }
 
 /* Filter bar */
@@ -468,8 +470,7 @@ canvas { max-width: 100%; display: block; }
   padding: 18px 22px; border-bottom: 1px solid var(--border);
   color: var(--text);
 }
-.modal > .form-group,
-.modal > div > .form-group { padding: 0 22px; }
+.modal > .form-group { padding: 0 22px; }
 .modal-body-wrap { padding: 20px 22px; overflow-y: auto; flex: 1; }
 .modal-actions { display: flex; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--border); justify-content: flex-end; }
 
@@ -1244,6 +1245,15 @@ canvas { max-width: 100%; display: block; }
 @keyframes spin-loader {
   to { transform: rotate(360deg); }
 }
+/* Spinner pequeño para estados de carga dentro de la app (igual estilo que el del login) */
+.small-spinner {
+  width: 22px; height: 22px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin-loader .7s linear infinite;
+  display: inline-block;
+}
 
 /* ── Página Configuración ── */
 .config-item {
@@ -1256,7 +1266,7 @@ canvas { max-width: 100%; display: block; }
   transition: background var(--transition);
   user-select: none;
 }
-.config-item:hover { background: var(--bg2); padding-left: 8px; }
+.config-item:hover { background: var(--bg2); }
 .config-item:active { background: var(--bg3); }
 .config-item-icon {
   width: 44px; height: 44px; border-radius: 12px;
@@ -1404,17 +1414,14 @@ input:hover, select:hover, textarea:hover, label:hover { filter: none; }
   }
 }
 
-/* ── Configuración 2 columnas desktop ── */
+/* ── Configuración: una sola columna centrada ── */
 .config-grid-2col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 20px;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  max-width: 640px;
+  margin: 0 auto;
 }
 .config-col { display: flex; flex-direction: column; gap: 0; }
-@media (max-width: 768px) {
-  .config-grid-2col { grid-template-columns: 1fr; }
-}
 
 /* ── FAB botones flotantes ── */
 #fab-container {
@@ -1430,8 +1437,8 @@ input:hover, select:hover, textarea:hover, label:hover { filter: none; }
   #fab-gasto { margin-top: 14px; }
 }
 
-/* Ocultar FABs en movimientos (ya tienen los botones inline) */
-.page-movimientos-active #fab-container { display: none !important; }
+/* Nota: la visibilidad de los FABs circulares en Movimientos (visibles en
+   escritorio, ocultos en móvil) se controla por JS en updateMovFABVisibility() */
 
 /* En desktop los FABs van más abajo (sin bottom-nav) */
 @media (min-width: 769px) {

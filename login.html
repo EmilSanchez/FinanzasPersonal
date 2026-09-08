@@ -407,7 +407,7 @@ html, body {
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getFirestore, collection, doc, getDocs, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getFirestore, collection, doc, getDocs, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
 const CFG={apiKey:"AIzaSyCMsgSK8tJW4-7OHkB-ZTcjGSOenmPRIog",authDomain:"finanzas-pro-1db2d.firebaseapp.com",projectId:"finanzas-pro-1db2d",storageBucket:"finanzas-pro-1db2d.firebasestorage.app",messagingSenderId:"74142920533",appId:"1:74142920533:web:6aa4b1a9ae82a94125c9dc"};
@@ -491,6 +491,19 @@ window.pp=function(d){if(buf.length>=4)return;buf+=d;updateDots();if(buf.length=
 window.pd=function(){buf=buf.slice(0,-1);updateDots();};
 function updateDots(){for(let i=0;i<4;i++)document.getElementById('d'+i).classList.toggle('on',i<buf.length);}
 
+// ── Registrar el ingreso (fecha/hora) para poder verlo luego en Configuración ──
+// Se guarda tanto la última vez (ultimoIngreso) como un historial corto
+// (últimos 15) para que el administrador pueda ver el uso de cada cuenta.
+async function registrarIngreso(selUser){
+  try{
+    const ahora = new Date().toISOString();
+    const ref = selUser ? doc(db,'usuarios',selUser.id) : doc(db,'config','app');
+    const historialPrevio = selUser ? (selUser.historialIngresos||[]) : ((await getDoc(ref).catch(()=>null))?.data()?.historialIngresos||[]);
+    const historial = [...historialPrevio, ahora].slice(-15);
+    await setDoc(ref, { ultimoIngreso: ahora, historialIngresos: historial }, { merge: true });
+  }catch(e){ console.warn('No se pudo registrar el ingreso:', e.message); }
+}
+
 window.psubmit=async function(){
   const entered=buf;buf='';updateDots();
   document.getElementById('verifying').style.display='flex';
@@ -513,6 +526,7 @@ window.psubmit=async function(){
     }
     const su=selUser?{id:selUser.id,nombre:selUser.nombre,isAdmin:false}:{isAdmin:true};
     localStorage.setItem(SK,JSON.stringify({ts:Date.now(),user:su}));
+    await registrarIngreso(selUser);
     window.location.replace('index.html');
   }else{
     document.getElementById('verifying').style.display='none';document.getElementById('pad').style.display='grid';
