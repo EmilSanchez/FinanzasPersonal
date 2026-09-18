@@ -4514,7 +4514,7 @@ function setModoPrecioInv(modo) {
   }
   const label = document.getElementById('fi-precio-label');
   const inp   = document.getElementById('fi-precio-usd');
-  if (label) label.textContent = modo==='total' ? 'Precio TOTAL de la compra (USD) *' : 'Precio por unidad (USD) *';
+  if (label) label.textContent = modo==='total' ? 'Precio TOTAL de la compra (USD)' : 'Precio por unidad (USD)';
   if (inp)   inp.placeholder   = modo==='total' ? 'Ej: 250.00' : 'Ej: 12.50';
   calcPreviewInv();
 }
@@ -4870,16 +4870,27 @@ function renderDetalleInv(invId) {
 
     <!-- Progreso de llegada a bodega (si hay pedido pendiente) -->
     ${p.unidadesPendientesLlegar>0?`
-    <div class="section" style="padding:11px 16px;margin-bottom:12px;border-left:3px solid #b45309;">
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:.77rem;color:var(--muted);margin-bottom:4px;flex-wrap:wrap;gap:8px;">
-        <span>${fmtNum(p.unidadesLlegadas)} / ${fmtNum(p.unidadesPedidas)} unidades en bodega — faltan <strong style="color:#b45309;">${fmtNum(p.unidadesPendientesLlegar)}</strong> por llegar</span>
-        <span style="display:flex;gap:14px;">
-          <button onclick="marcarTodoRecibido('${p.id}')" style="border:none;background:none;color:var(--muted);cursor:default;font-size:.74rem;padding:0;text-decoration:underline;">¿Ya llegó todo? Corregir</button>
-          <button onclick="openModalLlegadaBodega('${p.id}')" style="border:none;background:none;color:var(--accent);font-weight:700;cursor:default;font-size:.76rem;padding:0;">Llegó a bodega</button>
-        </span>
+    <div class="section" style="margin-bottom:12px;overflow:hidden;padding:0;">
+      <div style="display:flex;align-items:center;gap:14px;padding:16px 18px;flex-wrap:wrap;">
+        <div style="width:44px;height:44px;border-radius:10px;overflow:hidden;background:var(--bg2);flex-shrink:0;">${avatarImg}</div>
+        <div style="flex:1;min-width:170px;">
+          <div style="font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:3px;">Unidades en bodega</div>
+          <div style="display:flex;align-items:baseline;gap:6px;">
+            <span style="font-size:1.35rem;font-weight:800;color:var(--text);">${fmtNum(p.unidadesLlegadas)}</span>
+            <span style="font-size:.83rem;color:var(--muted);">/ ${fmtNum(p.unidadesPedidas)} pedidas</span>
+          </div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;">
+          <div style="font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#b45309;margin-bottom:3px;">Faltan por llegar</div>
+          <div style="font-size:1.35rem;font-weight:800;color:#b45309;">${fmtNum(p.unidadesPendientesLlegar)}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0;">
+          <button onclick="marcarTodoRecibido('${p.id}')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:default;font-size:.75rem;color:var(--muted);font-weight:600;">Ya llegó todo</button>
+          <button onclick="openModalLlegadaBodega('${p.id}')" style="height:34px;padding:0 14px;border:none;border-radius:8px;background:#b45309;color:#fff;cursor:default;font-size:.78rem;font-weight:700;">Llegó a bodega</button>
+        </div>
       </div>
-      <div class="progress-bar" style="height:7px;border-radius:10px;">
-        <div class="progress-fill" style="width:${p.unidadesPedidas>0?Math.round(p.unidadesLlegadas/p.unidadesPedidas*100):0}%;background:#b45309;border-radius:10px;"></div>
+      <div class="progress-bar" style="height:6px;border-radius:0;margin:0;">
+        <div class="progress-fill" style="width:${p.unidadesPedidas>0?Math.round(p.unidadesLlegadas/p.unidadesPedidas*100):0}%;background:#b45309;border-radius:0;"></div>
       </div>
     </div>`:''}
     <!-- Progreso -->
@@ -4901,7 +4912,7 @@ function renderDetalleInv(invId) {
       </div>
       <div class="table-wrap">
         <table class="data-table">
-          <thead><tr><th>Fecha</th><th>Unidades</th><th>USD c/u</th><th>Tasa</th><th>Envío</th><th>Inversión</th><th>Notas</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Unidades</th><th>USD c/u</th><th>Tasa</th><th>Envío</th><th>Inversión</th><th>Notas</th><th></th></tr></thead>
           <tbody>
             ${[...p.renovaciones].reverse().map(r=>`
               <tr>
@@ -4912,6 +4923,9 @@ function renderDetalleInv(invId) {
                 <td style="color:var(--orange)">${fmtCOP(r.envio||0)}</td>
                 <td style="font-weight:600">${fmtCOP(r.inversionNueva)}</td>
                 <td style="color:var(--muted);font-size:.82rem">${r.notas||'—'}</td>
+                <td><button class="btn btn-ghost btn-sm" onclick="editarRenovacionStock('${r.id}','${p.id}')" style="padding:4px 8px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button></td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -4963,9 +4977,14 @@ function renderDetalleInv(invId) {
                     <td style="color:var(--red);font-weight:600">${fmtCOP(g.monto)}</td>
                     <td style="color:var(--muted);font-size:.82rem">${bill?bill.nombre:'—'}</td>
                     <td style="color:var(--muted);font-size:.82rem">${g.notas||'—'}</td>
-                    <td><button class="btn btn-danger btn-sm" onclick="eliminarGastoAdicionalInv('${g.id}','${p.id}')">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                    </button></td>
+                    <td><div style="display:flex;gap:4px;">
+                      <button class="btn btn-ghost btn-sm" onclick="editarGastoAdicionalInv('${g.id}','${p.id}')" style="padding:4px 8px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </button>
+                      <button class="btn btn-danger btn-sm" onclick="eliminarGastoAdicionalInv('${g.id}','${p.id}')">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                      </button>
+                    </div></td>
                   </tr>`;
                 }).join('')}
           </tbody>
@@ -5104,7 +5123,7 @@ function openModalRenovarStock(invId) {
           <div class="form-group"><label>Nuevas unidades *</label>
             <input type="number" class="form-control" id="rs-unidades" placeholder="Ej: 6" oninput="calcRenovarPreview()">
           </div>
-          <div class="form-group"><label id="rs-precio-label">Precio por unidad (USD) *</label>
+          <div class="form-group"><label id="rs-precio-label">Precio por unidad (USD)</label>
             <input type="number" class="form-control" id="rs-precio-usd" value="${inv.precioUSD||''}" step="0.01" oninput="calcRenovarPreview()">
             <small id="rs-precio-hint" style="color:var(--muted);font-size:.72rem;display:block;margin-top:4px;"></small>
           </div>
@@ -5173,7 +5192,7 @@ function setModoPrecioRenovar(modo) {
   }
   const label = document.getElementById('rs-precio-label');
   const inp   = document.getElementById('rs-precio-usd');
-  if (label) label.textContent = modo==='total' ? 'Precio TOTAL de la compra (USD) *' : 'Precio por unidad (USD) *';
+  if (label) label.textContent = modo==='total' ? 'Precio TOTAL de la compra (USD)' : 'Precio por unidad (USD)';
   if (inp)   inp.placeholder   = modo==='total' ? 'Ej: 250.00' : 'Ej: 12.50';
   calcRenovarPreview();
 }
@@ -5232,16 +5251,9 @@ async function confirmarRenovarStock(invId, stockActual) {
   const notas       = document.getElementById('rs-notas')?.value.trim();
   const billeteraId = document.getElementById('rs-billetera')?.value || '';
 
-  if (!nuevas)    return toast('Ingresa la cantidad de unidades', 'error');
-  if (!precioUSD) return toast('Ingresa el precio de compra en USD', 'error');
-  if (!fecha)     return toast('La fecha es obligatoria', 'error');
-
-  // Billetera obligatoria
-  if (!billeteraId) {
-    const sel = document.getElementById('rs-billetera');
-    if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(()=>sel.style.border='',2000); }
-    return toast('Debes seleccionar de qué billetera sale el dinero', 'error');
-  }
+  if (!nuevas)      return toast('Ingresa la cantidad de unidades', 'error');
+  if (precioUSD<0)  return toast('El precio no puede ser negativo', 'error');
+  if (!fecha)       return toast('La fecha es obligatoria', 'error');
 
   const idx = STATE.db.inversiones.findIndex(i=>i.id===invId);
   if (idx === -1) return toast('Inversión no encontrada', 'error');
@@ -5249,11 +5261,21 @@ async function confirmarRenovarStock(invId, stockActual) {
   const inv = STATE.db.inversiones[idx];
   const inversionNueva = (precioUSD * tasa * nuevas) + envio + otros;
 
-  // Validar saldo suficiente
-  const saldo = saldoBilletera(billeteraId);
-  if (saldo < inversionNueva) {
-    const bill = STATE.db.billeteras?.find(b=>b.id===billeteraId);
-    return toast(`Saldo insuficiente en ${bill?.nombre||'billetera'}. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(inversionNueva)}`, 'error');
+  // Billetera obligatoria solo si hay un monto real que descontar (permite
+  // registrar renovaciones con costo USD 0, ej. muestras o reposiciones gratis)
+  if (inversionNueva > 0 && !billeteraId) {
+    const sel = document.getElementById('rs-billetera');
+    if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(()=>sel.style.border='',2000); }
+    return toast('Debes seleccionar de qué billetera sale el dinero', 'error');
+  }
+
+  // Validar saldo suficiente (solo si hay monto a descontar)
+  if (inversionNueva > 0 && billeteraId) {
+    const saldo = saldoBilletera(billeteraId);
+    if (saldo < inversionNueva) {
+      const bill = STATE.db.billeteras?.find(b=>b.id===billeteraId);
+      return toast(`Saldo insuficiente en ${bill?.nombre||'billetera'}. Disponible: ${fmt(saldo)} — Necesario: ${fmtCOP(inversionNueva)}`, 'error');
+    }
   }
 
   // Actualizar inversión: sumar unidades pedidas (costos se leen de renovaciones[] en calcInversion).
@@ -5265,35 +5287,257 @@ async function confirmarRenovarStock(invId, stockActual) {
     ? Number(inv.unidadesEnBodega) : Number(inv.unidades || 0);
   inv.unidadesEnBodega = yaEnBodegaAntes;
   inv.unidades    = (inv.unidades || 0) + nuevas;
-  inv.precioUSD   = precioUSD;
-  inv.tasa        = tasa;
+  if (precioUSD) inv.precioUSD = precioUSD;
+  if (tasa) inv.tasa = tasa;
   if (precioV > 0) inv.precioSugerido = precioV;
+
+  // Descontar de billetera (solo si hay monto real) y enlazar el gasto a la
+  // renovación (gastoId) para poder sincronizar montos si luego se edita.
+  let gastoId = null;
+  let bill = null;
+  if (inversionNueva > 0 && billeteraId) {
+    gastoId = uid();
+    bill = STATE.db.billeteras?.find(b=>b.id===billeteraId);
+    STATE.db.gastos.push({
+      id: gastoId, fecha,
+      hora: horaActual(),
+      monto: Math.round(inversionNueva),
+      desc: `Renovación stock: ${inv.nombre}${notas?' — '+notas:''}`,
+      cat: 'Inversión',
+      billeteraId,
+      autoGenerado: true
+    });
+  }
 
   // Guardar en historial de renovaciones
   if (!inv.renovaciones) inv.renovaciones = [];
   inv.renovaciones.push({
     id: uid(), fecha, nuevasUnidades: nuevas,
     precioUSD, tasa, envio, otros, inversionNueva,
-    billeteraId, notas: notas || ''
-  });
-
-  // Descontar de billetera
-  const bill = STATE.db.billeteras?.find(b=>b.id===billeteraId);
-  STATE.db.gastos.push({
-    id: uid(), fecha,
-    hora: horaActual(),
-    monto: Math.round(inversionNueva),
-    desc: `Renovación stock: ${inv.nombre}${notas?' — '+notas:''}`,
-    cat: 'Inversión',
-    billeteraId,
-    autoGenerado: true
+    billeteraId, notas: notas || '', gastoId
   });
 
   closeInvModal();
   renderAll();
   await saveDb(['inversiones','gastos']);
   const bn = bill ? ` (de ${bill.nombre})` : '';
-  toast(`Pedido registrado: +${nuevas} uds pendientes por llegar · ${fmtCOP(inversionNueva)} descontado${bn} `, 'success');
+  toast(`Pedido registrado: +${nuevas} uds pendientes por llegar${inversionNueva>0?` · ${fmtCOP(inversionNueva)} descontado${bn}`:''} `, 'success');
+}
+
+// ─── Editar renovación de stock existente ────────────────────
+function encontrarGastoRenovacion(inv, r) {
+  if (r.gastoId) {
+    const g = STATE.db.gastos.find(x=>x.id===r.gastoId);
+    if (g) return g;
+  }
+  // Compatibilidad con renovaciones creadas antes de guardar gastoId:
+  // se busca el gasto auto-generado que coincide en fecha, monto y descripción.
+  return STATE.db.gastos.find(g => g.autoGenerado && g.cat==='Inversión' &&
+    g.desc && g.desc.startsWith('Renovación stock: '+inv.nombre) &&
+    g.fecha === r.fecha && Math.round(g.monto) === Math.round(r.inversionNueva||0));
+}
+
+function editarRenovacionStock(renId, invId) {
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  if (!inv) return;
+  const r = (inv.renovaciones||[]).find(x=>x.id===renId);
+  if (!r) return;
+  const p = enriquecerInversion(inv);
+
+  const billeterasOpts = (STATE.db.billeteras||[]).map(b => {
+    const s = saldoBilletera(b.id);
+    return `<option value="${b.id}" ${b.id===r.billeteraId?'selected':''} style="color:${s>0?'inherit':'var(--red)'}">
+      ${BILL_ICONOS[b.tipo]||''} ${b.nombre} — ${fmt(s)}
+    </option>`;
+  }).join('');
+
+  const avatarImg = p.imagen
+    ? `<img src="${p.imagen}" alt="" style="width:100%;height:100%;object-fit:contain;background:var(--bg2);border-radius:10px;" onerror="this.style.display='none'">`
+    : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:1.3rem;font-weight:700;color:var(--accent);background:var(--accent-light);border-radius:10px;">${(p.nombre||'?')[0].toUpperCase()}</div>`;
+
+  const overlay = document.getElementById('modal-inv-form-overlay');
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:640px;width:100%;max-height:88vh;display:flex;flex-direction:column;">
+      <div class="modal-title" style="display:flex;align-items:center;gap:12px;padding:18px 22px;flex-shrink:0;">
+        <div style="width:44px;height:44px;flex-shrink:0;aspect-ratio:1;">${avatarImg}</div>
+        <div style="min-width:0;">
+          <div style="font-size:.98rem;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Editar renovación de stock</div>
+          <div style="font-size:.78rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${inv.nombre}</div>
+        </div>
+        <button onclick="closeInvModal()" style="margin-left:auto;background:none;border:none;font-size:1.1rem;color:var(--muted);cursor:default;flex-shrink:0;">✕</button>
+      </div>
+      <div class="modal-body-wrap" style="overflow-y:auto;padding:18px 22px;">
+        <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;">
+          <div class="form-group"><label>Unidades *</label>
+            <input type="number" class="form-control" id="rs-unidades" value="${r.nuevasUnidades}" oninput="calcRenovarPreview()">
+          </div>
+          <div class="form-group"><label id="rs-precio-label">Precio por unidad (USD)</label>
+            <input type="number" class="form-control" id="rs-precio-usd" value="${r.precioUSD||0}" step="0.01" oninput="calcRenovarPreview()">
+            <small id="rs-precio-hint" style="color:var(--muted);font-size:.72rem;display:block;margin-top:4px;"></small>
+          </div>
+          <div class="form-group"><label>Modo de precio</label>
+            <div style="display:flex;border:1px solid var(--border);border-radius:7px;overflow:hidden;height:38px;">
+              <button type="button" id="rs-modo-unitario" onclick="setModoPrecioRenovar('unitario')" style="flex:1;border:none;font-size:.72rem;font-weight:600;cursor:default;background:#0f2d6b;color:#fff;">Por unidad</button>
+              <button type="button" id="rs-modo-total" onclick="setModoPrecioRenovar('total')" style="flex:1;border:none;border-left:1px solid var(--border);font-size:.72rem;font-weight:600;cursor:default;background:none;color:var(--muted);">Total compra</button>
+            </div>
+          </div>
+          <div class="form-group"><label>Tasa dólar (COP)</label>
+            <input type="number" class="form-control" id="rs-tasa" value="${r.tasa||0}" oninput="calcRenovarPreview()">
+          </div>
+          <div class="form-group"><label>Envío (COP)</label>
+            <input type="number" class="form-control" id="rs-envio" value="${r.envio||0}" oninput="calcRenovarPreview()">
+          </div>
+          <div class="form-group"><label>Otros costos (COP)</label>
+            <input type="number" class="form-control" id="rs-otros" value="${r.otros||0}" oninput="calcRenovarPreview()">
+          </div>
+          <div class="form-group" style="grid-column:span 2"><label>Dinero sale de</label>
+            <select class="form-control" id="rs-billetera" onchange="calcRenovarPreview()">
+              <option value="">— Sin billetera (costo 0) —</option>
+              ${billeterasOpts}
+            </select>
+          </div>
+          <div class="form-group"><label>Fecha *</label>
+            <input type="date" class="form-control" id="rs-fecha" value="${r.fecha||''}">
+          </div>
+          <div class="form-group" style="grid-column:1/-1;">
+            <div id="rs-bill-aviso" style="display:none;font-size:.78rem;font-weight:600;"></div>
+          </div>
+          <div class="form-group" style="grid-column:1/-1"><label>Notas</label>
+            <input type="text" class="form-control" id="rs-notas" value="${(r.notas||'').replace(/"/g,'&quot;')}" placeholder="Ej: Segundo pedido Amazon...">
+          </div>
+        </div>
+        <div id="rs-preview" style="margin-top:12px;padding:10px 14px;background:var(--accent-light);border-radius:var(--radius-sm);font-size:.86rem;color:var(--accent2);display:flex;gap:18px;flex-wrap:wrap;">
+          <div>Inversión: <strong id="rs-inv-total">—</strong></div>
+          <div>Costo unitario: <strong id="rs-inv-unit">—</strong></div>
+          <div>Unidades: <strong id="rs-stock-result">—</strong></div>
+        </div>
+      </div>
+      <div class="modal-actions" style="flex-shrink:0;justify-content:space-between;">
+        <button class="btn btn-danger" onclick="eliminarRenovacionStock('${renId}','${invId}')">Eliminar</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost" onclick="closeInvModal()">Cancelar</button>
+          <button class="btn btn-success" onclick="confirmarEditarRenovacionStock('${renId}','${invId}')">Guardar cambios</button>
+        </div>
+      </div>
+    </div>`;
+  overlay.style.display = 'flex';
+  window._rsModoPrecio = 'unitario';
+  setTimeout(() => { setModoPrecioRenovar('unitario'); }, 50);
+}
+
+async function confirmarEditarRenovacionStock(renId, invId) {
+  const nuevas      = parseInt(document.getElementById('rs-unidades')?.value)||0;
+  const precioRaw   = parseFloat(document.getElementById('rs-precio-usd')?.value)||0;
+  const modoPrecio  = window._rsModoPrecio || 'unitario';
+  const precioUSD   = (modoPrecio === 'total' && nuevas > 0) ? precioRaw / nuevas : precioRaw;
+  const tasa        = parseFloat(document.getElementById('rs-tasa')?.value)||0;
+  const envio       = parseFloat(document.getElementById('rs-envio')?.value)||0;
+  const otros       = parseFloat(document.getElementById('rs-otros')?.value)||0;
+  const fecha       = document.getElementById('rs-fecha')?.value;
+  const notas       = document.getElementById('rs-notas')?.value.trim();
+  const billeteraId = document.getElementById('rs-billetera')?.value || '';
+
+  if (!nuevas)     return toast('Ingresa la cantidad de unidades', 'error');
+  if (precioUSD<0) return toast('El precio no puede ser negativo', 'error');
+  if (!fecha)      return toast('La fecha es obligatoria', 'error');
+
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  if (!inv) return toast('Inversión no encontrada', 'error');
+  const r = (inv.renovaciones||[]).find(x=>x.id===renId);
+  if (!r) return toast('Renovación no encontrada', 'error');
+
+  const inversionNueva = (precioUSD * tasa * nuevas) + envio + otros;
+
+  if (inversionNueva > 0 && !billeteraId) {
+    const sel = document.getElementById('rs-billetera');
+    if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(()=>sel.style.border='',2000); }
+    return toast('Debes seleccionar de qué billetera sale el dinero', 'error');
+  }
+
+  const gastoVinculado = encontrarGastoRenovacion(inv, r);
+
+  if (inversionNueva > 0 && billeteraId) {
+    // Si el gasto ya estaba descontado de la misma billetera, ese monto se
+    // "devuelve" antes de validar, para no bloquear por saldo insuficiente
+    // cuando en realidad solo se está ajustando el mismo movimiento.
+    const yaDescontadoDeEstaBilletera = (gastoVinculado && gastoVinculado.billeteraId === billeteraId) ? Number(gastoVinculado.monto||0) : 0;
+    const saldoDisponible = saldoBilletera(billeteraId) + yaDescontadoDeEstaBilletera;
+    if (saldoDisponible < inversionNueva) {
+      const bill = STATE.db.billeteras?.find(b=>b.id===billeteraId);
+      return toast(`Saldo insuficiente en ${bill?.nombre||'billetera'}. Disponible: ${fmt(saldoDisponible)} — Necesario: ${fmtCOP(inversionNueva)}`, 'error');
+    }
+  }
+
+  // Ajustar unidades totales pedidas por el delta entre el valor anterior y el nuevo
+  const deltaUnidades = nuevas - Number(r.nuevasUnidades||0);
+  inv.unidades = Math.max(0, Number(inv.unidades||0) + deltaUnidades);
+
+  r.nuevasUnidades = nuevas;
+  r.precioUSD = precioUSD;
+  r.tasa = tasa;
+  r.envio = envio;
+  r.otros = otros;
+  r.inversionNueva = inversionNueva;
+  r.fecha = fecha;
+  r.notas = notas || '';
+  r.billeteraId = billeteraId;
+
+  // Sincronizar (o crear) el movimiento de gasto vinculado a esta renovación
+  if (inversionNueva > 0 && billeteraId) {
+    if (gastoVinculado) {
+      gastoVinculado.monto = Math.round(inversionNueva);
+      gastoVinculado.fecha = fecha;
+      gastoVinculado.billeteraId = billeteraId;
+      gastoVinculado.desc = `Renovación stock: ${inv.nombre}${notas?' — '+notas:''}`;
+      r.gastoId = gastoVinculado.id;
+    } else {
+      const gastoId = uid();
+      STATE.db.gastos.push({
+        id: gastoId, fecha,
+        hora: horaActual(),
+        monto: Math.round(inversionNueva),
+        desc: `Renovación stock: ${inv.nombre}${notas?' — '+notas:''}`,
+        cat: 'Inversión',
+        billeteraId,
+        autoGenerado: true
+      });
+      r.gastoId = gastoId;
+    }
+  } else if (gastoVinculado) {
+    // El costo quedó en 0 o sin billetera: se elimina el movimiento de dinero asociado
+    STATE.db.gastos = STATE.db.gastos.filter(g=>g.id!==gastoVinculado.id);
+    r.gastoId = null;
+  }
+
+  closeInvModal();
+  renderDetalleInv(invId);
+  await saveDb(['inversiones','gastos']);
+  toast('Renovación actualizada', 'success');
+}
+
+async function eliminarRenovacionStock(renId, invId) {
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  if (!inv) return;
+  const r = (inv.renovaciones||[]).find(x=>x.id===renId);
+  if (!r) return;
+  const confirma = await appConfirm(
+    'Eliminar renovación de stock',
+    `¿Seguro que quieres eliminar esta renovación de +${fmtNum(r.nuevasUnidades)} unidades? Esto también revertirá el movimiento de dinero asociado, si existe.`,
+    { tipo: 'danger', textoConfirmar: 'Eliminar', textoCancelar: 'Cancelar' }
+  );
+  if (!confirma) return;
+
+  inv.unidades = Math.max(0, Number(inv.unidades||0) - Number(r.nuevasUnidades||0));
+
+  const gastoVinculado = encontrarGastoRenovacion(inv, r);
+  if (gastoVinculado) STATE.db.gastos = STATE.db.gastos.filter(g=>g.id!==gastoVinculado.id);
+
+  inv.renovaciones = (inv.renovaciones||[]).filter(x=>x.id!==renId);
+
+  closeInvModal();
+  renderDetalleInv(invId);
+  await saveDb(['inversiones','gastos']);
+  toast('Renovación eliminada', 'info');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -5309,12 +5553,13 @@ function openModalLlegadaBodega(invId) {
 
   const overlay = document.getElementById('modal-inv-form-overlay');
   overlay.innerHTML = `
-    <div class="modal" style="max-width:440px;width:100%;">
-      <div class="modal-title"> Llegó a bodega — ${inv.nombre}
-        <button onclick="closeInvModal()" style="float:right;background:none;border:none;font-size:1rem;color:var(--muted);cursor:default;">✕</button>
+    <div class="modal" style="max-width:460px;width:100%;">
+      <div class="modal-title" style="display:flex;align-items:center;gap:10px;">
+        <span style="flex:1;">Llegó a bodega — ${inv.nombre}</span>
+        <button onclick="closeInvModal()" style="background:none;border:none;font-size:1rem;color:var(--muted);cursor:default;flex-shrink:0;">✕</button>
       </div>
-      <div class="modal-body-wrap">
-        <div style="background:var(--bg2);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;font-size:.85rem;color:var(--muted);display:flex;flex-direction:column;gap:5px;">
+      <div class="modal-body-wrap" style="display:flex;flex-direction:column;gap:18px;">
+        <div style="background:var(--bg2);border-radius:var(--radius-sm);padding:14px 16px;font-size:.85rem;color:var(--muted);display:flex;flex-direction:column;gap:8px;">
           <span>Pedidas en total: <strong style="color:var(--text)">${fmtNum(p.unidadesPedidas)} uds</strong></span>
           <span>Ya en bodega: <strong style="color:var(--text)">${fmtNum(p.unidadesLlegadas)} uds</strong></span>
           <span>Faltan por llegar: <strong style="color:${p.unidadesPendientesLlegar>0?'#b45309':'var(--green)'}">${fmtNum(p.unidadesPendientesLlegar)} uds</strong></span>
@@ -5322,13 +5567,13 @@ function openModalLlegadaBodega(invId) {
         <div class="form-group">
           <label>¿Cuántas unidades llegaron ahora? *</label>
           <input type="number" class="form-control" id="lb-cantidad" placeholder="Ej: 5" max="${p.unidadesPendientesLlegar}" oninput="calcLlegadaPreview(${p.unidadesPendientesLlegar})" autofocus>
+          <div id="lb-preview" style="font-size:.8rem;min-height:16px;margin-top:2px;"></div>
         </div>
         <div class="form-group">
           <label>Notas (opcional)</label>
           <input type="text" class="form-control" id="lb-notas" placeholder="Ej: Segundo envío del pedido...">
         </div>
-        <div id="lb-preview" style="margin-top:6px;font-size:.82rem;min-height:18px;"></div>
-        <small style="color:var(--muted);font-size:.72rem;display:block;margin-top:4px;">Se guarda con la fecha y hora de este momento.</small>
+        <small style="color:var(--muted);font-size:.72rem;display:block;">Se guarda con la fecha y hora de este momento.</small>
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeInvModal()">Cancelar</button>
@@ -5542,6 +5787,102 @@ async function eliminarGastoAdicionalInv(gastoId, invId) {
   renderDetalleInv(invId);
   await saveDb(['inversiones','gastos']);
   toast('Gasto eliminado', 'info');
+}
+
+function editarGastoAdicionalInv(gastoId, invId) {
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  if (!inv) return;
+  const g = (inv.gastosAdicionales||[]).find(x=>x.id===gastoId);
+  if (!g) return;
+
+  const billeterasOpts = (STATE.db.billeteras||[]).map(b => {
+    const s = saldoBilletera(b.id);
+    return `<option value="${b.id}" ${b.id===g.billeteraId?'selected':''} style="color:${s>0?'inherit':'var(--red)'}">
+      ${BILL_ICONOS[b.tipo]||''} ${b.nombre} — ${fmt(s)}
+    </option>`;
+  }).join('');
+
+  const overlay = document.getElementById('modal-inv-form-overlay');
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:440px;width:100%;">
+      <div class="modal-title">Editar gasto adicional — ${inv.nombre}
+        <button onclick="closeInvModal()" style="float:right;background:none;border:none;font-size:1rem;color:var(--muted);cursor:default;">✕</button>
+      </div>
+      <div class="modal-body-wrap">
+        <div class="form-grid">
+          <div class="form-group"><label>Fecha *</label>
+            <input type="date" class="form-control" id="ga-fecha" value="${g.fecha||''}">
+          </div>
+          <div class="form-group"><label>Monto (COP) *</label>
+            <input type="number" class="form-control" id="ga-monto" value="${g.monto||0}" min="1" oninput="calcGastoAdicPreview()">
+          </div>
+          <div class="form-group" style="grid-column:1/-1"><label>Concepto / Detalle *</label>
+            <input type="text" class="form-control" id="ga-desc" value="${(g.desc||'').replace(/"/g,'&quot;')}" placeholder="Ej: Publicidad Meta, empaque, envío local...">
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>Dinero sale de *</label>
+            <select class="form-control" id="ga-billetera" onchange="calcGastoAdicPreview()">
+              <option value="">— Selecciona billetera (obligatorio) —</option>
+              ${billeterasOpts}
+            </select>
+            <div id="ga-bill-aviso" style="display:none;margin-top:5px;font-size:.78rem;font-weight:600;"></div>
+          </div>
+          <div class="form-group" style="grid-column:1/-1"><label>Notas adicionales</label>
+            <input type="text" class="form-control" id="ga-notas" value="${(g.notas||'').replace(/"/g,'&quot;')}" placeholder="Observaciones opcionales...">
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeInvModal()">Cancelar</button>
+        <button class="btn btn-success" onclick="confirmarEditarGastoAdicionalInv('${gastoId}','${invId}')">Guardar cambios</button>
+      </div>
+    </div>`;
+  overlay.style.display = 'flex';
+  setTimeout(calcGastoAdicPreview, 50);
+}
+
+async function confirmarEditarGastoAdicionalInv(gastoId, invId) {
+  const fecha       = document.getElementById('ga-fecha')?.value;
+  const monto       = parseFloat(document.getElementById('ga-monto')?.value)||0;
+  const desc        = document.getElementById('ga-desc')?.value.trim();
+  const billeteraId = document.getElementById('ga-billetera')?.value || '';
+  const notas       = document.getElementById('ga-notas')?.value.trim();
+
+  if (!fecha)  return toast('La fecha es obligatoria', 'error');
+  if (!monto)  return toast('El monto debe ser mayor a 0', 'error');
+  if (!desc)   return toast('El concepto es obligatorio', 'error');
+  if (!billeteraId) {
+    const sel = document.getElementById('ga-billetera');
+    if (sel) { sel.style.border='2px solid var(--red)'; setTimeout(()=>sel.style.border='',2000); }
+    return toast('Debes seleccionar de qué billetera sale el dinero', 'error');
+  }
+
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  if (!inv) return toast('Inversión no encontrada', 'error');
+  const g = (inv.gastosAdicionales||[]).find(x=>x.id===gastoId);
+  if (!g) return toast('Gasto no encontrado', 'error');
+
+  // Si se mantiene la misma billetera, se "devuelve" el monto anterior antes de validar
+  const saldoDisponible = saldoBilletera(billeteraId) + (billeteraId === g.billeteraId ? Number(g.monto||0) : 0);
+  if (saldoDisponible < monto) {
+    const bill = STATE.db.billeteras?.find(b=>b.id===billeteraId);
+    return toast(`Saldo insuficiente en ${bill?.nombre||'billetera'}. Disponible: ${fmt(saldoDisponible)}`, 'error');
+  }
+
+  g.fecha = fecha; g.monto = monto; g.desc = desc; g.billeteraId = billeteraId; g.notas = notas || '';
+
+  const gastoReal = STATE.db.gastos.find(x=>x.invGastoId===gastoId);
+  if (gastoReal) {
+    gastoReal.fecha = fecha;
+    gastoReal.monto = Math.round(monto);
+    gastoReal.desc = `Gasto inv. [${inv.nombre}]: ${desc}`;
+    gastoReal.billeteraId = billeteraId;
+  }
+
+  closeInvModal();
+  renderDetalleInv(invId);
+  await saveDb(['inversiones','gastos']);
+  toast('Gasto adicional actualizado', 'success');
 }
 
 /* ============================================================
