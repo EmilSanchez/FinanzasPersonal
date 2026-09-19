@@ -1539,7 +1539,7 @@ function renderDashboard() {
    ============================================================ */
 async function saveIngreso() {
   const fecha  = document.getElementById('i-fecha').value;
-  const monto  = Number(document.getElementById('i-monto').value);
+  const monto  = getMontoValue('i-monto');
   const fuente = document.getElementById('i-fuente').value.trim();
   const cat    = document.getElementById('i-cat').value;
   const editId = document.getElementById('ing-edit-id').value;
@@ -1572,6 +1572,7 @@ function editIngreso(id) {
   if (!item) return;
   document.getElementById('i-fecha').value  = item.fecha;
   document.getElementById('i-monto').value  = item.monto;
+  fmtMontoInput(document.getElementById('i-monto'));
   document.getElementById('i-fuente').value = item.fuente;
   document.getElementById('i-cat').value    = item.cat || 'Otro';
   document.getElementById('ing-edit-id').value = id;
@@ -1673,7 +1674,7 @@ function renderIngresos() {
    ============================================================ */
 async function saveGasto() {
   const fecha  = document.getElementById('g-fecha').value;
-  const monto  = Number(document.getElementById('g-monto').value);
+  const monto  = getMontoValue('g-monto');
   const desc   = document.getElementById('g-desc').value.trim();
   const cat    = document.getElementById('g-cat').value;
   const editId = document.getElementById('gas-edit-id').value;
@@ -1723,6 +1724,7 @@ function editGasto(id) {
   if (!item) return;
   document.getElementById('g-fecha').value  = item.fecha;
   document.getElementById('g-monto').value  = item.monto;
+  fmtMontoInput(document.getElementById('g-monto'));
   document.getElementById('g-desc').value   = item.desc;
   document.getElementById('g-cat').value    = item.cat || 'Otro';
   document.getElementById('gas-edit-id').value = id;
@@ -1882,9 +1884,9 @@ function onDeudaTipoChange() {
 
 async function saveDeuda() {
   const nombre     = document.getElementById('d-nombre').value.trim();
-  const total      = Number(document.getElementById('d-total').value);
+  const total      = getMontoValue('d-total');
   const fecha      = document.getElementById('d-fecha').value;
-  const cuota      = Number(document.getElementById('d-cuota').value) || 0;
+  const cuota      = getMontoValue('d-cuota');
   const prox       = document.getElementById('d-prox').value;
   const interes    = Number(document.getElementById('d-interes').value) || 0;
   const tipo       = document.getElementById('d-tipo')?.value || 'compra';
@@ -1936,7 +1938,9 @@ function openAbonar(idx) {
   document.getElementById('m-abonar-idx').value = idx;
   document.getElementById('m-abonar-nombre').value = d.nombre;
   const cuotaActual = getCuotaMesActual(d) || d.cuota;
-  document.getElementById('m-abonar-monto').value = cuotaActual || '';
+  const abonarMontoEl = document.getElementById('m-abonar-monto');
+  abonarMontoEl.value = cuotaActual || '';
+  fmtMontoInput(abonarMontoEl);
   document.getElementById('m-abonar-fecha').value = fechaHoy();
   document.getElementById('m-abonar-nota').value = '';
   populateBilleteraSelects();
@@ -1978,7 +1982,7 @@ function appConfirm(titulo, mensaje, opciones = {}) {
 
 async function registrarAbono() {
   const idx   = Number(document.getElementById('m-abonar-idx').value);
-  const monto = Number(document.getElementById('m-abonar-monto').value);
+  const monto = getMontoValue('m-abonar-monto');
   const fecha = document.getElementById('m-abonar-fecha').value;
   const nota  = document.getElementById('m-abonar-nota').value.trim();
   const d     = STATE.db.deudas[idx];
@@ -2057,7 +2061,9 @@ function openEditDeuda(idx) {
   document.getElementById('med-idx').value    = idx;
   document.getElementById('med-nombre').value = d.nombre || '';
   document.getElementById('med-total').value  = d.total || '';
+  fmtMontoInput(document.getElementById('med-total'));
   document.getElementById('med-cuota').value  = d.cuota || '';
+  fmtMontoInput(document.getElementById('med-cuota'));
   document.getElementById('med-prox').value   = d.prox || '';
   document.getElementById('med-interes').value = d.interes || '';
   const hint = document.getElementById('med-total-hint');
@@ -2073,8 +2079,8 @@ function openEditDeuda(idx) {
 async function saveEditDeuda() {
   const idx     = Number(document.getElementById('med-idx').value);
   const nombre  = document.getElementById('med-nombre').value.trim();
-  const total   = Number(document.getElementById('med-total').value) || 0;
-  const cuota   = Number(document.getElementById('med-cuota').value) || 0;
+  const total   = getMontoValue('med-total');
+  const cuota   = getMontoValue('med-cuota');
   const prox    = document.getElementById('med-prox').value;
   const interes = Number(document.getElementById('med-interes').value) || 0;
   const d = STATE.db.deudas[idx];
@@ -2132,7 +2138,7 @@ function openSumarDeuda(idx) {
 
 async function confirmarSumarDeuda() {
   const idx         = Number(document.getElementById('msd-idx').value);
-  const monto       = Number(document.getElementById('msd-monto').value);
+  const monto       = getMontoValue('msd-monto');
   const fecha       = document.getElementById('msd-fecha').value;
   const desc        = document.getElementById('msd-desc').value.trim();
   const tipoMsd     = document.getElementById('msd-tipo').value; // 'prestamo' o 'compra'
@@ -2698,7 +2704,7 @@ function openModalNuevoPrestamo() {
 async function savePrestamo() {
   const nombre      = document.getElementById('pr-nombre').value.trim();
   const contacto    = document.getElementById('pr-contacto').value.trim();
-  const monto       = Number(document.getElementById('pr-monto').value);
+  const monto       = getMontoValue('pr-monto');
   const fecha       = document.getElementById('pr-fecha').value;
   const vence       = document.getElementById('pr-vence').value;
   const interes     = Number(document.getElementById('pr-interes').value) || 0;
@@ -2757,7 +2763,7 @@ function openCobro(idx) {
 
 async function registrarCobro() {
   const idx        = Number(document.getElementById('m-cobro-idx').value);
-  const monto      = Number(document.getElementById('m-cobro-monto').value);
+  const monto      = getMontoValue('m-cobro-monto');
   const fecha      = document.getElementById('m-cobro-fecha').value;
   const nota       = document.getElementById('m-cobro-nota').value.trim();
   const billeteraId = document.getElementById('m-cobro-billetera')?.value || '';
@@ -2846,7 +2852,7 @@ function openAmpliarPrestamo(idx) {
 
 async function confirmarAmpliarPrestamo() {
   const idx         = Number(document.getElementById('map-idx').value);
-  const monto       = Number(document.getElementById('map-monto').value);
+  const monto       = getMontoValue('map-monto');
   const fecha       = document.getElementById('map-fecha').value;
   const desc        = document.getElementById('map-desc').value.trim();
   const billeteraId = document.getElementById('map-billetera').value;
@@ -3090,7 +3096,7 @@ function populateGFDeudaSelect(selId, currentDeudaId = '') {
 
 async function saveGastoFijo() {
   const nombre      = document.getElementById('gf-nombre').value.trim();
-  const monto       = Number(document.getElementById('gf-monto').value);
+  const monto       = getMontoValue('gf-monto');
   const cat         = document.getElementById('gf-cat').value;
   const dia         = Number(document.getElementById('gf-dia').value) || 0;
   const notas       = document.getElementById('gf-notas').value.trim();
@@ -3138,7 +3144,7 @@ function openEditGastoFijo(id) {
           </div>
           <div class="form-group">
             <label>Monto mensual *</label>
-            <input type="number" class="form-control" id="mgf-monto" placeholder="0" min="1">
+            <input type="text" inputmode="numeric" class="form-control" id="mgf-monto" placeholder="0" oninput="fmtMontoInput(this)">
           </div>
           <div class="form-group">
             <label>Categoría</label>
@@ -3182,6 +3188,7 @@ function openEditGastoFijo(id) {
   document.getElementById('mgf-id').value     = id;
   document.getElementById('mgf-nombre').value = gf.nombre || '';
   document.getElementById('mgf-monto').value  = gf.monto || '';
+  fmtMontoInput(document.getElementById('mgf-monto'));
   document.getElementById('mgf-cat').value    = gf.cat || 'Otro';
   document.getElementById('mgf-dia').value    = gf.dia || '';
   document.getElementById('mgf-notas').value  = gf.notas || '';
@@ -3193,7 +3200,7 @@ function openEditGastoFijo(id) {
 async function saveEditGastoFijo() {
   const id      = document.getElementById('mgf-id').value;
   const nombre  = document.getElementById('mgf-nombre').value.trim();
-  const monto   = Number(document.getElementById('mgf-monto').value);
+  const monto   = getMontoValue('mgf-monto');
   const cat     = document.getElementById('mgf-cat').value;
   const dia     = Number(document.getElementById('mgf-dia').value) || 0;
   const notas   = document.getElementById('mgf-notas').value.trim();
@@ -4428,19 +4435,19 @@ function openModalNuevaInversion(id=null) {
               <small id="fi-precio-hint" style="color:var(--muted);font-size:.72rem;display:block;margin-top:4px;"></small>
             </div>
             <div class="form-group"><label>Tasa dólar (COP) *</label>
-              <input type="number" class="form-control" id="fi-tasa" value="${inv?.tasa||4200}" oninput="calcPreviewInv()">
+              <input type="text" inputmode="numeric" class="form-control" id="fi-tasa" value="${inv?.tasa||4200}" oninput="fmtMontoInput(this);calcPreviewInv()">
             </div>
             <div class="form-group"><label>Cantidad comprada *</label>
               <input type="number" class="form-control" id="fi-unidades" value="${inv?.unidades||''}" placeholder="Ej: 6" oninput="calcPreviewInv()">
             </div>
             <div class="form-group"><label>Envío internacional (COP)</label>
-              <input type="number" class="form-control" id="fi-envio" value="${inv?.envio||0}" placeholder="0" oninput="calcPreviewInv()">
+              <input type="text" inputmode="numeric" class="form-control" id="fi-envio" value="${inv?.envio||0}" placeholder="0" oninput="fmtMontoInput(this);calcPreviewInv()">
             </div>
             <div class="form-group"><label>Otros costos (COP)</label>
-              <input type="number" class="form-control" id="fi-otros" value="${inv?.otrosCostos||0}" placeholder="0" oninput="calcPreviewInv()">
+              <input type="text" inputmode="numeric" class="form-control" id="fi-otros" value="${inv?.otrosCostos||0}" placeholder="0" oninput="fmtMontoInput(this);calcPreviewInv()">
             </div>
             <div class="form-group"><label>Precio sugerido venta (COP)</label>
-              <input type="number" class="form-control" id="fi-precio-sugerido" value="${inv?.precioSugerido||''}" placeholder="0">
+              <input type="text" inputmode="numeric" class="form-control" id="fi-precio-sugerido" value="${inv?.precioSugerido||''}" placeholder="0" oninput="fmtMontoInput(this)">
             </div>
           </div>
           <div id="inv-preview" style="margin-top:10px;padding:10px 14px;background:var(--accent-light);border-radius:var(--radius-sm);font-size:.875rem;color:var(--accent2);display:flex;gap:24px;">
@@ -4521,10 +4528,10 @@ function setModoPrecioInv(modo) {
 
 function calcPreviewInv() {
   const raw  = parseFloat(document.getElementById('fi-precio-usd')?.value)||0;
-  const tasa = parseFloat(document.getElementById('fi-tasa')?.value)||0;
+  const tasa = getMontoValue('fi-tasa');
   const cant = parseFloat(document.getElementById('fi-unidades')?.value)||0;
-  const env  = parseFloat(document.getElementById('fi-envio')?.value)||0;
-  const otr  = parseFloat(document.getElementById('fi-otros')?.value)||0;
+  const env  = getMontoValue('fi-envio');
+  const otr  = getMontoValue('fi-otros');
   const modo = window._fiModoPrecio || 'unitario';
   const usdUnit = (modo === 'total' && cant > 0) ? raw / cant : raw;
   const inv  = (usdUnit*tasa*cant)+env+otr;
@@ -4566,16 +4573,16 @@ async function guardarInversion(id=null) {
   // (el resto de la app siempre trabaja con precio unitario).
   const modoPrecio = window._fiModoPrecio || 'unitario';
   const precioUSD = (modoPrecio === 'total' && unidades > 0) ? precioRaw / unidades : precioRaw;
-  const tasa      = parseFloat(document.getElementById('fi-tasa')?.value)||0;
+  const tasa      = getMontoValue('fi-tasa');
   const fecha     = document.getElementById('fi-fecha')?.value;
 
   if(!nombre) return toast('El nombre es obligatorio','error');
-  if(!precioUSD && !document.getElementById('fi-envio')?.value) return toast('Ingresa el costo de compra','error');
+  if(!precioUSD && !getMontoValue('fi-envio')) return toast('Ingresa el costo de compra','error');
   if(!fecha)  return toast('La fecha es obligatoria','error');
 
   const billeteraId = document.getElementById('fi-billetera')?.value || '';
-  const envioVal    = parseFloat(document.getElementById('fi-envio')?.value)||0;
-  const otrosVal    = parseFloat(document.getElementById('fi-otros')?.value)||0;
+  const envioVal    = getMontoValue('fi-envio');
+  const otrosVal    = getMontoValue('fi-otros');
   const invTotal    = (precioUSD * tasa * unidades) + envioVal + otrosVal;
 
   // Solo validar billetera obligatoria al CREAR (al editar no se descuenta dinero)
@@ -4615,7 +4622,7 @@ async function guardarInversion(id=null) {
     envioInicial: envioVal,
     otrosCostos: otrosVal,
     otrosCostosInicial: otrosVal,
-    precioSugerido: parseFloat(document.getElementById('fi-precio-sugerido')?.value)||0,
+    precioSugerido: getMontoValue('fi-precio-sugerido'),
     fecha, estado: document.getElementById('fi-estado')?.value||'activa',
     notas: document.getElementById('fi-notas')?.value.trim(),
     billeteraId,
@@ -4666,9 +4673,8 @@ function openModalVentaInv(invId) {
       <div class="modal-body-wrap">
         <div style="display:flex;align-items:center;gap:12px;padding-bottom:16px;margin-bottom:16px;border-bottom:1px solid var(--border-light);">
           ${inv.imagen
-            ? `<img src="${inv.imagen}" alt="${inv.nombre}" style="width:44px;height:44px;object-fit:cover;border-radius:8px;flex-shrink:0;"
-                 onerror="this.style.display='none'">`
-            : `<div style="width:44px;height:44px;border-radius:8px;background:var(--accent-light);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.1rem;">${(inv.nombre||'?')[0].toUpperCase()}</div>`}
+            ? `<div style="width:44px;height:44px;border-radius:8px;overflow:hidden;background:var(--bg2);flex-shrink:0;"><img src="${inv.imagen}" alt="${inv.nombre}" style="width:100%;height:100%;object-fit:contain;" onerror="this.parentElement.style.display='none'"></div>`
+            : `<div style="width:44px;height:44px;border-radius:8px;background:var(--accent-light);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.1rem;flex-shrink:0;">${(inv.nombre||'?')[0].toUpperCase()}</div>`}
           <div>
             <div style="font-weight:700">${inv.nombre}</div>
             <div style="font-size:.82rem;color:var(--muted)">Stock disponible: <strong style="color:var(--text)">${p.stockActual}</strong> uds · Precio sugerido: ${fmtCOP(inv.precioSugerido||0)}</div>
@@ -4681,8 +4687,14 @@ function openModalVentaInv(invId) {
           <div class="form-group"><label>Cantidad *</label>
             <input type="number" class="form-control" id="fv-cant" min="1" max="${p.stockActual}" placeholder="Ej: 2" oninput="onFvBilleteraChange()">
           </div>
-          <div class="form-group" style="grid-column:1/-1"><label>Precio unitario de venta (COP) *</label>
-            <input type="number" class="form-control" id="fv-precio" min="1" placeholder="${inv.precioSugerido||'Ej: 180000'}" oninput="onFvBilleteraChange()">
+          <div class="form-group"><label id="fv-precio-label" style="display:flex;align-items:flex-end;min-height:26px;white-space:nowrap;">Precio unitario (COP) *</label>
+            <input type="text" inputmode="numeric" class="form-control" id="fv-precio" placeholder="${inv.precioSugerido||'Ej: 180000'}" oninput="fmtMontoInput(this);onFvBilleteraChange()">
+          </div>
+          <div class="form-group"><label style="display:flex;align-items:flex-end;min-height:26px;">Modo de precio</label>
+            <div style="display:flex;border:1px solid var(--border);border-radius:7px;overflow:hidden;height:38px;">
+              <button type="button" id="fv-modo-unitario" onclick="setModoPrecioVenta('unitario')" style="flex:1;border:none;font-size:.72rem;font-weight:600;cursor:default;background:#0f2d6b;color:#fff;">Por unidad</button>
+              <button type="button" id="fv-modo-total" onclick="setModoPrecioVenta('total')" style="flex:1;border:none;border-left:1px solid var(--border);font-size:.72rem;font-weight:600;cursor:default;background:none;color:var(--muted);">Total venta</button>
+            </div>
           </div>
           <div class="form-group"><label>Cliente / Referencia</label>
             <input type="text" class="form-control" id="fv-cliente" placeholder="Nombre opcional">
@@ -4709,13 +4721,42 @@ function openModalVentaInv(invId) {
       </div>
     </div>`;
   overlay.style.display='flex';
+  window._fvModoPrecio = 'unitario';
+  window._fvPrecioSugerido = inv.precioSugerido || 0;
+  setTimeout(() => { setModoPrecioVenta('unitario'); }, 50);
+}
+
+function setModoPrecioVenta(modo) {
+  window._fvModoPrecio = modo;
+  const btnU = document.getElementById('fv-modo-unitario');
+  const btnT = document.getElementById('fv-modo-total');
+  if (btnU && btnT) {
+    btnU.style.background = modo==='unitario' ? '#0f2d6b' : 'none';
+    btnU.style.color      = modo==='unitario' ? '#fff' : 'var(--muted)';
+    btnT.style.background = modo==='total' ? '#0f2d6b' : 'none';
+    btnT.style.color      = modo==='total' ? '#fff' : 'var(--muted)';
+  }
+  const label = document.getElementById('fv-precio-label');
+  const inp   = document.getElementById('fv-precio');
+  if (label) label.textContent = modo==='total' ? 'Precio total (COP) *' : 'Precio unitario (COP) *';
+  if (inp)   inp.placeholder   = modo==='total' ? 'Ej: 360000' : (window._fvPrecioSugerido || 'Ej: 180000');
+  onFvBilleteraChange();
+}
+
+// Convierte lo digitado en el campo de precio al precio POR UNIDAD real,
+// según el modo seleccionado (por unidad o total de la venta)
+function getPrecioUnitarioVenta() {
+  const raw  = getMontoValue('fv-precio');
+  const cant = parseInt(document.getElementById('fv-cant')?.value)||0;
+  const modo = window._fvModoPrecio || 'unitario';
+  return (modo === 'total' && cant > 0) ? raw / cant : raw;
 }
 
 function onFvBilleteraChange() {
   const sel     = document.getElementById('fv-billetera');
   const preview = document.getElementById('fv-bill-preview');
   if (!preview || !sel) return;
-  const precio = parseFloat(document.getElementById('fv-precio')?.value)||0;
+  const precio = getPrecioUnitarioVenta();
   const cant   = parseInt(document.getElementById('fv-cant')?.value)||0;
   if (!sel.value) { preview.style.display='none'; return; }
   const saldo       = saldoBilletera(sel.value);
@@ -4736,7 +4777,7 @@ function onFvBilleteraChange() {
 async function guardarVentaInv(invId, stockDisp) {
   const fecha    = document.getElementById('fv-fecha')?.value;
   const cantidad = parseInt(document.getElementById('fv-cant')?.value)||0;
-  const precio   = parseFloat(document.getElementById('fv-precio')?.value)||0;
+  const precio   = getPrecioUnitarioVenta();
   const cliente  = document.getElementById('fv-cliente')?.value.trim();
   const obs      = document.getElementById('fv-obs')?.value.trim();
   const billeteraId = document.getElementById('fv-billetera')?.value || '';
@@ -5134,13 +5175,13 @@ function openModalRenovarStock(invId) {
             </div>
           </div>
           <div class="form-group"><label>Tasa dólar (COP)</label>
-            <input type="number" class="form-control" id="rs-tasa" value="${inv.tasa||4200}" oninput="calcRenovarPreview()">
+            <input type="text" inputmode="numeric" class="form-control" id="rs-tasa" value="${inv.tasa||4200}" oninput="fmtMontoInput(this);calcRenovarPreview()">
           </div>
           <div class="form-group"><label>Envío (COP)</label>
-            <input type="number" class="form-control" id="rs-envio" value="0" oninput="calcRenovarPreview()">
+            <input type="text" inputmode="numeric" class="form-control" id="rs-envio" value="0" oninput="fmtMontoInput(this);calcRenovarPreview()">
           </div>
           <div class="form-group"><label>Otros costos (COP)</label>
-            <input type="number" class="form-control" id="rs-otros" value="0" oninput="calcRenovarPreview()">
+            <input type="text" inputmode="numeric" class="form-control" id="rs-otros" value="0" oninput="fmtMontoInput(this);calcRenovarPreview()">
           </div>
           <div class="form-group" style="grid-column:span 2"><label> Dinero sale de *</label>
             <select class="form-control" id="rs-billetera" onchange="calcRenovarPreview()">
@@ -5155,7 +5196,7 @@ function openModalRenovarStock(invId) {
             <div id="rs-bill-aviso" style="display:none;font-size:.78rem;font-weight:600;"></div>
           </div>
           <div class="form-group" style="grid-column:span 2"><label>Nuevo precio sugerido venta</label>
-            <input type="number" class="form-control" id="rs-precio-venta" value="${inv.precioSugerido||''}" placeholder="0">
+            <input type="text" inputmode="numeric" class="form-control" id="rs-precio-venta" value="${inv.precioSugerido||''}" placeholder="0" oninput="fmtMontoInput(this)">
           </div>
           <div class="form-group" style="grid-column:1/-1"><label>Notas</label>
             <input type="text" class="form-control" id="rs-notas" placeholder="Ej: Segundo pedido Amazon...">
@@ -5199,10 +5240,10 @@ function setModoPrecioRenovar(modo) {
 
 function calcRenovarPreview() {
   const raw    = parseFloat(document.getElementById('rs-precio-usd')?.value)||0;
-  const tasa   = parseFloat(document.getElementById('rs-tasa')?.value)||0;
+  const tasa   = getMontoValue('rs-tasa');
   const nuevas = parseInt(document.getElementById('rs-unidades')?.value)||0;
-  const env    = parseFloat(document.getElementById('rs-envio')?.value)||0;
-  const otros  = parseFloat(document.getElementById('rs-otros')?.value)||0;
+  const env    = getMontoValue('rs-envio');
+  const otros  = getMontoValue('rs-otros');
   const modo   = window._rsModoPrecio || 'unitario';
   const usd    = (modo === 'total' && nuevas > 0) ? raw / nuevas : raw;
   const inv    = (usd*tasa*nuevas)+env+otros;
@@ -5243,10 +5284,10 @@ async function confirmarRenovarStock(invId, stockActual) {
   // Si el modo es "Total compra", se convierte a precio por unidad para guardar
   const modoPrecio  = window._rsModoPrecio || 'unitario';
   const precioUSD   = (modoPrecio === 'total' && nuevas > 0) ? precioRaw / nuevas : precioRaw;
-  const tasa        = parseFloat(document.getElementById('rs-tasa')?.value)||0;
-  const envio       = parseFloat(document.getElementById('rs-envio')?.value)||0;
-  const otros       = parseFloat(document.getElementById('rs-otros')?.value)||0;
-  const precioV     = parseFloat(document.getElementById('rs-precio-venta')?.value)||0;
+  const tasa        = getMontoValue('rs-tasa');
+  const envio       = getMontoValue('rs-envio');
+  const otros       = getMontoValue('rs-otros');
+  const precioV     = getMontoValue('rs-precio-venta');
   const fecha       = document.getElementById('rs-fecha')?.value;
   const notas       = document.getElementById('rs-notas')?.value.trim();
   const billeteraId = document.getElementById('rs-billetera')?.value || '';
@@ -5382,13 +5423,13 @@ function editarRenovacionStock(renId, invId) {
             </div>
           </div>
           <div class="form-group"><label>Tasa dólar (COP)</label>
-            <input type="number" class="form-control" id="rs-tasa" value="${r.tasa||0}" oninput="calcRenovarPreview()">
+            <input type="text" inputmode="numeric" class="form-control" id="rs-tasa" value="${r.tasa||0}" oninput="fmtMontoInput(this);calcRenovarPreview()">
           </div>
           <div class="form-group"><label>Envío (COP)</label>
-            <input type="number" class="form-control" id="rs-envio" value="${r.envio||0}" oninput="calcRenovarPreview()">
+            <input type="text" inputmode="numeric" class="form-control" id="rs-envio" value="${r.envio||0}" oninput="fmtMontoInput(this);calcRenovarPreview()">
           </div>
           <div class="form-group"><label>Otros costos (COP)</label>
-            <input type="number" class="form-control" id="rs-otros" value="${r.otros||0}" oninput="calcRenovarPreview()">
+            <input type="text" inputmode="numeric" class="form-control" id="rs-otros" value="${r.otros||0}" oninput="fmtMontoInput(this);calcRenovarPreview()">
           </div>
           <div class="form-group" style="grid-column:span 2"><label>Dinero sale de</label>
             <select class="form-control" id="rs-billetera" onchange="calcRenovarPreview()">
@@ -5430,9 +5471,9 @@ async function confirmarEditarRenovacionStock(renId, invId) {
   const precioRaw   = parseFloat(document.getElementById('rs-precio-usd')?.value)||0;
   const modoPrecio  = window._rsModoPrecio || 'unitario';
   const precioUSD   = (modoPrecio === 'total' && nuevas > 0) ? precioRaw / nuevas : precioRaw;
-  const tasa        = parseFloat(document.getElementById('rs-tasa')?.value)||0;
-  const envio       = parseFloat(document.getElementById('rs-envio')?.value)||0;
-  const otros       = parseFloat(document.getElementById('rs-otros')?.value)||0;
+  const tasa        = getMontoValue('rs-tasa');
+  const envio       = getMontoValue('rs-envio');
+  const otros       = getMontoValue('rs-otros');
   const fecha       = document.getElementById('rs-fecha')?.value;
   const notas       = document.getElementById('rs-notas')?.value.trim();
   const billeteraId = document.getElementById('rs-billetera')?.value || '';
@@ -5679,7 +5720,7 @@ function openModalGastoAdicionalInv(invId) {
             <input type="date" class="form-control" id="ga-fecha" value="${ymd}">
           </div>
           <div class="form-group"><label>Monto (COP) *</label>
-            <input type="number" class="form-control" id="ga-monto" placeholder="0" min="1" oninput="calcGastoAdicPreview()">
+            <input type="text" inputmode="numeric" class="form-control" id="ga-monto" placeholder="0" oninput="fmtMontoInput(this);calcGastoAdicPreview()">
           </div>
           <div class="form-group" style="grid-column:1/-1"><label>Concepto / Detalle *</label>
             <input type="text" class="form-control" id="ga-desc" placeholder="Ej: Publicidad Meta, empaque, envío local...">
@@ -5706,7 +5747,7 @@ function openModalGastoAdicionalInv(invId) {
 }
 
 function calcGastoAdicPreview() {
-  const monto   = parseFloat(document.getElementById('ga-monto')?.value)||0;
+  const monto   = getMontoValue('ga-monto');
   const billSel = document.getElementById('ga-billetera');
   const aviso   = document.getElementById('ga-bill-aviso');
   if (!billSel || !aviso) return;
@@ -5728,7 +5769,7 @@ function calcGastoAdicPreview() {
 
 async function confirmarGastoAdicionalInv(invId) {
   const fecha       = document.getElementById('ga-fecha')?.value;
-  const monto       = parseFloat(document.getElementById('ga-monto')?.value)||0;
+  const monto       = getMontoValue('ga-monto');
   const desc        = document.getElementById('ga-desc')?.value.trim();
   const billeteraId = document.getElementById('ga-billetera')?.value || '';
   const notas       = document.getElementById('ga-notas')?.value.trim();
@@ -5814,7 +5855,7 @@ function editarGastoAdicionalInv(gastoId, invId) {
             <input type="date" class="form-control" id="ga-fecha" value="${g.fecha||''}">
           </div>
           <div class="form-group"><label>Monto (COP) *</label>
-            <input type="number" class="form-control" id="ga-monto" value="${g.monto||0}" min="1" oninput="calcGastoAdicPreview()">
+            <input type="text" inputmode="numeric" class="form-control" id="ga-monto" value="${g.monto||0}" oninput="fmtMontoInput(this);calcGastoAdicPreview()">
           </div>
           <div class="form-group" style="grid-column:1/-1"><label>Concepto / Detalle *</label>
             <input type="text" class="form-control" id="ga-desc" value="${(g.desc||'').replace(/"/g,'&quot;')}" placeholder="Ej: Publicidad Meta, empaque, envío local...">
@@ -5843,7 +5884,7 @@ function editarGastoAdicionalInv(gastoId, invId) {
 
 async function confirmarEditarGastoAdicionalInv(gastoId, invId) {
   const fecha       = document.getElementById('ga-fecha')?.value;
-  const monto       = parseFloat(document.getElementById('ga-monto')?.value)||0;
+  const monto       = getMontoValue('ga-monto');
   const desc        = document.getElementById('ga-desc')?.value.trim();
   const billeteraId = document.getElementById('ga-billetera')?.value || '';
   const notas       = document.getElementById('ga-notas')?.value.trim();
@@ -5968,7 +6009,7 @@ function openModalBilletera(id=null) {
         </div>
         <div class="form-group">
           <label>Saldo inicial (COP)</label>
-          <input type="number" class="form-control" id="fb-saldo" value="${b?.saldoInicial||0}" placeholder="0" style="height:44px;width:100%;">
+          <input type="text" inputmode="numeric" class="form-control" id="fb-saldo" value="${b?.saldoInicial||0}" placeholder="0" style="height:44px;width:100%;" oninput="fmtMontoInput(this)">
           <small style="color:var(--muted);font-size:.72rem;">Cuánto tienes actualmente en esta cuenta</small>
         </div>
         <label style="display:flex;align-items:center;gap:10px;cursor:default;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--bg2);">
@@ -5993,7 +6034,7 @@ async function guardarBilletera(id='') {
   const cobra4x1000 = document.getElementById('fb-cobra4x1000')?.checked || false;
   const nombre = document.getElementById('fb-nombre')?.value.trim();
   const tipo   = document.getElementById('fb-tipo')?.value;
-  const saldo  = parseFloat(document.getElementById('fb-saldo')?.value) || 0;
+  const saldo  = getMontoValue('fb-saldo');
   const color  = document.getElementById('fb-color')?.value;
 
   if (!nombre) return toast('El nombre es obligatorio', 'error');
@@ -6078,7 +6119,7 @@ function openModalTransferencia() {
 
 function onTrMontoChange() {
   const origenId = document.getElementById('tr-origen')?.value;
-  const monto    = parseFloat(document.getElementById('tr-monto')?.value) || 0;
+  const monto    = getMontoValue('tr-monto');
   const postEl   = document.getElementById('tr-saldo-post');
   if (!postEl) return;
   if (origenId && monto > 0) {
@@ -6106,7 +6147,7 @@ function openModalTransferenciaDesde(billId) {
 async function ejecutarTransferencia() {
   const origenId  = document.getElementById('tr-origen')?.value;
   const destinoId = document.getElementById('tr-destino')?.value;
-  const monto     = parseFloat(document.getElementById('tr-monto')?.value) || 0;
+  const monto     = getMontoValue('tr-monto');
   const fecha     = document.getElementById('tr-fecha')?.value;
   const descExtra = document.getElementById('tr-desc')?.value.trim();
 
