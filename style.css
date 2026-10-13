@@ -1401,13 +1401,13 @@ input:hover, select:hover, textarea:hover, label:hover { filter: none; }
   .inv-det-grid {
     grid-template-columns: 1fr !important;
   }
-  .inv-det-grid > div:first-child {
+  .inv-det-grid > div:nth-child(2) {
     display: flex !important;
     flex-direction: row;
     gap: 12px;
     align-items: flex-start;
   }
-  .inv-det-grid > div:first-child > div:first-child {
+  .inv-det-grid > div:nth-child(2) > div:first-child {
     width: 80px !important;
     height: 80px !important;
     flex-shrink: 0;
