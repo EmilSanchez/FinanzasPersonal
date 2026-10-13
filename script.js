@@ -4915,6 +4915,15 @@ function renderDetalleInv(invId) {
   const p = enriquecerInversion(rawInv);
   const invIdx = STATE.db.inversiones.indexOf(rawInv);
 
+  // Al entrar a un producto distinto, reiniciar la pestaña activa y los filtros
+  // del historial de ventas (no tiene sentido arrastrar el filtro de otro producto).
+  if (window._invDetLastId !== invId) {
+    window._invDetLastId = invId;
+    window._invActiveTab = 'ventas';
+    window._vhSoloPendientes = false;
+  }
+  const tab = window._invActiveTab || 'ventas';
+
   const pct = p.inversionTotal>0?((p.totalRecuperado/p.inversionTotal)*100).toFixed(1):0;
 
   // Calcular totales de movimientos del producto
@@ -4953,8 +4962,8 @@ function renderDetalleInv(invId) {
       </div>
     </div>
 
-    <!-- Fila: foto + info + costos -->
-    <div style="display:grid;grid-template-columns:130px 1fr 1fr;gap:12px;margin-bottom:12px;" class="inv-det-grid">
+    <!-- Fila: foto + info + costos + stock físico -->
+    <div style="display:grid;grid-template-columns:130px 1fr 1fr 1fr;gap:12px;margin-bottom:12px;" class="inv-det-grid">
       <!-- Foto -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px;display:flex;flex-direction:column;gap:8px;">
         <div style="width:100%;aspect-ratio:1;overflow:hidden;border-radius:8px;background:var(--bg2);">${avatarImg}</div>
@@ -4980,6 +4989,27 @@ function renderDetalleInv(invId) {
           <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-light);font-size:.82rem;">
             <span style="color:var(--muted);">${l}</span><span>${v}</span></div>`).join('')}
       </div>
+      <!-- Stock físico en bodega -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;display:flex;flex-direction:column;">
+        <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px;">Stock físico en bodega</div>
+        <div style="display:flex;align-items:baseline;gap:6px;">
+          <span style="font-size:1.4rem;font-weight:800;color:var(--text);">${fmtNum(p.stockActual)}</span>
+          <span style="font-size:.76rem;color:var(--muted);">uds disponibles</span>
+        </div>
+        <div style="font-size:.71rem;color:var(--muted);margin-top:3px;margin-bottom:10px;">Llegadas: ${fmtNum(p.unidadesLlegadas)} / ${fmtNum(p.unidadesPedidas)} pedidas${p.unidadesVendidas>0?` · Vendidas: ${fmtNum(p.unidadesVendidas)}`:''}</div>
+        ${p.unidadesPendientesLlegar>0?`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:7px;background:#fff7ed;border:1px solid #fde4c0;margin-bottom:8px;">
+          <span style="font-size:.71rem;color:#b45309;font-weight:700;">Disponible para preventa</span>
+          <span style="font-size:.82rem;color:#b45309;font-weight:800;">${fmtNum(p.unidadesPendientesLlegar)} uds</span>
+        </div>
+        <div class="progress-bar" style="height:5px;border-radius:10px;margin-bottom:10px;">
+          <div class="progress-fill" style="width:${p.unidadesPedidas>0?Math.round(p.unidadesLlegadas/p.unidadesPedidas*100):0}%;background:#b45309;border-radius:10px;"></div>
+        </div>
+        <div style="margin-top:auto;display:flex;gap:6px;">
+          <button onclick="marcarTodoRecibido('${p.id}')" style="flex:1;height:28px;border:1px solid var(--border);border-radius:6px;background:none;cursor:default;font-size:.68rem;color:var(--muted);font-weight:600;">Ya llegó todo</button>
+          <button onclick="openModalLlegadaBodega('${p.id}')" style="flex:1;height:28px;border:none;border-radius:6px;background:#b45309;color:#fff;cursor:default;font-size:.7rem;font-weight:700;">Llegó a bodega</button>
+        </div>`:`<div style="margin-top:auto;font-size:.72rem;color:var(--muted);">Sin pedidos pendientes por llegar</div>`}
+      </div>
     </div>
 
     <!-- KPIs compactos -->
@@ -4991,32 +5021,6 @@ function renderDetalleInv(invId) {
         </div>`).join('')}
     </div>
 
-    <!-- Progreso de llegada a bodega (si hay pedido pendiente) -->
-    ${p.unidadesPendientesLlegar>0?`
-    <div class="section" style="margin-bottom:12px;overflow:hidden;padding:0;">
-      <div style="display:flex;align-items:center;gap:14px;padding:16px 18px;flex-wrap:wrap;">
-        <div style="width:44px;height:44px;border-radius:10px;overflow:hidden;background:var(--bg2);flex-shrink:0;">${avatarImg}</div>
-        <div style="flex:1;min-width:170px;">
-          <div style="font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:3px;">Stock físico en bodega</div>
-          <div style="display:flex;align-items:baseline;gap:6px;">
-            <span style="font-size:1.35rem;font-weight:800;color:var(--text);">${fmtNum(p.stockActual)}</span>
-            <span style="font-size:.83rem;color:var(--muted);">uds disponibles</span>
-          </div>
-          <div style="font-size:.7rem;color:var(--muted);margin-top:3px;">Llegadas acumuladas: ${fmtNum(p.unidadesLlegadas)} / ${fmtNum(p.unidadesPedidas)} pedidas${p.unidadesVendidas>0?` · Vendidas: ${fmtNum(p.unidadesVendidas)}`:''}</div>
-        </div>
-        <div style="text-align:right;flex-shrink:0;">
-          <div style="font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#b45309;margin-bottom:3px;">Faltan por llegar</div>
-          <div style="font-size:1.35rem;font-weight:800;color:#b45309;">${fmtNum(p.unidadesPendientesLlegar)}</div>
-        </div>
-        <div style="display:flex;gap:8px;flex-shrink:0;">
-          <button onclick="marcarTodoRecibido('${p.id}')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:default;font-size:.75rem;color:var(--muted);font-weight:600;">Ya llegó todo</button>
-          <button onclick="openModalLlegadaBodega('${p.id}')" style="height:34px;padding:0 14px;border:none;border-radius:8px;background:#b45309;color:#fff;cursor:default;font-size:.78rem;font-weight:700;">Llegó a bodega</button>
-        </div>
-      </div>
-      <div class="progress-bar" style="height:6px;border-radius:0;margin:0;">
-        <div class="progress-fill" style="width:${p.unidadesPedidas>0?Math.round(p.unidadesLlegadas/p.unidadesPedidas*100):0}%;background:#b45309;border-radius:0;"></div>
-      </div>
-    </div>`:''}
     <!-- Progreso -->
     ${p.unidades>0?`
     <div class="section" style="padding:11px 16px;margin-bottom:12px;">
@@ -5028,64 +5032,63 @@ function renderDetalleInv(invId) {
         <div class="progress-fill" style="width:${ventasPct}%;background:${ventasPct>=100?'var(--green)':ventasPct>60?'var(--yellow)':'var(--accent)'};border-radius:10px;"></div>
       </div>
     </div>`:''}
-    <!-- Renovaciones -->
-    ${p.renovaciones && p.renovaciones.length ? `
-    <div class="section" style="margin-bottom:14px;">
-      <div class="section-header">
-        <span class="section-title">Renovaciones de stock (${p.renovaciones.length})</span>
+    <!-- Pestañas: ventas / gastos / llegadas / renovaciones -->
+    <div class="section" style="padding:0;overflow:hidden;">
+      <div style="display:flex;border-bottom:1px solid var(--border);overflow-x:auto;">
+        ${[['ventas','Historial de ventas',p.ventas.length],['gastos','Gastos adicionales',(p.gastosAdicionales||[]).length],['llegadas','Llegadas a bodega',(p.llegadasBodega||[]).length],['renovaciones','Renovaciones de stock',(p.renovaciones||[]).length]].map(([key,label,count])=>`
+          <button onclick="switchInvTab('${p.id}','${key}')" style="padding:11px 16px;border:none;border-bottom:2px solid ${tab===key?'var(--accent)':'transparent'};background:none;cursor:default;font-size:.8rem;font-weight:${tab===key?'700':'600'};color:${tab===key?'var(--text)':'var(--muted)'};white-space:nowrap;">${label}${count?` <span style="font-weight:700;">(${count})</span>`:''}</button>`).join('')}
       </div>
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead><tr><th>Fecha</th><th>Unidades</th><th>USD c/u</th><th>Tasa</th><th>Envío</th><th>Inversión</th><th>Notas</th><th></th></tr></thead>
-          <tbody>
-            ${[...p.renovaciones].reverse().map(r=>`
-              <tr>
-                <td>${r.fecha||'—'}</td>
-                <td>+${r.nuevasUnidades}</td>
-                <td>$${r.precioUSD}</td>
-                <td>${fmtCOP(r.tasa)}</td>
-                <td style="color:var(--orange)">${fmtCOP(r.envio||0)}</td>
-                <td style="font-weight:600">${fmtCOP(r.inversionNueva)}</td>
-                <td style="color:var(--muted);font-size:.82rem">${r.notas||'—'}</td>
-                <td><button class="btn btn-ghost btn-sm" onclick="editarRenovacionStock('${r.id}','${p.id}')" style="padding:4px 8px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                </button></td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>` : ''}
 
-    <!-- Historial de llegadas a bodega -->
-    ${p.llegadasBodega && p.llegadasBodega.length ? `
-    <div class="section" style="margin-bottom:14px;">
-      <div class="section-header">
-        <span class="section-title">Llegadas a bodega (${p.llegadasBodega.length})</span>
-      </div>
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead><tr><th>Fecha</th><th>Hora</th><th>Unidades</th><th>Notas</th></tr></thead>
-          <tbody>
-            ${[...p.llegadasBodega].reverse().map(l=>`
-              <tr>
-                <td>${l.fecha||'—'}</td>
-                <td style="color:var(--muted);">${l.hora||'—'}</td>
-                <td style="color:#b45309;font-weight:600">+${l.cantidad}</td>
-                <td style="color:var(--muted);font-size:.82rem">${l.notas||'—'}</td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>` : ''}
-
-    <!-- Gastos adicionales -->
-    <div class="section" style="margin-bottom:14px;">
-      <div class="section-header">
-        <span class="section-title">Gastos adicionales</span>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-size:.82rem;color:var(--muted)">${(p.gastosAdicionales||[]).length} registros · Total: <strong style="color:var(--red)">${fmtCOP(totalGastosAdic)}</strong></span>
-          <button class="btn btn-danger btn-sm" onclick="openModalGastoAdicionalInv('${p.id}')">+ Agregar</button>
+      ${tab==='ventas' ? `
+      <div style="padding:14px 18px 6px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input type="text" id="vh-buscar" placeholder="Buscar por ID de venta..." oninput="filtrarHistorialVentas('${p.id}')" style="height:32px;padding:0 10px;border:1px solid var(--border);border-radius:7px;font-size:.78rem;width:200px;background:var(--card);color:var(--text);">
+          <button id="vh-toggle-pendientes" onclick="toggleFiltroPendientes('${p.id}')" style="height:32px;padding:0 12px;border:1px solid ${window._vhSoloPendientes?'#b45309':'var(--border)'};border-radius:7px;background:${window._vhSoloPendientes?'#b45309':'none'};cursor:default;font-size:.74rem;font-weight:600;color:${window._vhSoloPendientes?'#fff':'var(--muted)'};white-space:nowrap;">Por despachar</button>
         </div>
+        <span style="font-size:.8rem;color:var(--muted)"><strong style="color:var(--green)">${fmtCOP(p.totalRecuperado)}</strong> recuperado</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Fecha</th><th>Cantidad</th><th>Precio unit.</th><th>Total</th><th>Ganancia</th><th>ID de venta</th><th>Observación</th><th>Estado</th><th></th></tr></thead>
+          <tbody>
+            ${!p.ventas.length
+              ? '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:28px;font-style:italic">Sin ventas registradas</td></tr>'
+              : [...p.ventas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).map(v=>{
+                  const totalVenta   = (v.cantidad||0)*(v.precioUnitario||0);
+                  const gananciaVenta = ((v.precioUnitario||0) - p.costoUnitario) * (v.cantidad||0);
+                  const pendiente = v.despachado === false;
+                  return `
+                <tr id="venta-fila-${v.id}" data-venta-row data-id-venta="${(v.cliente||'').toLowerCase().replace(/"/g,'&quot;')}" data-pendiente="${pendiente}">
+                  <td>${v.fecha||'—'}${v.preventa?'<br><span style="display:inline-block;margin-top:2px;padding:1px 6px;border-radius:4px;background:#fff7ed;color:#b45309;font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">Preventa</span>':''}</td>
+                  <td style="font-weight:600">${v.cantidad}</td>
+                  <td>${fmtCOP(v.precioUnitario)}</td>
+                  <td style="font-weight:700;color:var(--green)">${fmtCOP(totalVenta)}</td>
+                  <td style="font-weight:700;color:${gananciaVenta>=0?'var(--green)':'var(--red)'}">${gananciaVenta>=0?'+':''}${fmtCOP(gananciaVenta)}</td>
+                  <td style="color:var(--muted)">${v.cliente||'—'}</td>
+                  <td style="color:var(--muted)">${v.obs||'—'}</td>
+                  <td id="venta-estado-${v.id}">
+                    ${pendiente
+                      ? `<button onclick="despacharVentaInv('${v.id}','${p.id}')" style="border:1px solid #fde4c0;background:#fff7ed;color:#b45309;font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:12px;cursor:default;white-space:nowrap;transition:background .3s,color .3s;">Pendiente</button>`
+                      : `<span style="display:inline-block;border:1px solid var(--green-light);background:var(--green-light);color:var(--green);font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:12px;white-space:nowrap;transition:background .3s,color .3s;">Despachado</span>`}
+                  </td>
+                  <td><div style="display:flex;gap:4px;">
+                    <button class="btn btn-ghost btn-sm" onclick="editarVentaInv('${v.id}','${p.id}')" style="padding:4px 8px;">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="eliminarVentaInv('${v.id}','${p.id}')">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                    </button>
+                  </div></td>
+                </tr>`;}).join('')}
+            <tr id="vh-sin-resultados" style="display:none;"><td colspan="9" style="text-align:center;color:var(--muted);padding:28px;font-style:italic">No hay ventas que coincidan con el filtro</td></tr>
+          </tbody>
+        </table>
+      </div>` : ''}
+
+      ${tab==='gastos' ? `
+      <div style="padding:14px 18px 6px;display:flex;align-items:center;justify-content:flex-end;gap:10px;">
+        <span style="font-size:.8rem;color:var(--muted)">${(p.gastosAdicionales||[]).length} registros · Total: <strong style="color:var(--red)">${fmtCOP(totalGastosAdic)}</strong></span>
+        <button class="btn btn-danger btn-sm" onclick="openModalGastoAdicionalInv('${p.id}')">+ Agregar</button>
       </div>
       <div class="table-wrap">
         <table class="data-table">
@@ -5115,53 +5118,85 @@ function renderDetalleInv(invId) {
                 }).join('')}
           </tbody>
         </table>
-      </div>
-    </div>
+      </div>` : ''}
 
-    <!-- Historial de ventas -->
-    <div class="section">
-      <div class="section-header">
-        <span class="section-title">Historial de ventas</span>
-        <span style="font-size:.82rem;color:var(--muted)">${p.ventas.length} registros · <strong style="color:var(--green)">${fmtCOP(p.totalRecuperado)}</strong> recuperado</span>
-      </div>
-      <div class="table-wrap">
+      ${tab==='llegadas' ? `
+      <div class="table-wrap" style="margin-top:10px;">
         <table class="data-table">
-          <thead><tr><th>Fecha</th><th>Cantidad</th><th>Precio unit.</th><th>Total</th><th>Ganancia</th><th>ID de venta</th><th>Observación</th><th>Estado</th><th></th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Hora</th><th>Unidades</th><th>Notas</th></tr></thead>
           <tbody>
-            ${!p.ventas.length
-              ? '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:28px;font-style:italic">Sin ventas registradas</td></tr>'
-              : [...p.ventas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).map(v=>{
-                  const totalVenta   = (v.cantidad||0)*(v.precioUnitario||0);
-                  const gananciaVenta = ((v.precioUnitario||0) - p.costoUnitario) * (v.cantidad||0);
-                  const pendiente = v.despachado === false;
-                  return `
-                <tr id="venta-fila-${v.id}">
-                  <td>${v.fecha||'—'}${v.preventa?'<br><span style="display:inline-block;margin-top:2px;padding:1px 6px;border-radius:4px;background:#fff7ed;color:#b45309;font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">Preventa</span>':''}</td>
-                  <td style="font-weight:600">${v.cantidad}</td>
-                  <td>${fmtCOP(v.precioUnitario)}</td>
-                  <td style="font-weight:700;color:var(--green)">${fmtCOP(totalVenta)}</td>
-                  <td style="font-weight:700;color:${gananciaVenta>=0?'var(--green)':'var(--red)'}">${gananciaVenta>=0?'+':''}${fmtCOP(gananciaVenta)}</td>
-                  <td style="color:var(--muted)">${v.cliente||'—'}</td>
-                  <td style="color:var(--muted)">${v.obs||'—'}</td>
-                  <td id="venta-estado-${v.id}">
-                    ${pendiente
-                      ? `<button onclick="despacharVentaInv('${v.id}','${p.id}')" style="border:1px solid #fde4c0;background:#fff7ed;color:#b45309;font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:12px;cursor:default;white-space:nowrap;transition:background .3s,color .3s;">Pendiente</button>`
-                      : `<span style="display:inline-block;border:1px solid var(--green-light);background:var(--green-light);color:var(--green);font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:12px;white-space:nowrap;transition:background .3s,color .3s;">Despachado</span>`}
-                  </td>
-                  <td><div style="display:flex;gap:4px;">
-                    <button class="btn btn-ghost btn-sm" onclick="editarVentaInv('${v.id}','${p.id}')" style="padding:4px 8px;">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                    </button>
-                    <button class="btn btn-danger btn-sm" onclick="eliminarVentaInv('${v.id}','${p.id}')">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                    </button>
-                  </div></td>
-                </tr>`;}).join('')}
+            ${!(p.llegadasBodega||[]).length
+              ? '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:28px;font-style:italic">Sin llegadas registradas</td></tr>'
+              : [...p.llegadasBodega].reverse().map(l=>`
+              <tr>
+                <td>${l.fecha||'—'}</td>
+                <td style="color:var(--muted);">${l.hora||'—'}</td>
+                <td style="color:#b45309;font-weight:600">+${l.cantidad}</td>
+                <td style="color:var(--muted);font-size:.82rem">${l.notas||'—'}</td>
+              </tr>`).join('')}
           </tbody>
         </table>
-      </div>
+      </div>` : ''}
+
+      ${tab==='renovaciones' ? `
+      <div class="table-wrap" style="margin-top:10px;">
+        <table class="data-table">
+          <thead><tr><th>Fecha</th><th>Unidades</th><th>USD c/u</th><th>Tasa</th><th>Envío</th><th>Inversión</th><th>Notas</th><th></th></tr></thead>
+          <tbody>
+            ${!(p.renovaciones||[]).length
+              ? '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:28px;font-style:italic">Sin renovaciones registradas</td></tr>'
+              : [...p.renovaciones].reverse().map(r=>`
+              <tr>
+                <td>${r.fecha||'—'}</td>
+                <td>+${r.nuevasUnidades}</td>
+                <td>$${r.precioUSD}</td>
+                <td>${fmtCOP(r.tasa)}</td>
+                <td style="color:var(--orange)">${fmtCOP(r.envio||0)}</td>
+                <td style="font-weight:600">${fmtCOP(r.inversionNueva)}</td>
+                <td style="color:var(--muted);font-size:.82rem">${r.notas||'—'}</td>
+                <td><button class="btn btn-ghost btn-sm" onclick="editarRenovacionStock('${r.id}','${p.id}')" style="padding:4px 8px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>` : ''}
     </div>
   `;
+}
+
+// ─── Pestañas del detalle de inversión (ventas / gastos / llegadas / renovaciones) ──
+function switchInvTab(invId, tab) {
+  window._invActiveTab = tab;
+  renderDetalleInv(invId);
+}
+
+// ─── Buscador y filtro del historial de ventas (no recarga la tabla, solo filtra) ──
+function filtrarHistorialVentas(invId) {
+  const q = (document.getElementById('vh-buscar')?.value || '').trim().toLowerCase();
+  const soloPendientes = !!window._vhSoloPendientes;
+  const filas = document.querySelectorAll('tr[data-venta-row]');
+  let visibles = 0;
+  filas.forEach(tr => {
+    const idVenta = tr.getAttribute('data-id-venta') || '';
+    const pendiente = tr.getAttribute('data-pendiente') === 'true';
+    const match = (!q || idVenta.includes(q)) && (!soloPendientes || pendiente);
+    tr.style.display = match ? '' : 'none';
+    if (match) visibles++;
+  });
+  const sinResultados = document.getElementById('vh-sin-resultados');
+  if (sinResultados) sinResultados.style.display = (filas.length && !visibles) ? '' : 'none';
+}
+
+function toggleFiltroPendientes(invId) {
+  window._vhSoloPendientes = !window._vhSoloPendientes;
+  const btn = document.getElementById('vh-toggle-pendientes');
+  if (btn) {
+    btn.style.background = window._vhSoloPendientes ? '#b45309' : 'none';
+    btn.style.color = window._vhSoloPendientes ? '#fff' : 'var(--muted)';
+    btn.style.borderColor = window._vhSoloPendientes ? '#b45309' : 'var(--border)';
+  }
+  filtrarHistorialVentas(invId);
 }
 async function eliminarVentaInv(ventaId, invId) {
   if(!await appConfirm('Eliminar venta', '¿Seguro que quieres eliminar esta venta? También se eliminará el ingreso que generó.', { tipo: 'danger', textoConfirmar: 'Eliminar', textoCancelar: 'Cancelar' })) return;
