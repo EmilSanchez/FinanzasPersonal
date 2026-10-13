@@ -4949,11 +4949,12 @@ function renderDetalleInv(invId) {
       <div style="display:flex;align-items:center;gap:14px;padding:16px 18px;flex-wrap:wrap;">
         <div style="width:44px;height:44px;border-radius:10px;overflow:hidden;background:var(--bg2);flex-shrink:0;">${avatarImg}</div>
         <div style="flex:1;min-width:170px;">
-          <div style="font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:3px;">Unidades en bodega</div>
+          <div style="font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:3px;">Stock físico en bodega</div>
           <div style="display:flex;align-items:baseline;gap:6px;">
-            <span style="font-size:1.35rem;font-weight:800;color:var(--text);">${fmtNum(p.unidadesLlegadas)}</span>
-            <span style="font-size:.83rem;color:var(--muted);">/ ${fmtNum(p.unidadesPedidas)} pedidas</span>
+            <span style="font-size:1.35rem;font-weight:800;color:var(--text);">${fmtNum(p.stockActual)}</span>
+            <span style="font-size:.83rem;color:var(--muted);">uds disponibles</span>
           </div>
+          <div style="font-size:.7rem;color:var(--muted);margin-top:3px;">Llegadas acumuladas: ${fmtNum(p.unidadesLlegadas)} / ${fmtNum(p.unidadesPedidas)} pedidas${p.unidadesVendidas>0?` · Vendidas: ${fmtNum(p.unidadesVendidas)}`:''}</div>
         </div>
         <div style="text-align:right;flex-shrink:0;">
           <div style="font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#b45309;margin-bottom:3px;">Faltan por llegar</div>
