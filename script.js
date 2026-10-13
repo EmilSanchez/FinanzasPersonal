@@ -4511,12 +4511,18 @@ function openModalNuevaInversion(id=null) {
       </div>
     </div>`;
   overlay.style.display='flex';
+  overlay.classList.remove('open');
+  requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('open')));
   setTimeout(() => { setModoPrecioInv('unitario'); }, 50);
 }
 
 function closeInvModal() {
   const o=document.getElementById('modal-inv-form-overlay');
-  if(o) { o.style.display='none'; o.innerHTML=''; }
+  if(!o) return;
+  o.classList.remove('open');
+  // Esperar a que termine el fundido de salida antes de ocultar y vaciar,
+  // para que el cierre también se vea suave (no un corte seco).
+  setTimeout(() => { o.style.display='none'; o.innerHTML=''; }, 200);
 }
 
 function setModoPrecioInv(modo) {
@@ -4740,6 +4746,8 @@ function openModalVentaInv(invId) {
       </div>
     </div>`;
   overlay.style.display='flex';
+  overlay.classList.remove('open');
+  requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('open')));
   window._fvModoPrecio = 'unitario';
   window._fvPrecioSugerido = inv.precioSugerido || 0;
   window._fvStockFisico = p.stockActual;
@@ -5336,6 +5344,8 @@ function editarVentaInv(ventaId, invId) {
       </div>
     </div>`;
   overlay.style.display='flex';
+  overlay.classList.remove('open');
+  requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('open')));
   window._fvPrecioSugerido = inv.precioSugerido || 0;
   window._fvStockFisico = stockFisicoParaEditar;
   window._fvDisponibleVenta = disponibleParaEditar;
@@ -5544,6 +5554,8 @@ function openModalRenovarStock(invId) {
       </div>
     </div>`;
   overlay.style.display = 'flex';
+  overlay.classList.remove('open');
+  requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('open')));
   window._rsModoPrecio = 'unitario';
   setTimeout(() => { setModoPrecioRenovar('unitario'); }, 50);
 }
@@ -5789,6 +5801,8 @@ function editarRenovacionStock(renId, invId) {
       </div>
     </div>`;
   overlay.style.display = 'flex';
+  overlay.classList.remove('open');
+  requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('open')));
   window._rsModoPrecio = 'unitario';
   setTimeout(() => { setModoPrecioRenovar('unitario'); }, 50);
 }
@@ -5949,6 +5963,8 @@ function openModalLlegadaBodega(invId) {
       </div>
     </div>`;
   overlay.style.display = 'flex';
+  overlay.classList.remove('open');
+  requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('open')));
   if (p.unidadesPendientesLlegar === 0) {
     setTimeout(() => toast('Ya no hay unidades pendientes por llegar de este producto', 'info'), 150);
   }
@@ -6080,6 +6096,8 @@ function openModalGastoAdicionalInv(invId) {
       </div>
     </div>`;
   overlay.style.display = 'flex';
+  overlay.classList.remove('open');
+  requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('open')));
 }
 
 function calcGastoAdicPreview() {
@@ -6225,6 +6243,8 @@ function editarGastoAdicionalInv(gastoId, invId) {
       </div>
     </div>`;
   overlay.style.display = 'flex';
+  overlay.classList.remove('open');
+  requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('open')));
   setTimeout(calcGastoAdicPreview, 50);
 }
 
