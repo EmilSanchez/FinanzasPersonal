@@ -4961,35 +4961,66 @@ function renderDetalleInv(invId) {
         <div style="font-weight:700;font-size:1.05rem;">${p.nombre}</div>
         <div style="font-size:.73rem;color:var(--muted);">${p.tipo||''}${p.plataforma?' · '+p.plataforma:''}${p.sku?' · '+p.sku:''}</div>
       </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;">
+        <button onclick="openModalNuevaInversion('${p.id}')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:default;color:var(--muted);display:flex;align-items:center;gap:5px;font-size:.78rem;font-weight:600;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Editar
+        </button>
+        <button onclick="openModalGastoAdicionalInv('${p.id}')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:.78rem;font-weight:600;cursor:default;">+ Gasto</button>
+        <button onclick="openModalRenovarStock('${p.id}')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:.78rem;font-weight:600;cursor:default;">+ Stock</button>
+        <button onclick="openModalVentaInv('${p.id}')" style="height:34px;padding:0 14px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:.78rem;font-weight:700;cursor:default;">+ Venta</button>
+      </div>
     </div>
 
-    <!-- Fila: kpis + foto + info + costos + stock físico + acciones -->
-    <div style="display:grid;grid-template-columns:140px 130px 1fr 1fr 1fr 150px;gap:12px;margin-bottom:12px;" class="inv-det-grid">
-      <!-- KPIs en columna -->
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:10px;display:flex;flex-direction:column;gap:6px;">
-        ${[['Capital',fmtCOP(totalCapital),'var(--text)'],['Envíos',fmtCOP(totalEnvios),'var(--orange)'],['Recuperado',fmtCOP(p.totalRecuperado),'var(--green)'],[`Ganancia${p.ganancia>=0?'':' ↓'}`,fmtCOP(p.ganancia),p.ganancia>=0?'var(--green)':'var(--red)'],['Stock',fmtNum(p.stockActual)+' uds','var(--orange)'],['Vendidas',fmtNum(p.unidadesVendidas)+' uds','var(--accent)']].map(([l,v,c])=>`
-          <div style="padding:6px 8px;border-radius:7px;background:var(--bg2);">
-            <div style="font-size:.6rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px;">${l}</div>
-            <div style="font-size:.76rem;font-weight:800;color:${c};">${v}</div>
-          </div>`).join('')}
-      </div>
-      <!-- Foto -->
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px;display:flex;flex-direction:column;gap:8px;">
-        <div style="width:100%;aspect-ratio:1;overflow:hidden;border-radius:8px;background:var(--bg2);">${avatarImg}</div>
-        <div style="display:flex;flex-direction:column;gap:4px;">${invBadgeEstado(p.estado)}${invBadgeStock(p.estadoStock)}</div>
-        ${p.estado!=='cerrada'?`<div style="display:flex;flex-direction:column;gap:4px;margin-top:auto;">
-          ${p.estado==='activa'?`<button onclick="cambiarEstadoInv(${invIdx},'cerrada')" style="height:26px;border:1px solid var(--border);border-radius:6px;background:none;cursor:default;font-size:.68rem;color:var(--muted);">Cerrar</button>`:''}
-          ${p.estado==='activa'?`<button onclick="cambiarEstadoInv(${invIdx},'pausada')" style="height:26px;border:1px solid var(--border);border-radius:6px;background:none;cursor:default;font-size:.68rem;color:var(--muted);">Pausar</button>`:''}
-          ${p.estado==='pausada'?`<button onclick="cambiarEstadoInv(${invIdx},'activa')" style="height:26px;border:none;border-radius:6px;background:#0f2d6b;color:#fff;cursor:default;font-size:.68rem;">Activar</button>`:''}
+    <!-- Fila: foto+kpis / info (+ progreso ventas) / costos / stock físico -->
+    <div style="display:grid;grid-template-columns:260px 1fr 1fr 1fr;gap:12px;margin-bottom:12px;" class="inv-det-grid">
+      <!-- Foto + KPIs -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;gap:12px;">
+          <div style="width:64px;height:64px;flex-shrink:0;overflow:hidden;border-radius:8px;background:var(--bg2);">${avatarImg}</div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:5px;min-width:0;justify-content:center;">
+            ${[['Capital',fmtCOP(totalCapital),'var(--text)'],['Envíos',fmtCOP(totalEnvios),'var(--orange)'],['Recuperado',fmtCOP(p.totalRecuperado),'var(--green)'],[`Ganancia${p.ganancia>=0?'':' ↓'}`,fmtCOP(p.ganancia),p.ganancia>=0?'var(--green)':'var(--red)']].map(([l,v,c])=>`
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px;">
+                <span style="font-size:.62rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;">${l}</span>
+                <span style="font-size:.76rem;font-weight:800;color:${c};white-space:nowrap;">${v}</span>
+              </div>`).join('')}
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;padding-top:10px;border-top:1px solid var(--border-light);">
+          <div style="display:flex;flex-direction:column;gap:4px;">${invBadgeEstado(p.estado)}${invBadgeStock(p.estadoStock)}</div>
+          <div style="display:flex;gap:14px;">
+            <div style="text-align:right;">
+              <div style="font-size:.6rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Stock</div>
+              <div style="font-size:.8rem;font-weight:800;color:var(--orange);">${fmtNum(p.stockActual)} uds</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:.6rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Vendidas</div>
+              <div style="font-size:.8rem;font-weight:800;color:var(--accent);">${fmtNum(p.unidadesVendidas)} uds</div>
+            </div>
+          </div>
+        </div>
+        ${p.estado!=='cerrada'?`<div style="display:flex;gap:6px;">
+          ${p.estado==='activa'?`<button onclick="cambiarEstadoInv(${invIdx},'cerrada')" style="flex:1;height:24px;border:1px solid var(--border);border-radius:6px;background:none;cursor:default;font-size:.64rem;color:var(--muted);">Cerrar</button>`:''}
+          ${p.estado==='activa'?`<button onclick="cambiarEstadoInv(${invIdx},'pausada')" style="flex:1;height:24px;border:1px solid var(--border);border-radius:6px;background:none;cursor:default;font-size:.64rem;color:var(--muted);">Pausar</button>`:''}
+          ${p.estado==='pausada'?`<button onclick="cambiarEstadoInv(${invIdx},'activa')" style="flex:1;height:24px;border:none;border-radius:6px;background:#0f2d6b;color:#fff;cursor:default;font-size:.64rem;">Activar</button>`:''}
         </div>`:''}
       </div>
       <!-- Info -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;">
-        <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px;">Información</div>
+        <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px;">Información del producto</div>
         ${[['SKU',p.sku?`<code style="font-size:.73rem;background:var(--bg2);border:1px solid var(--border);padding:1px 5px;border-radius:4px;">${p.sku}</code>`:'—'],['Categoría',p.categoria||'—'],['Proveedor',p.plataforma||'—'],['Compra',p.fecha||'—'],['Link',p.link?`<a href="${p.link}" target="_blank" style="color:var(--accent);font-size:.8rem;">Ver ↗</a>`:'—']].map(([l,v])=>`
           <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-light);font-size:.82rem;">
             <span style="color:var(--muted);">${l}</span><span>${v}</span></div>`).join('')}
         ${p.notas?`<div style="margin-top:8px;font-size:.76rem;color:var(--muted);font-style:italic;">${p.notas}</div>`:''}
+        ${p.unidades>0?`
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border-light);">
+          <div style="display:flex;justify-content:space-between;font-size:.74rem;color:var(--muted);margin-bottom:4px;">
+            <span>${p.unidadesVendidas} / ${p.unidades} unidades vendidas</span>
+            <span style="font-weight:700;color:var(--accent);">${ventasPct}%</span>
+          </div>
+          <div class="progress-bar" style="height:7px;border-radius:10px;">
+            <div class="progress-fill" style="width:${ventasPct}%;background:${ventasPct>=100?'var(--green)':ventasPct>60?'var(--yellow)':'var(--accent)'};border-radius:10px;"></div>
+          </div>
+        </div>`:''}
       </div>
       <!-- Costos -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;">
@@ -5020,29 +5051,8 @@ function renderDetalleInv(invId) {
           <button onclick="openModalLlegadaBodega('${p.id}')" style="flex:1;height:28px;border:none;border-radius:6px;background:#b45309;color:#fff;cursor:default;font-size:.7rem;font-weight:700;">Llegó a bodega</button>
         </div>`:`<div style="margin-top:auto;font-size:.72rem;color:var(--muted);">Sin pedidos pendientes por llegar</div>`}
       </div>
-      <!-- Acciones en columna -->
-      <div style="display:flex;flex-direction:column;gap:6px;">
-        <button onclick="openModalVentaInv('${p.id}')" style="height:34px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:.76rem;font-weight:700;cursor:default;">+ Venta</button>
-        <button onclick="openModalRenovarStock('${p.id}')" style="height:34px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:.76rem;font-weight:600;cursor:default;">+ Stock</button>
-        ${p.unidadesPendientesLlegar>0?`<button onclick="openModalLlegadaBodega('${p.id}')" style="height:34px;border:none;border-radius:8px;background:#b45309;color:#fff;font-size:.74rem;font-weight:700;cursor:default;">Llegó a bodega</button>`:''}
-        <button onclick="openModalGastoAdicionalInv('${p.id}')" style="height:34px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:.76rem;font-weight:600;cursor:default;">+ Gasto</button>
-        <button onclick="openModalNuevaInversion('${p.id}')" style="height:34px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;gap:5px;font-size:.74rem;font-weight:600;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Editar
-        </button>
-      </div>
     </div>
 
-    <!-- Progreso -->
-    ${p.unidades>0?`
-    <div class="section" style="padding:11px 16px;margin-bottom:12px;">
-      <div style="display:flex;justify-content:space-between;font-size:.77rem;color:var(--muted);margin-bottom:4px;">
-        <span>${p.unidadesVendidas} / ${p.unidades} unidades vendidas</span>
-        <span style="font-weight:700;color:var(--accent);">${ventasPct}%</span>
-      </div>
-      <div class="progress-bar" style="height:7px;border-radius:10px;">
-        <div class="progress-fill" style="width:${ventasPct}%;background:${ventasPct>=100?'var(--green)':ventasPct>60?'var(--yellow)':'var(--accent)'};border-radius:10px;"></div>
-      </div>
-    </div>`:''}
     <!-- Pestañas: ventas / gastos / llegadas / renovaciones -->
     <div class="section" style="padding:0;overflow:hidden;">
       <div style="display:flex;border-bottom:1px solid var(--border);overflow-x:auto;">
