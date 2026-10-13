@@ -3847,6 +3847,15 @@ function enriquecerInversion(inv) {
   const unidadesPendientesLlegar = Math.max(0, cantidad - unidadesLlegadas);
 
   const stockActual    = Math.max(0, unidadesLlegadas - unidadesVendidas);
+  // Unidades vendidas que aún no se pueden entregar porque no han llegado
+  // físicamente a bodega (preventas: ya se vendieron, pero el pedido sigue
+  // en camino). Se calculan contra lo que YA llegó, no contra lo pedido.
+  const unidadesPreventa = Math.max(0, unidadesVendidas - unidadesLlegadas);
+  // Lo máximo que se puede VENDER ahora mismo: todo lo pedido (llegado o en
+  // camino) menos lo ya vendido. Vender contra un pedido en camino es una
+  // preventa válida — el cliente paga, pero la entrega queda pendiente hasta
+  // que la mercancía llegue a bodega.
+  const disponibleVenta = Math.max(0, cantidad - unidadesVendidas);
   const costoVendido   = costoUnitario * unidadesVendidas;
   const ganancia       = totalRecuperado - costoVendido;
   const recuperacionPct = inversionTotal > 0 ? (totalRecuperado/inversionTotal)*100 : 0;
@@ -3856,6 +3865,7 @@ function enriquecerInversion(inv) {
   return { ...inv, inversionTotal, costoUnitario, unidadesVendidas,
     totalRecuperado, stockActual, ganancia, recuperacionPct, estadoStock, ventas,
     unidadesPedidas: cantidad, unidadesLlegadas, unidadesPendientesLlegar,
+    unidadesPreventa, disponibleVenta,
     gastosAdicionales: inv.gastosAdicionales || [],
     renovaciones: inv.renovaciones || [],
     llegadasBodega: inv.llegadasBodega || [] };
@@ -4677,7 +4687,11 @@ function openModalVentaInv(invId) {
             : `<div style="width:44px;height:44px;border-radius:8px;background:var(--accent-light);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.1rem;flex-shrink:0;">${(inv.nombre||'?')[0].toUpperCase()}</div>`}
           <div>
             <div style="font-weight:700">${inv.nombre}</div>
-            <div style="font-size:.82rem;color:var(--muted)">Stock disponible: <strong style="color:var(--text)">${p.stockActual}</strong> uds · Precio sugerido: ${fmtCOP(inv.precioSugerido||0)}</div>
+            <div style="font-size:.82rem;color:var(--muted)">
+              En bodega: <strong style="color:var(--text)">${p.stockActual}</strong> uds
+              ${p.unidadesPendientesLlegar>0?` · Pendientes por llegar: <strong style="color:#b45309">${p.unidadesPendientesLlegar}</strong> uds`:''}
+              · Precio sugerido: ${fmtCOP(inv.precioSugerido||0)}
+            </div>
           </div>
         </div>
         <div class="form-grid">
@@ -4685,7 +4699,7 @@ function openModalVentaInv(invId) {
             <input type="date" class="form-control" id="fv-fecha" value="${ymd}">
           </div>
           <div class="form-group"><label>Cantidad *</label>
-            <input type="number" class="form-control" id="fv-cant" min="1" max="${p.stockActual}" placeholder="Ej: 2" oninput="onFvBilleteraChange()">
+            <input type="number" class="form-control" id="fv-cant" min="1" max="${p.disponibleVenta}" placeholder="Ej: 2" oninput="onFvBilleteraChange()">
           </div>
           <div class="form-group"><label id="fv-precio-label" style="display:flex;align-items:flex-end;min-height:26px;white-space:nowrap;">Precio unitario (COP) *</label>
             <input type="text" inputmode="numeric" class="form-control" id="fv-precio" placeholder="${inv.precioSugerido||'Ej: 180000'}" oninput="fmtMontoInput(this);onFvBilleteraChange()">
@@ -4696,8 +4710,8 @@ function openModalVentaInv(invId) {
               <button type="button" id="fv-modo-total" onclick="setModoPrecioVenta('total')" style="flex:1;border:none;border-left:1px solid var(--border);font-size:.72rem;font-weight:600;cursor:default;background:none;color:var(--muted);">Total venta</button>
             </div>
           </div>
-          <div class="form-group"><label>Cliente / Referencia</label>
-            <input type="text" class="form-control" id="fv-cliente" placeholder="Nombre opcional">
+          <div class="form-group"><label>ID de venta</label>
+            <input type="text" class="form-control" id="fv-cliente" placeholder="Ej: 2000018708435690">
           </div>
           <div class="form-group"><label>Observación</label>
             <input type="text" class="form-control" id="fv-obs" placeholder="Notas opcionales">
@@ -4714,15 +4728,17 @@ function openModalVentaInv(invId) {
             <small style="color:var(--muted);font-size:.72rem">El dinero de la venta se sumará a esta billetera</small>
           </div>
         </div>
+        <div id="fv-preventa-aviso" style="display:none;margin-top:12px;padding:10px 14px;border-radius:var(--radius-sm);background:#fff7ed;border:1px solid #fde4c0;font-size:.78rem;color:#b45309;line-height:1.5;"></div>
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeInvModal()">Cancelar</button>
-        <button class="btn btn-primary" onclick="guardarVentaInv('${invId}',${p.stockActual})">Registrar venta</button>
+        <button class="btn btn-primary" onclick="guardarVentaInv('${invId}',${p.disponibleVenta},${p.stockActual})">Registrar venta</button>
       </div>
     </div>`;
   overlay.style.display='flex';
   window._fvModoPrecio = 'unitario';
   window._fvPrecioSugerido = inv.precioSugerido || 0;
+  window._fvStockFisico = p.stockActual;
   setTimeout(() => { setModoPrecioVenta('unitario'); }, 50);
 }
 
@@ -4755,9 +4771,23 @@ function getPrecioUnitarioVenta() {
 function onFvBilleteraChange() {
   const sel     = document.getElementById('fv-billetera');
   const preview = document.getElementById('fv-bill-preview');
+  const cant    = parseInt(document.getElementById('fv-cant')?.value)||0;
+
+  // Aviso de preventa: si la cantidad supera lo que hay físicamente en
+  // bodega, se está vendiendo contra un pedido que aún está en camino.
+  const aviso = document.getElementById('fv-preventa-aviso');
+  if (aviso) {
+    const stockFisico = window._fvStockFisico ?? 0;
+    if (cant > stockFisico) {
+      aviso.style.display = '';
+      aviso.innerHTML = `Esta venta es una <strong>preventa</strong>: solo tienes ${fmtNum(stockFisico)} uds físicas en bodega. Las ${fmtNum(cant - stockFisico)} uds restantes quedan vendidas contra el pedido que aún está en camino — entrégalas cuando registres su llegada a bodega.`;
+    } else {
+      aviso.style.display = 'none';
+    }
+  }
+
   if (!preview || !sel) return;
   const precio = getPrecioUnitarioVenta();
-  const cant   = parseInt(document.getElementById('fv-cant')?.value)||0;
   if (!sel.value) { preview.style.display='none'; return; }
   const saldo       = saldoBilletera(sel.value);
   const totalVenta  = precio * cant;
@@ -4774,7 +4804,7 @@ function onFvBilleteraChange() {
   }
 }
 
-async function guardarVentaInv(invId, stockDisp) {
+async function guardarVentaInv(invId, disponibleVenta, stockFisico) {
   const fecha    = document.getElementById('fv-fecha')?.value;
   const cantidad = parseInt(document.getElementById('fv-cant')?.value)||0;
   const precio   = getPrecioUnitarioVenta();
@@ -4784,15 +4814,18 @@ async function guardarVentaInv(invId, stockDisp) {
 
   if(!fecha)    return toast('La fecha es obligatoria','error');
   if(!cantidad) return toast('La cantidad debe ser mayor a 0','error');
-  if(cantidad>stockDisp) return toast('Stock insuficiente. Disponible: '+stockDisp,'error');
+  // El tope ya NO es solo lo físico en bodega: también se puede vender contra
+  // unidades que ya fueron pedidas y están en camino (preventa).
+  if(cantidad>disponibleVenta) return toast('No tienes suficientes unidades pedidas para vender esa cantidad. Disponible (bodega + en camino): '+disponibleVenta,'error');
   if(!precio)   return toast('El precio de venta es obligatorio','error');
   if(!billeteraId) {
     const sel = document.getElementById('fv-billetera');
     if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(() => sel.style.border = '', 2000); }
     return toast('Debes seleccionar en qué billetera ingresa el dinero de la venta','error');
   }
+  const esPreventa = cantidad > (stockFisico||0);
   const ventaId = uid();
-  addVentaInv({ id: ventaId, invId, fecha, cantidad, precioUnitario:precio, cliente, obs, billeteraId });
+  addVentaInv({ id: ventaId, invId, fecha, cantidad, precioUnitario:precio, cliente, obs, billeteraId, preventa: esPreventa, despachado: !esPreventa });
 
   const inv = STATE.db.inversiones.find(i=>i.id===invId);
   const billNombre = STATE.db.billeteras?.find(b=>b.id===billeteraId)?.nombre || '';
@@ -4823,7 +4856,8 @@ async function guardarVentaInv(invId, stockDisp) {
   closeInvModal();
   await saveDb(['ventasInv','ingresos']);
   const destino = billNombre ? ` → ${billNombre}` : '';
-  toast('Venta registrada' + destino + (gananciaVenta > 0 ? ' — ganancia: ' + fmtCOP(Math.round(gananciaVenta)) : '') + ' ','success');
+  const etiquetaPreventa = esPreventa ? ' (preventa — pendiente de entrega)' : '';
+  toast('Venta registrada' + etiquetaPreventa + destino + (gananciaVenta > 0 ? ' — ganancia: ' + fmtCOP(Math.round(gananciaVenta)) : '') + ' ','success');
 }
 
 // ─── Detalle inversión (vista completa) ───────────────────────
@@ -5041,25 +5075,36 @@ function renderDetalleInv(invId) {
       </div>
       <div class="table-wrap">
         <table class="data-table">
-          <thead><tr><th>Fecha</th><th>Cantidad</th><th>Precio unit.</th><th>Total</th><th>Ganancia</th><th>Cliente</th><th>Observación</th><th></th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Cantidad</th><th>Precio unit.</th><th>Total</th><th>Ganancia</th><th>ID de venta</th><th>Observación</th><th>Estado</th><th></th></tr></thead>
           <tbody>
             ${!p.ventas.length
-              ? '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:28px;font-style:italic">Sin ventas registradas</td></tr>'
+              ? '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:28px;font-style:italic">Sin ventas registradas</td></tr>'
               : [...p.ventas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).map(v=>{
                   const totalVenta   = (v.cantidad||0)*(v.precioUnitario||0);
                   const gananciaVenta = ((v.precioUnitario||0) - p.costoUnitario) * (v.cantidad||0);
+                  const pendiente = v.despachado === false;
                   return `
-                <tr>
-                  <td>${v.fecha||'—'}</td>
+                <tr id="venta-fila-${v.id}">
+                  <td>${v.fecha||'—'}${v.preventa?'<br><span style="display:inline-block;margin-top:2px;padding:1px 6px;border-radius:4px;background:#fff7ed;color:#b45309;font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">Preventa</span>':''}</td>
                   <td style="font-weight:600">${v.cantidad}</td>
                   <td>${fmtCOP(v.precioUnitario)}</td>
                   <td style="font-weight:700;color:var(--green)">${fmtCOP(totalVenta)}</td>
                   <td style="font-weight:700;color:${gananciaVenta>=0?'var(--green)':'var(--red)'}">${gananciaVenta>=0?'+':''}${fmtCOP(gananciaVenta)}</td>
                   <td style="color:var(--muted)">${v.cliente||'—'}</td>
                   <td style="color:var(--muted)">${v.obs||'—'}</td>
-                  <td><button class="btn btn-danger btn-sm" onclick="eliminarVentaInv('${v.id}','${p.id}')">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                  </button></td>
+                  <td id="venta-estado-${v.id}">
+                    ${pendiente
+                      ? `<button onclick="despacharVentaInv('${v.id}','${p.id}')" style="border:1px solid #fde4c0;background:#fff7ed;color:#b45309;font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:12px;cursor:default;white-space:nowrap;transition:background .3s,color .3s;">Pendiente</button>`
+                      : `<span style="display:inline-block;border:1px solid var(--green-light);background:var(--green-light);color:var(--green);font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:12px;white-space:nowrap;transition:background .3s,color .3s;">Despachado</span>`}
+                  </td>
+                  <td><div style="display:flex;gap:4px;">
+                    <button class="btn btn-ghost btn-sm" onclick="editarVentaInv('${v.id}','${p.id}')" style="padding:4px 8px;">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="eliminarVentaInv('${v.id}','${p.id}')">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                    </button>
+                  </div></td>
                 </tr>`;}).join('')}
           </tbody>
         </table>
@@ -5079,6 +5124,163 @@ async function eliminarVentaInv(ventaId, invId) {
   renderAll();
   await saveDb(['ventasInv', 'ingresos']);
   toast('Venta e ingreso asociado eliminados', 'info');
+}
+
+// ─── Despachar venta (marcar como entregada) ──────────────────
+async function despacharVentaInv(ventaId, invId) {
+  const venta = (STATE.db.ventasInv||[]).find(v=>v.id===ventaId);
+  if (!venta) return;
+  const idVenta = venta.cliente ? venta.cliente : 'sin ID';
+  const confirma = await appConfirm(
+    'Despachar venta',
+    `¿Seguro que despachaste el producto de la venta: "${idVenta}"?`,
+    { tipo: 'info', textoConfirmar: 'Sí, ya lo despaché', textoCancelar: 'Cancelar' }
+  );
+  if (!confirma) return;
+
+  venta.despachado = true;
+  renderDetalleInv(invId);
+
+  // Pequeña animación de confirmación sobre la fila recién actualizada
+  const fila = document.getElementById('venta-fila-'+ventaId);
+  if (fila) {
+    fila.style.transition = 'background-color .3s ease';
+    fila.style.backgroundColor = 'var(--green-light)';
+    setTimeout(() => { fila.style.backgroundColor = ''; }, 800);
+  }
+
+  await saveDb(['ventasInv']);
+  toast('Venta marcada como despachada', 'success');
+}
+
+// ─── Editar venta existente ───────────────────────────────────
+function editarVentaInv(ventaId, invId) {
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  if (!inv) return;
+  const venta = (STATE.db.ventasInv||[]).find(v=>v.id===ventaId);
+  if (!venta) return;
+  const p = enriquecerInversion(inv);
+  // Al editar, se le "devuelve" a lo disponible lo que esta misma venta ya
+  // estaba usando, antes de validar la nueva cantidad.
+  const disponibleParaEditar  = p.disponibleVenta + Number(venta.cantidad||0);
+  const stockFisicoParaEditar = p.stockActual + Number(venta.cantidad||0);
+
+  const overlay = document.getElementById('modal-inv-form-overlay');
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:440px;width:100%;">
+      <div class="modal-title">Editar venta
+        <button onclick="closeInvModal()" style="float:right;background:none;border:none;font-size:1rem;color:var(--muted);cursor:default;">✕</button>
+      </div>
+      <div class="modal-body-wrap">
+        <div style="display:flex;align-items:center;gap:12px;padding-bottom:16px;margin-bottom:16px;border-bottom:1px solid var(--border-light);">
+          ${inv.imagen
+            ? `<div style="width:44px;height:44px;border-radius:8px;overflow:hidden;background:var(--bg2);flex-shrink:0;"><img src="${inv.imagen}" alt="${inv.nombre}" style="width:100%;height:100%;object-fit:contain;" onerror="this.parentElement.style.display='none'"></div>`
+            : `<div style="width:44px;height:44px;border-radius:8px;background:var(--accent-light);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.1rem;flex-shrink:0;">${(inv.nombre||'?')[0].toUpperCase()}</div>`}
+          <div>
+            <div style="font-weight:700">${inv.nombre}</div>
+            <div style="font-size:.82rem;color:var(--muted)">Disponible para esta venta: <strong style="color:var(--text)">${disponibleParaEditar}</strong> uds</div>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="form-group"><label>Fecha de venta *</label>
+            <input type="date" class="form-control" id="fv-fecha" value="${venta.fecha||''}">
+          </div>
+          <div class="form-group"><label>Cantidad *</label>
+            <input type="number" class="form-control" id="fv-cant" min="1" max="${disponibleParaEditar}" value="${venta.cantidad||''}" oninput="onFvBilleteraChange()">
+          </div>
+          <div class="form-group"><label id="fv-precio-label" style="display:flex;align-items:flex-end;min-height:26px;white-space:nowrap;">Precio unitario (COP) *</label>
+            <input type="text" inputmode="numeric" class="form-control" id="fv-precio" value="${venta.precioUnitario||''}" oninput="fmtMontoInput(this);onFvBilleteraChange()">
+          </div>
+          <div class="form-group"><label style="display:flex;align-items:flex-end;min-height:26px;">Modo de precio</label>
+            <div style="display:flex;border:1px solid var(--border);border-radius:7px;overflow:hidden;height:38px;">
+              <button type="button" id="fv-modo-unitario" onclick="setModoPrecioVenta('unitario')" style="flex:1;border:none;font-size:.72rem;font-weight:600;cursor:default;background:#0f2d6b;color:#fff;">Por unidad</button>
+              <button type="button" id="fv-modo-total" onclick="setModoPrecioVenta('total')" style="flex:1;border:none;border-left:1px solid var(--border);font-size:.72rem;font-weight:600;cursor:default;background:none;color:var(--muted);">Total venta</button>
+            </div>
+          </div>
+          <div class="form-group"><label>ID de venta</label>
+            <input type="text" class="form-control" id="fv-cliente" value="${(venta.cliente||'').replace(/"/g,'&quot;')}" placeholder="Ej: 2000018708435690">
+          </div>
+          <div class="form-group"><label>Observación</label>
+            <input type="text" class="form-control" id="fv-obs" value="${(venta.obs||'').replace(/"/g,'&quot;')}" placeholder="Notas opcionales">
+          </div>
+          <div class="form-group" style="grid-column:1/-1"><label> Dinero ingresa a *</label>
+            <select class="form-control" id="fv-billetera" onchange="onFvBilleteraChange()">
+              <option value="">— Selecciona billetera (obligatorio) —</option>
+              ${(STATE.db.billeteras||[]).map(b=>{
+                const s=saldoBilletera(b.id);
+                const sel = b.id===venta.billeteraId ? 'selected' : '';
+                return `<option value="${b.id}" ${sel}>${(BILL_ICONOS[b.tipo]||'')+' '+b.nombre+' — '+fmt(s)}</option>`;
+              }).join('')}
+            </select>
+            <div id="fv-bill-preview" style="display:none;margin-top:6px;padding:8px 12px;border-radius:var(--radius-sm);font-size:.83rem;font-weight:600;"></div>
+          </div>
+        </div>
+        <div id="fv-preventa-aviso" style="display:none;margin-top:12px;padding:10px 14px;border-radius:var(--radius-sm);background:#fff7ed;border:1px solid #fde4c0;font-size:.78rem;color:#b45309;line-height:1.5;"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeInvModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmarEditarVentaInv('${ventaId}','${invId}',${disponibleParaEditar},${stockFisicoParaEditar})">Guardar cambios</button>
+      </div>
+    </div>`;
+  overlay.style.display='flex';
+  window._fvPrecioSugerido = inv.precioSugerido || 0;
+  window._fvStockFisico = stockFisicoParaEditar;
+  window._fvModoPrecio = 'unitario';
+  setTimeout(() => { setModoPrecioVenta('unitario'); }, 50);
+}
+
+async function confirmarEditarVentaInv(ventaId, invId, disponibleParaEditar, stockFisicoParaEditar) {
+  const fecha    = document.getElementById('fv-fecha')?.value;
+  const cantidad = parseInt(document.getElementById('fv-cant')?.value)||0;
+  const precio   = getPrecioUnitarioVenta();
+  const cliente  = document.getElementById('fv-cliente')?.value.trim();
+  const obs      = document.getElementById('fv-obs')?.value.trim();
+  const billeteraId = document.getElementById('fv-billetera')?.value || '';
+
+  if(!fecha)    return toast('La fecha es obligatoria','error');
+  if(!cantidad) return toast('La cantidad debe ser mayor a 0','error');
+  if(cantidad>disponibleParaEditar) return toast('No tienes suficientes unidades pedidas para esa cantidad. Disponible: '+disponibleParaEditar,'error');
+  if(!precio)   return toast('El precio de venta es obligatorio','error');
+  if(!billeteraId) {
+    const sel = document.getElementById('fv-billetera');
+    if (sel) { sel.style.border = '2px solid var(--red)'; setTimeout(() => sel.style.border = '', 2000); }
+    return toast('Debes seleccionar en qué billetera ingresa el dinero de la venta','error');
+  }
+
+  const venta = (STATE.db.ventasInv||[]).find(v=>v.id===ventaId);
+  if (!venta) return toast('Venta no encontrada','error');
+
+  const esPreventa = cantidad > stockFisicoParaEditar;
+
+  venta.fecha = fecha;
+  venta.cantidad = cantidad;
+  venta.precioUnitario = precio;
+  venta.cliente = cliente;
+  venta.obs = obs;
+  venta.billeteraId = billeteraId;
+  venta.preventa = esPreventa;
+  // Si antes no tenía estado de despacho (venta antigua) y ahora resulta ser
+  // una preventa, queda pendiente. Si ya tenía un estado explícito, se
+  // respeta — editar no revierte un despacho ya confirmado por el usuario.
+  if (esPreventa && venta.despachado === undefined) venta.despachado = false;
+  if (venta.despachado === undefined) venta.despachado = true;
+
+  // Sincronizar el ingreso vinculado a esta venta
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  const totalVenta = precio * cantidad;
+  const ingreso = STATE.db.ingresos.find(i=>i.origenVentaId===ventaId);
+  if (ingreso) {
+    ingreso.fecha = fecha;
+    ingreso.monto = Math.round(totalVenta);
+    ingreso.billeteraId = billeteraId;
+    ingreso.fuente = 'Venta inversión: '+(inv?.nombre||'Producto')+(cliente?' — '+cliente:'');
+  }
+
+  closeInvModal();
+  renderDetalleInv(invId);
+  renderAll();
+  await saveDb(['ventasInv','ingresos']);
+  toast('Venta actualizada', 'success');
 }
 
 async function deleteInversion(idx) {
