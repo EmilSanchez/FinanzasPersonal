@@ -4983,34 +4983,25 @@ function renderDetalleInv(invId) {
     <div style="display:grid;grid-template-columns:260px 1fr 1fr 1fr;gap:12px;margin-bottom:12px;" class="inv-det-grid">
       <!-- Foto + KPIs -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
-        <div style="display:flex;gap:12px;">
-          <div style="width:64px;height:64px;flex-shrink:0;overflow:hidden;border-radius:8px;background:var(--bg2);">${avatarImg}</div>
-          <div style="flex:1;display:flex;flex-direction:column;gap:5px;min-width:0;justify-content:center;">
-            ${[['Capital',fmtCOP(totalCapital),'var(--text)'],['Envíos',fmtCOP(totalEnvios),'var(--orange)'],['Recuperado',fmtCOP(p.totalRecuperado),'var(--green)'],[`Ganancia${p.ganancia>=0?'':' ↓'}`,fmtCOP(p.ganancia),p.ganancia>=0?'var(--green)':'var(--red)']].map(([l,v,c])=>`
-              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px;">
-                <span style="font-size:.62rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;">${l}</span>
-                <span style="font-size:.76rem;font-weight:800;color:${c};white-space:nowrap;">${v}</span>
-              </div>`).join('')}
+        <div style="width:100%;aspect-ratio:1;max-height:150px;overflow:hidden;border-radius:8px;background:var(--bg2);">${avatarImg}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;">${invBadgeEstado(p.estado)}${invBadgeStock(p.estadoStock)}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;padding-top:10px;border-top:1px solid var(--border-light);">
+          ${[['Capital',fmtCOP(totalCapital),'var(--text)'],['Envíos',fmtCOP(totalEnvios),'var(--orange)'],['Recuperado',fmtCOP(p.totalRecuperado),'var(--green)'],[`Ganancia${p.ganancia>=0?'':' ↓'}`,fmtCOP(p.ganancia),p.ganancia>=0?'var(--green)':'var(--red)']].map(([l,v,c])=>`
+            <div style="min-width:0;">
+              <div style="font-size:.6rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;">${l}</div>
+              <div style="font-size:.78rem;font-weight:800;color:${c};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${v}</div>
+            </div>`).join('')}
+        </div>
+        <div style="display:flex;gap:14px;padding-top:8px;border-top:1px solid var(--border-light);">
+          <div>
+            <div style="font-size:.6rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Stock</div>
+            <div style="font-size:.8rem;font-weight:800;color:var(--orange);">${fmtNum(p.stockActual)} uds</div>
+          </div>
+          <div>
+            <div style="font-size:.6rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Vendidas</div>
+            <div style="font-size:.8rem;font-weight:800;color:var(--accent);">${fmtNum(p.unidadesVendidas)} uds</div>
           </div>
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:flex-end;padding-top:10px;border-top:1px solid var(--border-light);">
-          <div style="display:flex;flex-direction:column;gap:4px;">${invBadgeEstado(p.estado)}${invBadgeStock(p.estadoStock)}</div>
-          <div style="display:flex;gap:14px;">
-            <div style="text-align:right;">
-              <div style="font-size:.6rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Stock</div>
-              <div style="font-size:.8rem;font-weight:800;color:var(--orange);">${fmtNum(p.stockActual)} uds</div>
-            </div>
-            <div style="text-align:right;">
-              <div style="font-size:.6rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Vendidas</div>
-              <div style="font-size:.8rem;font-weight:800;color:var(--accent);">${fmtNum(p.unidadesVendidas)} uds</div>
-            </div>
-          </div>
-        </div>
-        ${p.estado!=='cerrada'?`<div style="display:flex;gap:6px;">
-          ${p.estado==='activa'?`<button onclick="cambiarEstadoInv(${invIdx},'cerrada')" style="flex:1;height:24px;border:1px solid var(--border);border-radius:6px;background:none;cursor:default;font-size:.64rem;color:var(--muted);">Cerrar</button>`:''}
-          ${p.estado==='activa'?`<button onclick="cambiarEstadoInv(${invIdx},'pausada')" style="flex:1;height:24px;border:1px solid var(--border);border-radius:6px;background:none;cursor:default;font-size:.64rem;color:var(--muted);">Pausar</button>`:''}
-          ${p.estado==='pausada'?`<button onclick="cambiarEstadoInv(${invIdx},'activa')" style="flex:1;height:24px;border:none;border-radius:6px;background:#0f2d6b;color:#fff;cursor:default;font-size:.64rem;">Activar</button>`:''}
-        </div>`:''}
       </div>
       <!-- Info -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;">
