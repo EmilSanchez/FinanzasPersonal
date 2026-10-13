@@ -4673,6 +4673,10 @@ function openModalVentaInv(invId) {
   if(!inv) return;
   const p = enriquecerInversion(inv);
   const ymd = fechaHoy();
+  // Lo que realmente queda disponible para vender como preventa (pedido - vendido
+  // - lo que ya está en bodega). No usar unidadesPendientesLlegar aquí: ese dato es
+  // solo logística de envío y no baja cuando se registran ventas contra el pedido.
+  const capacidadPreventa = Math.max(0, p.disponibleVenta - p.stockActual);
 
   const overlay = document.getElementById('modal-inv-form-overlay');
   overlay.innerHTML = `
@@ -4689,7 +4693,7 @@ function openModalVentaInv(invId) {
             <div style="font-weight:700">${inv.nombre}</div>
             <div style="font-size:.82rem;color:var(--muted)">
               En bodega: <strong style="color:var(--text)">${p.stockActual}</strong> uds
-              ${p.unidadesPendientesLlegar>0?` · Pendientes por llegar: <strong style="color:#b45309">${p.unidadesPendientesLlegar}</strong> uds`:''}
+              ${capacidadPreventa>0?` · Disponible para preventa: <strong style="color:#b45309">${capacidadPreventa}</strong> uds`:''}
               · Precio sugerido: ${fmtCOP(inv.precioSugerido||0)}
             </div>
           </div>
@@ -4732,7 +4736,7 @@ function openModalVentaInv(invId) {
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeInvModal()">Cancelar</button>
-        <button class="btn btn-primary" id="fv-btn-guardar" onclick="guardarVentaInv('${invId}',${p.disponibleVenta},${p.stockActual},${p.unidadesPendientesLlegar})">Registrar venta</button>
+        <button class="btn btn-primary" id="fv-btn-guardar" onclick="guardarVentaInv('${invId}',${p.disponibleVenta},${p.stockActual},${capacidadPreventa})">Registrar venta</button>
       </div>
     </div>`;
   overlay.style.display='flex';
@@ -4740,7 +4744,7 @@ function openModalVentaInv(invId) {
   window._fvPrecioSugerido = inv.precioSugerido || 0;
   window._fvStockFisico = p.stockActual;
   window._fvDisponibleVenta = p.disponibleVenta;
-  window._fvPendientesLlegar = p.unidadesPendientesLlegar;
+  window._fvPendientesLlegar = capacidadPreventa;
   setTimeout(() => { setModoPrecioVenta('unitario'); }, 50);
 }
 
@@ -4936,6 +4940,12 @@ function renderDetalleInv(invId) {
   const totalCapital = p.inversionTotal - gastosOtrosAdic - totalEnvios;
 
   const ventasPct = p.unidades>0 ? Math.min(100,Math.round((p.unidadesVendidas/p.unidades)*100)) : 0;
+  // Capacidad real que aún se puede vender como preventa: lo pedido menos lo ya
+  // vendido, menos lo que ya está físicamente en bodega (eso ya no es "preventa").
+  // OJO: esto NO es igual a "unidadesPendientesLlegar" (que es solo logística de
+  // envío y no baja cuando se registra una venta) — por eso antes el número no
+  // se movía al vender contra el pedido en camino.
+  const capacidadPreventa = Math.max(0, p.disponibleVenta - p.stockActual);
   const avatarImg = p.imagen
     ? `<img src="${p.imagen}" alt="${p.nombre}" style="width:100%;height:100%;object-fit:contain;border-radius:8px;"
          onerror="this.style.display='none'">`
@@ -4951,19 +4961,18 @@ function renderDetalleInv(invId) {
         <div style="font-weight:700;font-size:1.05rem;">${p.nombre}</div>
         <div style="font-size:.73rem;color:var(--muted);">${p.tipo||''}${p.plataforma?' · '+p.plataforma:''}${p.sku?' · '+p.sku:''}</div>
       </div>
-      <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;">
-        <button onclick="openModalVentaInv('${p.id}')" style="height:34px;padding:0 12px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:.78rem;font-weight:700;cursor:default;">+ Venta</button>
-        <button onclick="openModalRenovarStock('${p.id}')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:.78rem;font-weight:600;cursor:default;">+ Stock</button>
-        ${p.unidadesPendientesLlegar>0?`<button onclick="openModalLlegadaBodega('${p.id}')" style="height:34px;padding:0 12px;border:none;border-radius:8px;background:#b45309;color:#fff;font-size:.78rem;font-weight:700;cursor:default;">Llegó a bodega</button>`:''}
-        <button onclick="openModalGastoAdicionalInv('${p.id}')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:.78rem;font-weight:600;cursor:default;">+ Gasto</button>
-        <button onclick="openModalNuevaInversion('${p.id}')" style="height:34px;width:34px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        </button>
-      </div>
     </div>
 
-    <!-- Fila: foto + info + costos + stock físico -->
-    <div style="display:grid;grid-template-columns:130px 1fr 1fr 1fr;gap:12px;margin-bottom:12px;" class="inv-det-grid">
+    <!-- Fila: kpis + foto + info + costos + stock físico + acciones -->
+    <div style="display:grid;grid-template-columns:140px 130px 1fr 1fr 1fr 150px;gap:12px;margin-bottom:12px;" class="inv-det-grid">
+      <!-- KPIs en columna -->
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:10px;display:flex;flex-direction:column;gap:6px;">
+        ${[['Capital',fmtCOP(totalCapital),'var(--text)'],['Envíos',fmtCOP(totalEnvios),'var(--orange)'],['Recuperado',fmtCOP(p.totalRecuperado),'var(--green)'],[`Ganancia${p.ganancia>=0?'':' ↓'}`,fmtCOP(p.ganancia),p.ganancia>=0?'var(--green)':'var(--red)'],['Stock',fmtNum(p.stockActual)+' uds','var(--orange)'],['Vendidas',fmtNum(p.unidadesVendidas)+' uds','var(--accent)']].map(([l,v,c])=>`
+          <div style="padding:6px 8px;border-radius:7px;background:var(--bg2);">
+            <div style="font-size:.6rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px;">${l}</div>
+            <div style="font-size:.76rem;font-weight:800;color:${c};">${v}</div>
+          </div>`).join('')}
+      </div>
       <!-- Foto -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px;display:flex;flex-direction:column;gap:8px;">
         <div style="width:100%;aspect-ratio:1;overflow:hidden;border-radius:8px;background:var(--bg2);">${avatarImg}</div>
@@ -4998,9 +5007,10 @@ function renderDetalleInv(invId) {
         </div>
         <div style="font-size:.71rem;color:var(--muted);margin-top:3px;margin-bottom:10px;">Llegadas: ${fmtNum(p.unidadesLlegadas)} / ${fmtNum(p.unidadesPedidas)} pedidas${p.unidadesVendidas>0?` · Vendidas: ${fmtNum(p.unidadesVendidas)}`:''}</div>
         ${p.unidadesPendientesLlegar>0?`
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:7px;background:#fff7ed;border:1px solid #fde4c0;margin-bottom:8px;">
-          <span style="font-size:.71rem;color:#b45309;font-weight:700;">Disponible para preventa</span>
-          <span style="font-size:.82rem;color:#b45309;font-weight:800;">${fmtNum(p.unidadesPendientesLlegar)} uds</span>
+        <div style="font-size:.68rem;color:var(--muted);margin-bottom:6px;">En camino (envío): <strong style="color:var(--text)">${fmtNum(p.unidadesPendientesLlegar)}</strong> uds</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:7px;background:${capacidadPreventa>0?'#fff7ed':'var(--bg2)'};border:1px solid ${capacidadPreventa>0?'#fde4c0':'var(--border)'};margin-bottom:8px;">
+          <span style="font-size:.71rem;color:${capacidadPreventa>0?'#b45309':'var(--muted)'};font-weight:700;">Disponible para preventa</span>
+          <span style="font-size:.82rem;color:${capacidadPreventa>0?'#b45309':'var(--muted)'};font-weight:800;">${fmtNum(capacidadPreventa)} uds</span>
         </div>
         <div class="progress-bar" style="height:5px;border-radius:10px;margin-bottom:10px;">
           <div class="progress-fill" style="width:${p.unidadesPedidas>0?Math.round(p.unidadesLlegadas/p.unidadesPedidas*100):0}%;background:#b45309;border-radius:10px;"></div>
@@ -5010,15 +5020,16 @@ function renderDetalleInv(invId) {
           <button onclick="openModalLlegadaBodega('${p.id}')" style="flex:1;height:28px;border:none;border-radius:6px;background:#b45309;color:#fff;cursor:default;font-size:.7rem;font-weight:700;">Llegó a bodega</button>
         </div>`:`<div style="margin-top:auto;font-size:.72rem;color:var(--muted);">Sin pedidos pendientes por llegar</div>`}
       </div>
-    </div>
-
-    <!-- KPIs compactos -->
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:12px;">
-      ${[['Capital',fmtCOP(totalCapital),'var(--text)'],['Envíos',fmtCOP(totalEnvios),'var(--orange)'],['Recuperado',fmtCOP(p.totalRecuperado),'var(--green)'],[`Ganancia${p.ganancia>=0?'':' ↓'}`,fmtCOP(p.ganancia),p.ganancia>=0?'var(--green)':'var(--red)'],['Stock',fmtNum(p.stockActual)+' uds','var(--orange)'],['Vendidas',fmtNum(p.unidadesVendidas)+' uds','var(--accent)']].map(([l,v,c])=>`
-        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;box-shadow:var(--shadow);">
-          <div style="font-size:.65rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">${l}</div>
-          <div style="font-size:.9rem;font-weight:800;color:${c};">${v}</div>
-        </div>`).join('')}
+      <!-- Acciones en columna -->
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button onclick="openModalVentaInv('${p.id}')" style="height:34px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:.76rem;font-weight:700;cursor:default;">+ Venta</button>
+        <button onclick="openModalRenovarStock('${p.id}')" style="height:34px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:.76rem;font-weight:600;cursor:default;">+ Stock</button>
+        ${p.unidadesPendientesLlegar>0?`<button onclick="openModalLlegadaBodega('${p.id}')" style="height:34px;border:none;border-radius:8px;background:#b45309;color:#fff;font-size:.74rem;font-weight:700;cursor:default;">Llegó a bodega</button>`:''}
+        <button onclick="openModalGastoAdicionalInv('${p.id}')" style="height:34px;border:1px solid var(--border);border-radius:8px;background:var(--card);font-size:.76rem;font-weight:600;cursor:default;">+ Gasto</button>
+        <button onclick="openModalNuevaInversion('${p.id}')" style="height:34px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;gap:5px;font-size:.74rem;font-weight:600;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Editar
+        </button>
+      </div>
     </div>
 
     <!-- Progreso -->
@@ -5250,6 +5261,9 @@ function editarVentaInv(ventaId, invId) {
   // estaba usando, antes de validar la nueva cantidad.
   const disponibleParaEditar  = p.disponibleVenta + Number(venta.cantidad||0);
   const stockFisicoParaEditar = p.stockActual + Number(venta.cantidad||0);
+  // Misma corrección que en openModalVentaInv: lo que queda para preventa, no la
+  // logística de envío cruda (que no se mueve al editar una venta).
+  const capacidadPreventaEditar = Math.max(0, disponibleParaEditar - stockFisicoParaEditar);
 
   const overlay = document.getElementById('modal-inv-form-overlay');
   overlay.innerHTML = `
@@ -5264,7 +5278,10 @@ function editarVentaInv(ventaId, invId) {
             : `<div style="width:44px;height:44px;border-radius:8px;background:var(--accent-light);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.1rem;flex-shrink:0;">${(inv.nombre||'?')[0].toUpperCase()}</div>`}
           <div>
             <div style="font-weight:700">${inv.nombre}</div>
-            <div style="font-size:.82rem;color:var(--muted)">Disponible para esta venta: <strong style="color:var(--text)">${disponibleParaEditar}</strong> uds</div>
+            <div style="font-size:.82rem;color:var(--muted)">
+              En bodega: <strong style="color:var(--text)">${stockFisicoParaEditar}</strong> uds
+              ${capacidadPreventaEditar>0?` · Disponible para preventa: <strong style="color:#b45309">${capacidadPreventaEditar}</strong> uds`:''}
+            </div>
           </div>
         </div>
         <div class="form-grid">
@@ -5305,14 +5322,14 @@ function editarVentaInv(ventaId, invId) {
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeInvModal()">Cancelar</button>
-        <button class="btn btn-primary" onclick="confirmarEditarVentaInv('${ventaId}','${invId}',${disponibleParaEditar},${stockFisicoParaEditar},${p.unidadesPendientesLlegar})">Guardar cambios</button>
+        <button class="btn btn-primary" onclick="confirmarEditarVentaInv('${ventaId}','${invId}',${disponibleParaEditar},${stockFisicoParaEditar},${capacidadPreventaEditar})">Guardar cambios</button>
       </div>
     </div>`;
   overlay.style.display='flex';
   window._fvPrecioSugerido = inv.precioSugerido || 0;
   window._fvStockFisico = stockFisicoParaEditar;
   window._fvDisponibleVenta = disponibleParaEditar;
-  window._fvPendientesLlegar = p.unidadesPendientesLlegar;
+  window._fvPendientesLlegar = capacidadPreventaEditar;
   window._fvModoPrecio = 'unitario';
   setTimeout(() => { setModoPrecioVenta('unitario'); }, 50);
 }
