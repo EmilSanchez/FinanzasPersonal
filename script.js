@@ -3836,6 +3836,22 @@ function enriquecerInversion(inv) {
   const inversionTotal = calcInversion(inv);
   const cantidad       = Number(inv.unidades||0); // total pedido histórico (todas las compras/renovaciones)
   const costoUnitario  = cantidad > 0 ? inversionTotal / cantidad : 0;
+
+  // Costo unitario del LOTE ACTUAL (la compra o renovación más reciente), en vez
+  // del promedio histórico de todas las compras. Así la ganancia por venta refleja
+  // el costo real vigente y se actualiza solo con cada renovación de stock nueva.
+  const renovacionesArr = inv.renovaciones || [];
+  const unidadesInicialesLote = Number(inv.unidadesIniciales || inv.unidades || 0);
+  const capitalBaseLote = Number(inv.precioUSD || 0) * unidadesInicialesLote * Number(inv.tasa || 0);
+  const envioBaseLote   = Number(inv.envioInicial !== undefined ? inv.envioInicial : inv.envio || 0);
+  const otrosBaseLote   = Number(inv.otrosCostosInicial !== undefined ? inv.otrosCostosInicial : inv.otrosCostos || 0);
+  let costoUnitarioActual = unidadesInicialesLote > 0 ? (capitalBaseLote + envioBaseLote + otrosBaseLote) / unidadesInicialesLote : costoUnitario;
+  if (renovacionesArr.length > 0) {
+    const ultimaRenov = renovacionesArr[renovacionesArr.length - 1];
+    const unidadesRenov = Number(ultimaRenov.nuevasUnidades || 0);
+    if (unidadesRenov > 0) costoUnitarioActual = Number(ultimaRenov.inversionNueva || 0) / unidadesRenov;
+  }
+
   const unidadesVendidas = ventas.reduce((s,v)=>s+(v.cantidad||0), 0);
   const totalRecuperado  = ventas.reduce((s,v)=>s+((v.cantidad||0)*(v.precioUnitario||0)), 0);
 
@@ -3856,13 +3872,13 @@ function enriquecerInversion(inv) {
   // preventa válida — el cliente paga, pero la entrega queda pendiente hasta
   // que la mercancía llegue a bodega.
   const disponibleVenta = Math.max(0, cantidad - unidadesVendidas);
-  const costoVendido   = costoUnitario * unidadesVendidas;
+  const costoVendido   = costoUnitarioActual * unidadesVendidas;
   const ganancia       = totalRecuperado - costoVendido;
   const recuperacionPct = inversionTotal > 0 ? (totalRecuperado/inversionTotal)*100 : 0;
   let estadoStock = 'ok';
   if (stockActual === 0) estadoStock = 'agotado';
   else if (cantidad > 0 && stockActual <= Math.ceil(cantidad*0.2)) estadoStock = 'bajo';
-  return { ...inv, inversionTotal, costoUnitario, unidadesVendidas,
+  return { ...inv, inversionTotal, costoUnitario, costoUnitarioActual, unidadesVendidas,
     totalRecuperado, stockActual, ganancia, recuperacionPct, estadoStock, ventas,
     unidadesPedidas: cantidad, unidadesLlegadas, unidadesPendientesLlegar,
     unidadesPreventa, disponibleVenta,
@@ -3989,6 +4005,17 @@ function toggleInvMenu(id, ev) {
   if (menu) menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
 }
 document.addEventListener('click', () => document.querySelectorAll('.inv-dropdown').forEach(m => m.style.display = 'none'));
+
+// ─── Tarjeta "Estructura de costos" del detalle de inversión: se despliega hacia
+// la derecha al hacer clic, para no ocupar espacio vertical en el sidebar ───
+function toggleCostosCard(ev) {
+  ev?.stopPropagation();
+  const pop = document.getElementById('inv-costos-popover');
+  if (!pop) return;
+  const abrir = pop.style.display !== 'block';
+  document.querySelectorAll('.inv-dropdown').forEach(m => { if (m.id !== 'inv-costos-popover') m.style.display = 'none'; });
+  pop.style.display = abrir ? 'block' : 'none';
+}
 
 // ─── Render principal ──────────────────────────────────────────
 function renderInversiones() {
@@ -4876,13 +4903,8 @@ async function guardarVentaInv(invId, disponibleVenta, stockFisico, pendientesLl
 
   const inv = STATE.db.inversiones.find(i=>i.id===invId);
   const billNombre = STATE.db.billeteras?.find(b=>b.id===billeteraId)?.nombre || '';
-  // Calcular ganancia real: precio_venta - costo_unitario
-  const totalInvCap = inv ? (
-    Number(inv.capitalCOP||0) +
-    (Number(inv.precioUSD||0)*Number(inv.unidades||1)*Number(inv.tasa||0)) +
-    Number(inv.envio||0) + Number(inv.otrosCostos||0)
-  ) : 0;
-  const costoUnit = (inv && inv.unidades > 0) ? totalInvCap / inv.unidades : 0;
+  // Calcular ganancia real: precio_venta - costo_unitario del lote actual
+  const costoUnit = inv ? enriquecerInversion(inv).costoUnitarioActual : 0;
   const gananciaVenta = (precio - costoUnit) * cantidad; // solo la ganancia neta
   const totalVenta = precio * cantidad;
 
@@ -4900,7 +4922,10 @@ async function guardarVentaInv(invId, disponibleVenta, stockFisico, pendientesLl
   });
 
   window._vhPage = 1;
-  window._vhSoloPendientes = false;
+  window._vhEstadoFiltro = 'todos';
+  window._vhQuery = '';
+  window._vhBuscarEditando = false;
+  window._vhEstadoEditando = false;
   renderAll();
   closeInvModal();
   // Animación suave de confirmación sobre la fila de la venta recién creada
@@ -4934,8 +4959,11 @@ function renderDetalleInv(invId) {
   if (window._invDetLastId !== invId) {
     window._invDetLastId = invId;
     window._invActiveTab = 'ventas';
-    window._vhSoloPendientes = false;
+    window._vhEstadoFiltro = 'todos';
     window._vhPage = 1;
+    window._vhQuery = '';
+    window._vhBuscarEditando = false;
+    window._vhEstadoEditando = false;
   }
   const tab = window._invActiveTab || 'ventas';
 
@@ -4958,11 +4986,12 @@ function renderDetalleInv(invId) {
   // se movía al vender contra el pedido en camino.
   const capacidadPreventa = Math.max(0, p.disponibleVenta - p.stockActual);
   const avatarImg = p.imagen
-    ? `<img src="${p.imagen}" alt="${p.nombre}" style="width:100%;height:100%;object-fit:contain;border-radius:8px;"
+    ? `<img src="${p.imagen}" alt="${p.nombre}" style="max-width:100%;max-height:260px;width:auto;height:auto;display:block;margin:0 auto;object-fit:contain;border-radius:8px;"
          onerror="this.style.display='none'">`
-    : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;color:var(--accent);background:var(--accent-light);border-radius:8px;">${(p.nombre||'?')[0].toUpperCase()}</div>`;
+    : `<div style="width:100%;aspect-ratio:1;max-height:260px;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;color:var(--accent);background:var(--accent-light);border-radius:8px;">${(p.nombre||'?')[0].toUpperCase()}</div>`;
 
   document.getElementById('page-detalle-inv').innerHTML = `
+    <div style="zoom:0.92;">
     <!-- Header -->
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
       <button onclick="navigate('inversiones')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:default;font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:5px;">
@@ -4985,67 +5014,75 @@ function renderDetalleInv(invId) {
     <!-- Layout: sidebar (foto/info/costos/stock) + contenido principal (kpis + pestañas) -->
     <div style="display:grid;grid-template-columns:340px 1fr;gap:16px;align-items:start;margin-bottom:12px;" class="inv-det-layout">
       <!-- Sidebar -->
-      <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;flex-direction:column;gap:10px;">
         <!-- Foto -->
-        <div class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
-          <div style="width:100%;aspect-ratio:1;max-height:180px;overflow:hidden;border-radius:8px;background:var(--bg2);">${avatarImg}</div>
+        <div class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
+          <div style="width:100%;display:flex;align-items:center;justify-content:center;max-height:260px;overflow:hidden;border-radius:8px;">${avatarImg}</div>
           <div style="display:flex;flex-wrap:wrap;gap:4px;">${invBadgeEstado(p.estado)}${invBadgeStock(p.estadoStock)}</div>
         </div>
+        <!-- Stock físico en bodega -->
+        <div class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;display:flex;flex-direction:column;">
+          <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px;">Stock físico en bodega</div>
+          <div style="display:flex;align-items:baseline;gap:6px;">
+            <span style="font-size:1.3rem;font-weight:800;color:var(--text);">${fmtNum(p.stockActual)}</span>
+            <span style="font-size:.74rem;color:var(--muted);">uds disponibles</span>
+          </div>
+          <div style="font-size:.7rem;color:var(--muted);margin-top:2px;margin-bottom:8px;">Llegadas: ${fmtNum(p.unidadesLlegadas)} / ${fmtNum(p.unidadesPedidas)} pedidas${p.unidadesVendidas>0?` · Vendidas: ${fmtNum(p.unidadesVendidas)}`:''}</div>
+          ${p.unidadesPendientesLlegar>0?`
+          <div style="font-size:.67rem;color:var(--muted);margin-bottom:5px;">En camino (envío): <strong style="color:var(--text)">${fmtNum(p.unidadesPendientesLlegar)}</strong> uds</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;border-radius:7px;background:${capacidadPreventa>0?'#fff7ed':'var(--bg2)'};border:1px solid ${capacidadPreventa>0?'#fde4c0':'var(--border)'};margin-bottom:7px;">
+            <span style="font-size:.7rem;color:${capacidadPreventa>0?'#b45309':'var(--muted)'};font-weight:700;">Disponible para preventa</span>
+            <span style="font-size:.8rem;color:${capacidadPreventa>0?'#b45309':'var(--muted)'};font-weight:800;">${fmtNum(capacidadPreventa)} uds</span>
+          </div>
+          <div class="progress-bar" style="height:5px;border-radius:10px;margin-bottom:8px;">
+            <div class="progress-fill" style="width:${p.unidadesPedidas>0?Math.round(p.unidadesLlegadas/p.unidadesPedidas*100):0}%;background:#b45309;border-radius:10px;"></div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button onclick="marcarTodoRecibido('${p.id}')" style="flex:1;height:26px;border:1px solid var(--border);border-radius:6px;background:none;cursor:default;font-size:.67rem;color:var(--muted);font-weight:600;">Ya llegó todo</button>
+            <button onclick="openModalLlegadaBodega('${p.id}')" style="flex:1;height:26px;border:none;border-radius:6px;background:#b45309;color:#fff;cursor:default;font-size:.69rem;font-weight:700;">Llegó a bodega</button>
+          </div>`:`<div style="font-size:.71rem;color:var(--muted);">Sin pedidos pendientes por llegar</div>`}
+        </div>
         <!-- Info -->
-        <div class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;">
-          <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px;">Información del producto</div>
+        <div class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;">
+          <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px;">Información del producto</div>
           ${[['SKU',p.sku?`<code style="font-size:.73rem;background:var(--bg2);border:1px solid var(--border);padding:1px 5px;border-radius:4px;">${p.sku}</code>`:'—'],['Categoría',p.categoria||'—'],['Proveedor',p.plataforma||'—'],['Compra',p.fecha||'—'],['Link',p.link?`<a href="${p.link}" target="_blank" style="color:var(--accent);font-size:.8rem;">Ver ↗</a>`:'—']].map(([l,v])=>`
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-light);font-size:.82rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border-light);font-size:.8rem;">
               <span style="color:var(--muted);">${l}</span><span>${v}</span></div>`).join('')}
-          ${p.notas?`<div style="margin-top:8px;font-size:.76rem;color:var(--muted);font-style:italic;">${p.notas}</div>`:''}
+          ${p.notas?`<div style="margin-top:6px;font-size:.75rem;color:var(--muted);font-style:italic;">${p.notas}</div>`:''}
           ${p.unidades>0?`
-          <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border-light);">
-            <div style="display:flex;justify-content:space-between;font-size:.74rem;color:var(--muted);margin-bottom:4px;">
+          <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border-light);">
+            <div style="display:flex;justify-content:space-between;font-size:.73rem;color:var(--muted);margin-bottom:4px;">
               <span>${p.unidadesVendidas} / ${p.unidades} unidades vendidas</span>
               <span style="font-weight:700;color:var(--accent);">${ventasPct}%</span>
             </div>
-            <div class="progress-bar" style="height:7px;border-radius:10px;">
+            <div class="progress-bar" style="height:6px;border-radius:10px;">
               <div class="progress-fill" style="width:${ventasPct}%;background:${ventasPct>=100?'var(--green)':ventasPct>60?'var(--yellow)':'var(--accent)'};border-radius:10px;"></div>
             </div>
           </div>`:''}
         </div>
-        <!-- Costos -->
-        <div class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;">
-          <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px;">Estructura de costos</div>
-          ${[['USD c/u',`$${p.precioUSD||0} USD`],['Tasa',fmtCOP(p.tasa||0)],['Costo COP',fmtCOP(p.costoUnitario)],['Envío',fmtCOP(totalEnvios)],['Otros',fmtCOP(rawInv.otrosCostos||0)],['Precio sugerido',`<strong style="color:var(--accent);">${fmtCOP(p.precioSugerido||0)}</strong>`]].map(([l,v])=>`
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-light);font-size:.82rem;">
-              <span style="color:var(--muted);">${l}</span><span>${v}</span></div>`).join('')}
-        </div>
-        <!-- Stock físico en bodega -->
-        <div class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;display:flex;flex-direction:column;">
-          <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px;">Stock físico en bodega</div>
-          <div style="display:flex;align-items:baseline;gap:6px;">
-            <span style="font-size:1.4rem;font-weight:800;color:var(--text);">${fmtNum(p.stockActual)}</span>
-            <span style="font-size:.76rem;color:var(--muted);">uds disponibles</span>
+        <!-- Costos (desplegable hacia ARRIBA, para no ocupar espacio vertical ni taparse con el contenido principal) -->
+        <div class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;position:relative;isolation:isolate;">
+          <div onclick="toggleCostosCard(event)" style="display:flex;align-items:center;justify-content:space-between;cursor:default;">
+            <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);">Estructura de costos</div>
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2.5" style="transform:rotate(-90deg);"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
-          <div style="font-size:.71rem;color:var(--muted);margin-top:3px;margin-bottom:10px;">Llegadas: ${fmtNum(p.unidadesLlegadas)} / ${fmtNum(p.unidadesPedidas)} pedidas${p.unidadesVendidas>0?` · Vendidas: ${fmtNum(p.unidadesVendidas)}`:''}</div>
-          ${p.unidadesPendientesLlegar>0?`
-          <div style="font-size:.68rem;color:var(--muted);margin-bottom:6px;">En camino (envío): <strong style="color:var(--text)">${fmtNum(p.unidadesPendientesLlegar)}</strong> uds</div>
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:7px;background:${capacidadPreventa>0?'#fff7ed':'var(--bg2)'};border:1px solid ${capacidadPreventa>0?'#fde4c0':'var(--border)'};margin-bottom:8px;">
-            <span style="font-size:.71rem;color:${capacidadPreventa>0?'#b45309':'var(--muted)'};font-weight:700;">Disponible para preventa</span>
-            <span style="font-size:.82rem;color:${capacidadPreventa>0?'#b45309':'var(--muted)'};font-weight:800;">${fmtNum(capacidadPreventa)} uds</span>
+          <div style="margin-top:4px;font-size:.84rem;"><strong style="color:var(--accent);">${fmtCOP(p.precioSugerido||0)}</strong> <span style="color:var(--muted);font-size:.72rem;">precio sugerido</span></div>
+
+          <div id="inv-costos-popover" class="inv-dropdown" style="display:none;position:absolute;bottom:calc(100% + 10px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 -8px 24px rgba(0,0,0,.14), 0 0 0 1px var(--border);padding:12px 14px;z-index:60;">
+            ${[['USD c/u',`$${p.precioUSD||0} USD`],['Tasa',fmtCOP(p.tasa||0)],['Costo COP (lote actual)',fmtCOP(p.costoUnitarioActual)],['Envío',fmtCOP(totalEnvios)],['Otros',fmtCOP(rawInv.otrosCostos||0)],['Precio sugerido',`<strong style="color:var(--accent);">${fmtCOP(p.precioSugerido||0)}</strong>`]].map(([l,v])=>`
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border-light);font-size:.8rem;">
+                <span style="color:var(--muted);">${l}</span><span>${v}</span></div>`).join('')}
           </div>
-          <div class="progress-bar" style="height:5px;border-radius:10px;margin-bottom:10px;">
-            <div class="progress-fill" style="width:${p.unidadesPedidas>0?Math.round(p.unidadesLlegadas/p.unidadesPedidas*100):0}%;background:#b45309;border-radius:10px;"></div>
-          </div>
-          <div style="margin-top:auto;display:flex;gap:6px;">
-            <button onclick="marcarTodoRecibido('${p.id}')" style="flex:1;height:28px;border:1px solid var(--border);border-radius:6px;background:none;cursor:default;font-size:.68rem;color:var(--muted);font-weight:600;">Ya llegó todo</button>
-            <button onclick="openModalLlegadaBodega('${p.id}')" style="flex:1;height:28px;border:none;border-radius:6px;background:#b45309;color:#fff;cursor:default;font-size:.7rem;font-weight:700;">Llegó a bodega</button>
-          </div>`:`<div style="margin-top:auto;font-size:.72rem;color:var(--muted);">Sin pedidos pendientes por llegar</div>`}
         </div>
       </div>
 
       <!-- Contenido principal: KPIs + pestañas -->
-      <div style="display:flex;flex-direction:column;gap:12px;min-width:0;">
+      <div style="display:flex;flex-direction:column;gap:10px;min-width:0;">
         <!-- KPIs con ícono -->
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">
           ${[
             ['Capital',fmtCOP(totalCapital),'var(--text)','var(--bg2)','<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>'],
+            ['Costo unitario',fmtCOP(p.costoUnitarioActual),'var(--text)','var(--bg2)','<path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>'],
             ['Envíos',fmtCOP(totalEnvios),'#b45309','#fff7ed','<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>'],
             ['Recuperado',fmtCOP(p.totalRecuperado),'var(--green)','var(--green-light)','<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>'],
             [`Ganancia${p.ganancia>=0?'':' ↓'}`,fmtCOP(p.ganancia),p.ganancia>=0?'var(--green)':'var(--red)',p.ganancia>=0?'var(--green-light)':'#fef2f2','<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>'],
@@ -5065,29 +5102,44 @@ function renderDetalleInv(invId) {
 
         <!-- Pestañas: ventas / gastos / llegadas / renovaciones -->
         <div class="section" style="padding:0;overflow:hidden;">
-          <div style="display:flex;border-bottom:1px solid var(--border);overflow-x:auto;">
-            ${[['ventas','Historial de ventas',p.ventas.length],['gastos','Gastos adicionales',(p.gastosAdicionales||[]).length],['llegadas','Llegadas a bodega',(p.llegadasBodega||[]).length],['renovaciones','Renovaciones de stock',(p.renovaciones||[]).length]].map(([key,label,count])=>`
-              <button onclick="switchInvTab('${p.id}','${key}')" style="padding:11px 16px;border:none;border-bottom:2px solid ${tab===key?'var(--accent)':'transparent'};background:none;cursor:default;font-size:.8rem;font-weight:${tab===key?'700':'600'};color:${tab===key?'var(--text)':'var(--muted)'};white-space:nowrap;transition:color .15s,border-color .15s;">${label}${count?` <span style="font-weight:700;">(${count})</span>`:''}</button>`).join('')}
-          </div>
-
-          <div class="inv-tab-panel">
-          ${tab==='ventas' ? `
-          <div style="padding:14px 18px 6px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-              <input type="text" id="vh-buscar" placeholder="Buscar por ID de venta..." oninput="filtrarHistorialVentas('${p.id}')" style="height:32px;padding:0 10px;border:1px solid var(--border);border-radius:7px;font-size:.78rem;width:200px;background:var(--card);color:var(--text);transition:border-color .15s;">
-              <button id="vh-toggle-pendientes" onclick="toggleFiltroPendientes('${p.id}')" style="height:32px;padding:0 12px;border:1px solid ${window._vhSoloPendientes?'#b45309':'var(--border)'};border-radius:7px;background:${window._vhSoloPendientes?'#b45309':'none'};cursor:default;font-size:.74rem;font-weight:600;color:${window._vhSoloPendientes?'#fff':'var(--muted)'};white-space:nowrap;transition:background .15s,color .15s,border-color .15s;">Por despachar</button>
+          <div id="inv-tab-bar" style="position:relative;display:flex;border-bottom:1px solid var(--border);overflow-x:auto;align-items:center;justify-content:space-between;gap:10px;">
+            <div style="display:flex;overflow-x:auto;">
+              ${[['ventas','Historial de ventas',p.ventas.length],['gastos','Gastos adicionales',(p.gastosAdicionales||[]).length],['llegadas','Llegadas a bodega',(p.llegadasBodega||[]).length],['renovaciones','Renovaciones de stock',(p.renovaciones||[]).length]].map(([key,label,count])=>`
+                <button data-tab="${key}" onclick="switchInvTab('${p.id}','${key}')" style="padding:11px 16px;border:none;background:none;cursor:default;font-size:.8rem;font-weight:${tab===key?'700':'600'};color:${tab===key?'var(--text)':'var(--muted)'};white-space:nowrap;transition:color .15s;">${label}${count?` <span style="font-weight:700;">(${count})</span>`:''}</button>`).join('')}
             </div>
-            <span style="font-size:.8rem;color:var(--muted)"><strong style="color:var(--green)">${fmtCOP(p.totalRecuperado)}</strong> recuperado</span>
+            <span id="inv-tab-info-label" style="font-size:.78rem;color:var(--muted);white-space:nowrap;padding-right:16px;display:${(tab==='ventas'||tab==='gastos')?'':'none'};">${renderInvTabInfoLabelHTML(p, tab)}</span>
+            <div id="inv-tab-indicator" style="position:absolute;bottom:0;left:0;width:0;height:2px;background:var(--accent);"></div>
           </div>
-          <div id="vh-tabla-container" class="inv-tabla-fade">${renderVentasTablaHTML(p, p.id)}</div>` : ''}
 
-          ${tab==='gastos' ? `
-      <div style="padding:14px 18px 6px;display:flex;align-items:center;justify-content:flex-end;gap:10px;">
-        <span style="font-size:.8rem;color:var(--muted)">${(p.gastosAdicionales||[]).length} registros · Total: <strong style="color:var(--red)">${fmtCOP(totalGastosAdic)}</strong></span>
-        <button class="btn btn-danger btn-sm" onclick="openModalGastoAdicionalInv('${p.id}')">+ Agregar</button>
+          <div class="inv-tab-panel" id="inv-tab-panel">${renderInvTabContenidoHTML(p, p.id, tab)}</div>
+        </div>
       </div>
-      <div class="table-wrap">
-        <table class="data-table">
+    </div>
+    </div>
+  `;
+  posicionarIndicadorPestana(p.id, tab, true);
+}
+
+// Texto informativo que se muestra en la barra de pestañas (a la derecha), según la
+// pestaña activa — reemplaza lo que antes era una fila aparte encima de cada tabla.
+function renderInvTabInfoLabelHTML(p, tab) {
+  if (tab === 'ventas') return `<strong style="color:var(--green)">${fmtCOP(p.totalRecuperado)}</strong> recuperado`;
+  if (tab === 'gastos') {
+    const totalGastosAdic = (p.gastosAdicionales||[]).reduce((a,g)=>a+Number(g.monto),0);
+    return `${(p.gastosAdicionales||[]).length} registros · Total: <strong style="color:var(--red)">${fmtCOP(totalGastosAdic)}</strong>`;
+  }
+  return '';
+}
+
+// ─── Contenido de cada pestaña del detalle de inversión (ventas/gastos/llegadas/renovaciones) ──
+function renderInvTabContenidoHTML(p, invId, tab) {
+  if (tab === 'ventas') {
+    return `<div id="vh-tabla-container" class="inv-tabla-fade" style="margin-top:10px;">${renderVentasTablaHTML(p, invId)}</div>`;
+  }
+  if (tab === 'gastos') {
+    return `
+      <div class="table-wrap" style="margin-top:10px;">
+        <table class="data-table inv-table-compact">
           <thead><tr><th>Fecha</th><th>Motivo</th><th>Concepto</th><th>Monto</th><th>Billetera</th><th>Notas</th><th></th></tr></thead>
           <tbody>
             ${!(p.gastosAdicionales||[]).length
@@ -5103,10 +5155,10 @@ function renderDetalleInv(invId) {
                     <td style="color:var(--muted);font-size:.82rem">${bill?bill.nombre:'—'}</td>
                     <td style="color:var(--muted);font-size:.82rem">${g.notas||'—'}</td>
                     <td><div style="display:flex;gap:4px;">
-                      <button class="btn btn-ghost btn-sm" onclick="editarGastoAdicionalInv('${g.id}','${p.id}')" style="padding:4px 8px;">
+                      <button class="btn btn-ghost btn-sm inv-row-action-btn" onclick="editarGastoAdicionalInv('${g.id}','${invId}')" style="padding:4px 8px;">
                         <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                       </button>
-                      <button class="btn btn-danger btn-sm" onclick="eliminarGastoAdicionalInv('${g.id}','${p.id}')">
+                      <button class="btn btn-danger btn-sm inv-row-action-btn" onclick="eliminarGastoAdicionalInv('${g.id}','${invId}')">
                         <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
                       </button>
                     </div></td>
@@ -5114,11 +5166,12 @@ function renderDetalleInv(invId) {
                 }).join('')}
           </tbody>
         </table>
-      </div>` : ''}
-
-      ${tab==='llegadas' ? `
+      </div>`;
+  }
+  if (tab === 'llegadas') {
+    return `
       <div class="table-wrap" style="margin-top:10px;">
-        <table class="data-table">
+        <table class="data-table inv-table-compact">
           <thead><tr><th>Fecha</th><th>Hora</th><th>Unidades</th><th>Notas</th></tr></thead>
           <tbody>
             ${!(p.llegadasBodega||[]).length
@@ -5132,11 +5185,12 @@ function renderDetalleInv(invId) {
               </tr>`).join('')}
           </tbody>
         </table>
-      </div>` : ''}
-
-      ${tab==='renovaciones' ? `
+      </div>`;
+  }
+  if (tab === 'renovaciones') {
+    return `
       <div class="table-wrap" style="margin-top:10px;">
-        <table class="data-table">
+        <table class="data-table inv-table-compact">
           <thead><tr><th>Fecha</th><th>Unidades</th><th>USD c/u</th><th>Tasa</th><th>Envío</th><th>Inversión</th><th>Notas</th><th></th></tr></thead>
           <tbody>
             ${!(p.renovaciones||[]).length
@@ -5150,18 +5204,15 @@ function renderDetalleInv(invId) {
                 <td style="color:var(--orange)">${fmtCOP(r.envio||0)}</td>
                 <td style="font-weight:600">${fmtCOP(r.inversionNueva)}</td>
                 <td style="color:var(--muted);font-size:.82rem">${r.notas||'—'}</td>
-                <td><button class="btn btn-ghost btn-sm" onclick="editarRenovacionStock('${r.id}','${p.id}')" style="padding:4px 8px;">
+                <td><button class="btn btn-ghost btn-sm inv-row-action-btn" onclick="editarRenovacionStock('${r.id}','${invId}')" style="padding:4px 8px;">
                   <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button></td>
               </tr>`).join('')}
           </tbody>
         </table>
-      </div>` : ''}
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
+      </div>`;
+  }
+  return '';
 }
 
 // ─── Buscador/filtro/paginación del historial de ventas ───────
@@ -5172,14 +5223,51 @@ function generarListaPaginas(actual, total) {
   return [1,'...',actual-1,actual,actual+1,'...',total];
 }
 
+// Contenido del <th> "ID de venta": etiqueta clicable (clic para buscar) o input activo.
+// Se renderiza por separado para poder actualizar SOLO esta celda al abrir/cerrar el
+// buscador, sin tener que volver a dibujar toda la tabla (eso se veía mal).
+function renderThIdVentaHTML(invId) {
+  const qRaw = (window._vhQuery || '').trim();
+  const qAttr = qRaw.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const qCorto = qAttr.length > 14 ? qAttr.slice(0,14)+'…' : qAttr;
+  const editandoBuscar = !!window._vhBuscarEditando;
+  return editandoBuscar
+    ? `<input type="text" id="vh-buscar" value="${qAttr}" placeholder="Buscar ID..." oninput="window._vhQuery=this.value;filtrarHistorialVentas('${invId}')" onblur="cerrarBuscarVenta('${invId}')" onkeydown="if(event.key==='Enter')this.blur();" style="width:100%;height:22px;padding:0 6px;border:1px solid var(--accent);border-radius:5px;font-size:.7rem;font-weight:400;text-transform:none;background:var(--card);color:var(--text);">`
+    : `<div onclick="abrirBuscarVenta('${invId}')" style="display:flex;align-items:center;gap:4px;cursor:default;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0;opacity:.55;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <span>ID DE VENTA</span>
+        ${qRaw ? `<span style="display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:9px;background:var(--accent-light);color:var(--accent);font-weight:700;text-transform:none;font-size:.66rem;">"${qCorto}"<span onclick="limpiarBuscarVenta('${invId}',event)" style="cursor:default;">✕</span></span>` : ''}
+      </div>`;
+}
+
+// Contenido del <th> "Estado": etiqueta clicable (clic para filtrar) o select activo.
+// Misma idea: se actualiza solo esta celda al abrir/cerrar, no toda la tabla.
+function renderThEstadoHTML(invId) {
+  const filtroEstado = window._vhEstadoFiltro || 'todos';
+  const editandoEstado = !!window._vhEstadoEditando;
+  return editandoEstado
+    ? `<select id="vh-filtro-estado" onchange="cambiarFiltroEstadoVentas('${invId}', this.value)" onblur="cerrarEstadoVenta('${invId}')" style="width:100%;height:22px;padding:0 4px;border:1px solid var(--accent);border-radius:5px;font-size:.7rem;font-weight:400;text-transform:none;background:var(--card);color:var(--text);cursor:default;">
+        <option value="todos" ${filtroEstado==='todos'?'selected':''}>Todos</option>
+        <option value="pendiente" ${filtroEstado==='pendiente'?'selected':''}>Pendiente</option>
+        <option value="despachado" ${filtroEstado==='despachado'?'selected':''}>Despachado</option>
+      </select>`
+    : `<div onclick="abrirEstadoVenta('${invId}')" style="display:flex;align-items:center;gap:4px;cursor:default;">
+        <span>ESTADO</span>
+        ${filtroEstado!=='todos' ? `<span style="padding:1px 6px;border-radius:9px;background:var(--accent-light);color:var(--accent);font-weight:700;text-transform:none;font-size:.66rem;">${filtroEstado==='pendiente'?'Pendiente':'Despachado'}</span>` : ''}
+        <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="opacity:.55;flex-shrink:0;"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>`;
+}
+
 function renderVentasTablaHTML(p, invId) {
-  const q = (document.getElementById('vh-buscar')?.value || '').trim().toLowerCase();
-  const soloPendientes = !!window._vhSoloPendientes;
+  const qRaw = (window._vhQuery || '').trim();
+  const q = qRaw.toLowerCase();
+  const filtroEstado = window._vhEstadoFiltro || 'todos';
   const todas = [...p.ventas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
   const filtradas = todas.filter(v => {
     const idVenta = (v.cliente||'').toLowerCase();
     const pendiente = v.despachado === false;
-    return (!q || idVenta.includes(q)) && (!soloPendientes || pendiente);
+    const pasaEstado = filtroEstado==='todos' || (filtroEstado==='pendiente' ? pendiente : !pendiente);
+    return (!q || idVenta.includes(q)) && pasaEstado;
   });
   const pageSize = 10;
   const totalPages = Math.max(1, Math.ceil(filtradas.length / pageSize));
@@ -5194,7 +5282,7 @@ function renderVentasTablaHTML(p, invId) {
     ? `<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:28px;font-style:italic">${todas.length ? 'No hay ventas que coincidan con el filtro' : 'Sin ventas registradas'}</td></tr>`
     : pagina.map(v=>{
         const totalVenta   = (v.cantidad||0)*(v.precioUnitario||0);
-        const gananciaVenta = ((v.precioUnitario||0) - p.costoUnitario) * (v.cantidad||0);
+        const gananciaVenta = ((v.precioUnitario||0) - p.costoUnitarioActual) * (v.cantidad||0);
         const pendiente = v.despachado === false;
         return `
       <tr id="venta-fila-${v.id}">
@@ -5211,10 +5299,10 @@ function renderVentasTablaHTML(p, invId) {
             : `<span style="display:inline-block;border:1px solid var(--green-light);background:var(--green-light);color:var(--green);font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:12px;white-space:nowrap;transition:background .3s,color .3s;">Despachado</span>`}
         </td>
         <td><div style="display:flex;gap:4px;">
-          <button class="btn btn-ghost btn-sm" onclick="editarVentaInv('${v.id}','${invId}')" style="padding:4px 8px;">
+          <button class="btn btn-ghost btn-sm inv-row-action-btn" onclick="editarVentaInv('${v.id}','${invId}')" style="padding:4px 8px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
-          <button class="btn btn-danger btn-sm" onclick="eliminarVentaInv('${v.id}','${invId}')">
+          <button class="btn btn-danger btn-sm inv-row-action-btn" onclick="eliminarVentaInv('${v.id}','${invId}')">
             <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
           </button>
         </div></td>
@@ -5239,8 +5327,18 @@ function renderVentasTablaHTML(p, invId) {
 
   return `
     <div class="table-wrap">
-      <table class="data-table">
-        <thead><tr><th>Fecha</th><th>Cantidad</th><th>Precio unit.</th><th>Total</th><th>Ganancia</th><th>ID de venta</th><th>Observación</th><th>Estado</th><th></th></tr></thead>
+      <table class="data-table inv-table-compact inv-ventas-table">
+        <colgroup>
+          <col style="width:92px;"><col style="width:62px;"><col style="width:92px;"><col style="width:92px;"><col style="width:92px;">
+          <col style="width:135px;"><col style="width:135px;"><col style="width:105px;"><col style="width:58px;">
+        </colgroup>
+        <thead><tr>
+          <th>Fecha</th><th>Cantidad</th><th>Precio unit.</th><th>Total</th><th>Ganancia</th>
+          <th id="th-id-venta">${renderThIdVentaHTML(invId)}</th>
+          <th>Observación</th>
+          <th id="th-estado">${renderThEstadoHTML(invId)}</th>
+          <th></th>
+        </tr></thead>
         <tbody>${filasHtml}</tbody>
       </table>
     </div>
@@ -5253,10 +5351,20 @@ function refrescarVentasTabla(invId) {
   const p = enriquecerInversion(inv);
   const cont = document.getElementById('vh-tabla-container');
   if (cont) {
+    // Si el buscador tiene el foco, conservamos posición del cursor tras re-renderizar
+    const buscarActivo = document.activeElement && document.activeElement.id === 'vh-buscar';
+    const cursorPos = buscarActivo ? document.activeElement.selectionStart : null;
     cont.innerHTML = renderVentasTablaHTML(p, invId);
     cont.classList.remove('inv-tabla-fade');
     void cont.offsetWidth;
     cont.classList.add('inv-tabla-fade');
+    if (buscarActivo) {
+      const inputNuevo = document.getElementById('vh-buscar');
+      if (inputNuevo) {
+        inputNuevo.focus();
+        if (cursorPos !== null) inputNuevo.setSelectionRange(cursorPos, cursorPos);
+      }
+    }
   }
 }
 
@@ -5266,10 +5374,54 @@ function cambiarPaginaVentas(invId, page) {
 }
 
 // ─── Pestañas del detalle de inversión (ventas / gastos / llegadas / renovaciones) ──
+// Solo actualiza el contenido de la pestaña activa y la posición del indicador, en vez
+// de volver a renderizar toda la página (foto, KPIs, tarjetas laterales, etc.).
 function switchInvTab(invId, tab) {
   window._invActiveTab = tab;
-  if (tab === 'ventas') window._vhPage = 1;
-  renderDetalleInv(invId);
+  if (tab === 'ventas') {
+    window._vhPage = 1;
+    window._vhBuscarEditando = false;
+    window._vhEstadoEditando = false;
+  }
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  const bar = document.getElementById('inv-tab-bar');
+  const panel = document.getElementById('inv-tab-panel');
+  if (!inv || !bar || !panel) { renderDetalleInv(invId); return; }
+  const p = enriquecerInversion(inv);
+
+  bar.querySelectorAll('[data-tab]').forEach(btn => {
+    const activo = btn.dataset.tab === tab;
+    btn.style.color = activo ? 'var(--text)' : 'var(--muted)';
+    btn.style.fontWeight = activo ? '700' : '600';
+  });
+  posicionarIndicadorPestana(invId, tab, false);
+
+  const infoLabel = document.getElementById('inv-tab-info-label');
+  if (infoLabel) {
+    infoLabel.style.display = (tab==='ventas'||tab==='gastos') ? '' : 'none';
+    infoLabel.innerHTML = renderInvTabInfoLabelHTML(p, tab);
+  }
+
+  panel.classList.remove('inv-tab-panel');
+  void panel.offsetWidth;
+  panel.innerHTML = renderInvTabContenidoHTML(p, invId, tab);
+  panel.classList.add('inv-tab-panel');
+}
+
+// Mueve suavemente la línea azul indicadora debajo de la pestaña activa.
+// instantaneo=true desactiva la transición (usado en el primer render de la página,
+// para que no se vea "deslizando" cada vez que se actualiza algún dato).
+function posicionarIndicadorPestana(invId, tab, instantaneo) {
+  const bar = document.getElementById('inv-tab-bar');
+  const indicador = document.getElementById('inv-tab-indicator');
+  if (!bar || !indicador) return;
+  const btn = bar.querySelector(`[data-tab="${tab}"]`);
+  if (!btn) return;
+  if (instantaneo) indicador.style.transition = 'none';
+  else indicador.style.transition = 'left .25s cubic-bezier(.4,0,.2,1), width .25s cubic-bezier(.4,0,.2,1)';
+  indicador.style.left = btn.offsetLeft + 'px';
+  indicador.style.width = btn.offsetWidth + 'px';
+  if (instantaneo) { void indicador.offsetWidth; }
 }
 
 // ─── Buscador y filtro del historial de ventas (recalcula y pagina) ───
@@ -5278,16 +5430,51 @@ function filtrarHistorialVentas(invId) {
   refrescarVentasTabla(invId);
 }
 
-function toggleFiltroPendientes(invId) {
-  window._vhSoloPendientes = !window._vhSoloPendientes;
+function cambiarFiltroEstadoVentas(invId, valor) {
+  window._vhEstadoFiltro = valor;
+  window._vhEstadoEditando = false; // aplicar el filtro ya cierra el selector
   window._vhPage = 1;
-  const btn = document.getElementById('vh-toggle-pendientes');
-  if (btn) {
-    btn.style.background = window._vhSoloPendientes ? '#b45309' : 'none';
-    btn.style.color = window._vhSoloPendientes ? '#fff' : 'var(--muted)';
-    btn.style.borderColor = window._vhSoloPendientes ? '#b45309' : 'var(--border)';
-  }
   refrescarVentasTabla(invId);
+}
+
+// ─── Buscador/filtro de ventas integrados en el encabezado de la tabla (clic para editar) ───
+// IMPORTANTE: abrir/cerrar el editor solo actualiza la celda del encabezado afectada
+// (no toda la tabla), para que no se vea un refresco completo al simplemente hacer clic.
+function abrirBuscarVenta(invId) {
+  window._vhBuscarEditando = true;
+  window._vhEstadoEditando = false;
+  const thId = document.getElementById('th-id-venta');
+  const thEstado = document.getElementById('th-estado');
+  if (thId) thId.innerHTML = renderThIdVentaHTML(invId);
+  if (thEstado) thEstado.innerHTML = renderThEstadoHTML(invId);
+  const el = document.getElementById('vh-buscar');
+  if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+}
+function cerrarBuscarVenta(invId) {
+  window._vhBuscarEditando = false;
+  const thId = document.getElementById('th-id-venta');
+  if (thId) thId.innerHTML = renderThIdVentaHTML(invId);
+}
+function limpiarBuscarVenta(invId, ev) {
+  if (ev) ev.stopPropagation();
+  window._vhQuery = '';
+  window._vhPage = 1;
+  refrescarVentasTabla(invId); // esto sí cambia los resultados mostrados, requiere refrescar la tabla
+}
+function abrirEstadoVenta(invId) {
+  window._vhEstadoEditando = true;
+  window._vhBuscarEditando = false;
+  const thId = document.getElementById('th-id-venta');
+  const thEstado = document.getElementById('th-estado');
+  if (thId) thId.innerHTML = renderThIdVentaHTML(invId);
+  if (thEstado) thEstado.innerHTML = renderThEstadoHTML(invId);
+  const el = document.getElementById('vh-filtro-estado');
+  if (el) { el.focus(); if (el.showPicker) { try { el.showPicker(); } catch(e) {} } }
+}
+function cerrarEstadoVenta(invId) {
+  window._vhEstadoEditando = false;
+  const thEstado = document.getElementById('th-estado');
+  if (thEstado) thEstado.innerHTML = renderThEstadoHTML(invId);
 }
 async function eliminarVentaInv(ventaId, invId) {
   if(!await appConfirm('Eliminar venta', '¿Seguro que quieres eliminar esta venta? También se eliminará el ingreso que generó.', { tipo: 'danger', textoConfirmar: 'Eliminar', textoCancelar: 'Cancelar' })) return;
@@ -5557,7 +5744,7 @@ function openModalRenovarStock(invId) {
       <div class="modal-body-wrap" style="overflow-y:auto;padding:18px 22px;">
         <div style="background:var(--bg2);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;font-size:.85rem;color:var(--muted);display:flex;gap:20px;flex-wrap:wrap;">
           <span>Stock actual: <strong style="color:var(--text)">${p.stockActual} uds</strong></span>
-          <span>Costo unitario actual: <strong style="color:var(--text)">${fmtCOP(p.costoUnitario)}</strong></span>
+          <span>Costo unitario actual: <strong style="color:var(--text)">${fmtCOP(p.costoUnitarioActual)}</strong></span>
         </div>
         <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;">
           <div class="form-group"><label>Nuevas unidades *</label>

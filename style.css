@@ -1456,6 +1456,36 @@ input:hover, select:hover, textarea:hover, label:hover { filter: none; }
 }
 .inv-page-btn:hover:not(:disabled) { transform: translateY(-1px); }
 
+/* Encabezado de tabla más delgado dentro del detalle de inversión */
+.inv-table-compact th { padding: 7px 12px; vertical-align: middle; }
+.inv-table-compact td { padding: 9px 12px; }
+
+/* Tabla de ventas: ancho de columnas fijo, para que al abrir/cerrar el buscador o el
+   filtro de estado en el encabezado la tabla NO se "corra" ni cambie de tamaño */
+.inv-ventas-table { table-layout: fixed; }
+.inv-ventas-table td, .inv-ventas-table th { overflow: hidden; text-overflow: ellipsis; }
+
+/* Indicador deslizante de la pestaña activa (barra azul) */
+#inv-tab-indicator { pointer-events: none; }
+
+/* Botones flotantes circulares (Registrar ingreso / Registrar gasto): siempre semi-transparentes,
+   resaltan a su color normal al pasar el mouse por encima */
+.fab-circle-btn {
+  opacity: .5;
+  transition: opacity .2s ease, box-shadow .2s ease, transform .15s ease;
+}
+.fab-circle-btn:hover {
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+/* Animación suave y elegante para los botones de acción de las filas (editar/eliminar) */
+.inv-row-action-btn {
+  transition: background .18s ease, border-color .18s ease, color .18s ease, transform .18s cubic-bezier(.34,1.56,.64,1);
+}
+.inv-row-action-btn:hover { transform: translateY(-2px); }
+.inv-row-action-btn:active { transform: translateY(0) scale(.92); }
+
 /* ── Configuración: una sola columna centrada ── */
 .config-grid-2col {
   display: flex;
