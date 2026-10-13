@@ -465,6 +465,23 @@ canvas { max-width: 100%; display: block; }
   transform: scale(.96) translateY(8px); transition: transform var(--transition);
 }
 .modal-overlay.open .modal { transform: scale(1) translateY(0); }
+
+/* Overlay dedicado de los formularios dinámicos de Inversiones (venta,
+   renovación de stock, gasto adicional, llegada a bodega, etc.): mismo
+   fundido + escala suave que los modales estándar, pero controlado con
+   la clase .open en vez de display, para que la transición sí se vea. */
+#modal-inv-form-overlay {
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+#modal-inv-form-overlay.open { opacity: 1; }
+#modal-inv-form-overlay .modal {
+  transform: scale(.96) translateY(8px);
+  opacity: 0;
+  transition: transform var(--transition), opacity var(--transition);
+}
+#modal-inv-form-overlay.open .modal { transform: scale(1) translateY(0); opacity: 1; }
+
 .modal-title {
   font-size: 1rem; font-weight: 700;
   padding: 18px 22px; border-bottom: 1px solid var(--border);
