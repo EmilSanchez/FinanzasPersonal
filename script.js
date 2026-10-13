@@ -4875,8 +4875,12 @@ function renderDetalleInv(invId) {
 
   // Calcular totales de movimientos del producto
   const totalGastosAdic = (p.gastosAdicionales||[]).reduce((a,g)=>a+Number(g.monto),0);
-  const totalEnvios = Number(rawInv.envio||0) + (rawInv.renovaciones||[]).reduce((a,r)=>a+Number(r.envio||0),0);
-  const totalCapital = p.inversionTotal - totalGastosAdic - totalEnvios;
+  // Gastos adicionales marcados con motivo "Envío" (ej. el flete que se registra
+  // después, aparte) también cuentan como envío, no como gasto genérico.
+  const gastosEnvioAdic = (p.gastosAdicionales||[]).filter(g=>g.motivo==='Envío').reduce((a,g)=>a+Number(g.monto),0);
+  const gastosOtrosAdic = totalGastosAdic - gastosEnvioAdic;
+  const totalEnvios = Number(rawInv.envio||0) + (rawInv.renovaciones||[]).reduce((a,r)=>a+Number(r.envio||0),0) + gastosEnvioAdic;
+  const totalCapital = p.inversionTotal - gastosOtrosAdic - totalEnvios;
 
   const ventasPct = p.unidades>0 ? Math.min(100,Math.round((p.unidadesVendidas/p.unidades)*100)) : 0;
   const avatarImg = p.imagen
@@ -4928,7 +4932,7 @@ function renderDetalleInv(invId) {
       <!-- Costos -->
       <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;">
         <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px;">Estructura de costos</div>
-        ${[['USD c/u',`$${p.precioUSD||0} USD`],['Tasa',fmtCOP(p.tasa||0)],['Costo COP',fmtCOP(p.costoUnitario)],['Envío',fmtCOP(rawInv.envio||0)],['Otros',fmtCOP(rawInv.otrosCostos||0)],['Precio sugerido',`<strong style="color:var(--accent);">${fmtCOP(p.precioSugerido||0)}</strong>`]].map(([l,v])=>`
+        ${[['USD c/u',`$${p.precioUSD||0} USD`],['Tasa',fmtCOP(p.tasa||0)],['Costo COP',fmtCOP(p.costoUnitario)],['Envío',fmtCOP(totalEnvios)],['Otros',fmtCOP(rawInv.otrosCostos||0)],['Precio sugerido',`<strong style="color:var(--accent);">${fmtCOP(p.precioSugerido||0)}</strong>`]].map(([l,v])=>`
           <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-light);font-size:.82rem;">
             <span style="color:var(--muted);">${l}</span><span>${v}</span></div>`).join('')}
       </div>
@@ -5041,14 +5045,16 @@ function renderDetalleInv(invId) {
       </div>
       <div class="table-wrap">
         <table class="data-table">
-          <thead><tr><th>Fecha</th><th>Concepto</th><th>Monto</th><th>Billetera</th><th>Notas</th><th></th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Motivo</th><th>Concepto</th><th>Monto</th><th>Billetera</th><th>Notas</th><th></th></tr></thead>
           <tbody>
             ${!(p.gastosAdicionales||[]).length
-              ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;font-style:italic">Sin gastos adicionales registrados</td></tr>'
+              ? '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;font-style:italic">Sin gastos adicionales registrados</td></tr>'
               : [...(p.gastosAdicionales||[])].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).map(g => {
                   const bill = STATE.db.billeteras?.find(b=>b.id===g.billeteraId);
+                  const esEnvio = g.motivo === 'Envío';
                   return `<tr>
                     <td style="white-space:nowrap">${g.fecha||'—'}</td>
+                    <td><span style="display:inline-block;padding:1px 7px;border-radius:10px;font-size:.68rem;font-weight:700;white-space:nowrap;${esEnvio?'background:#fff7ed;color:#b45309;':'background:var(--bg2);color:var(--muted);'}">${g.motivo||'Otro'}</span></td>
                     <td style="font-weight:600">${g.desc}</td>
                     <td style="color:var(--red);font-weight:600">${fmtCOP(g.monto)}</td>
                     <td style="color:var(--muted);font-size:.82rem">${bill?bill.nombre:'—'}</td>
@@ -5925,6 +5931,15 @@ function openModalGastoAdicionalInv(invId) {
           <div class="form-group"><label>Monto (COP) *</label>
             <input type="text" inputmode="numeric" class="form-control" id="ga-monto" placeholder="0" oninput="fmtMontoInput(this);calcGastoAdicPreview()">
           </div>
+          <div class="form-group" style="grid-column:1/-1"><label>Motivo</label>
+            <select class="form-control" id="ga-motivo">
+              <option value="Otro">Otro</option>
+              <option value="Envío">Envío (se suma al total de Envíos)</option>
+              <option value="Publicidad">Publicidad</option>
+              <option value="Empaque">Empaque</option>
+              <option value="Comisión">Comisión</option>
+            </select>
+          </div>
           <div class="form-group" style="grid-column:1/-1"><label>Concepto / Detalle *</label>
             <input type="text" class="form-control" id="ga-desc" placeholder="Ej: Publicidad Meta, empaque, envío local...">
           </div>
@@ -5973,6 +5988,7 @@ function calcGastoAdicPreview() {
 async function confirmarGastoAdicionalInv(invId) {
   const fecha       = document.getElementById('ga-fecha')?.value;
   const monto       = getMontoValue('ga-monto');
+  const motivo      = document.getElementById('ga-motivo')?.value || 'Otro';
   const desc        = document.getElementById('ga-desc')?.value.trim();
   const billeteraId = document.getElementById('ga-billetera')?.value || '';
   const notas       = document.getElementById('ga-notas')?.value.trim();
@@ -5999,7 +6015,7 @@ async function confirmarGastoAdicionalInv(invId) {
   // Guardar en historial de gastos adicionales de la inversión
   if (!inv.gastosAdicionales) inv.gastosAdicionales = [];
   const gastoId = uid();
-  inv.gastosAdicionales.push({ id: gastoId, fecha, monto, desc, billeteraId, notas: notas||'', hora: horaActual() });
+  inv.gastosAdicionales.push({ id: gastoId, fecha, monto, motivo, desc, billeteraId, notas: notas||'', hora: horaActual() });
 
   // Registrar como gasto real (descuenta de billetera)
   const bill = STATE.db.billeteras?.find(b=>b.id===billeteraId);
@@ -6060,6 +6076,15 @@ function editarGastoAdicionalInv(gastoId, invId) {
           <div class="form-group"><label>Monto (COP) *</label>
             <input type="text" inputmode="numeric" class="form-control" id="ga-monto" value="${g.monto||0}" oninput="fmtMontoInput(this);calcGastoAdicPreview()">
           </div>
+          <div class="form-group" style="grid-column:1/-1"><label>Motivo</label>
+            <select class="form-control" id="ga-motivo">
+              <option value="Otro" ${(!g.motivo||g.motivo==='Otro')?'selected':''}>Otro</option>
+              <option value="Envío" ${g.motivo==='Envío'?'selected':''}>Envío (se suma al total de Envíos)</option>
+              <option value="Publicidad" ${g.motivo==='Publicidad'?'selected':''}>Publicidad</option>
+              <option value="Empaque" ${g.motivo==='Empaque'?'selected':''}>Empaque</option>
+              <option value="Comisión" ${g.motivo==='Comisión'?'selected':''}>Comisión</option>
+            </select>
+          </div>
           <div class="form-group" style="grid-column:1/-1"><label>Concepto / Detalle *</label>
             <input type="text" class="form-control" id="ga-desc" value="${(g.desc||'').replace(/"/g,'&quot;')}" placeholder="Ej: Publicidad Meta, empaque, envío local...">
           </div>
@@ -6088,6 +6113,7 @@ function editarGastoAdicionalInv(gastoId, invId) {
 async function confirmarEditarGastoAdicionalInv(gastoId, invId) {
   const fecha       = document.getElementById('ga-fecha')?.value;
   const monto       = getMontoValue('ga-monto');
+  const motivo      = document.getElementById('ga-motivo')?.value || 'Otro';
   const desc        = document.getElementById('ga-desc')?.value.trim();
   const billeteraId = document.getElementById('ga-billetera')?.value || '';
   const notas       = document.getElementById('ga-notas')?.value.trim();
@@ -6113,7 +6139,7 @@ async function confirmarEditarGastoAdicionalInv(gastoId, invId) {
     return toast(`Saldo insuficiente en ${bill?.nombre||'billetera'}. Disponible: ${fmt(saldoDisponible)}`, 'error');
   }
 
-  g.fecha = fecha; g.monto = monto; g.desc = desc; g.billeteraId = billeteraId; g.notas = notas || '';
+  g.fecha = fecha; g.monto = monto; g.motivo = motivo; g.desc = desc; g.billeteraId = billeteraId; g.notas = notas || '';
 
   const gastoReal = STATE.db.gastos.find(x=>x.invGastoId===gastoId);
   if (gastoReal) {
