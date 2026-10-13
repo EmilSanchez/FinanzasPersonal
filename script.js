@@ -4732,13 +4732,15 @@ function openModalVentaInv(invId) {
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeInvModal()">Cancelar</button>
-        <button class="btn btn-primary" onclick="guardarVentaInv('${invId}',${p.disponibleVenta},${p.stockActual})">Registrar venta</button>
+        <button class="btn btn-primary" id="fv-btn-guardar" onclick="guardarVentaInv('${invId}',${p.disponibleVenta},${p.stockActual},${p.unidadesPendientesLlegar})">Registrar venta</button>
       </div>
     </div>`;
   overlay.style.display='flex';
   window._fvModoPrecio = 'unitario';
   window._fvPrecioSugerido = inv.precioSugerido || 0;
   window._fvStockFisico = p.stockActual;
+  window._fvDisponibleVenta = p.disponibleVenta;
+  window._fvPendientesLlegar = p.unidadesPendientesLlegar;
   setTimeout(() => { setModoPrecioVenta('unitario'); }, 50);
 }
 
@@ -4775,14 +4777,35 @@ function onFvBilleteraChange() {
 
   // Aviso de preventa: si la cantidad supera lo que hay físicamente en
   // bodega, se está vendiendo contra un pedido que aún está en camino.
+  // Si además supera lo disponible total (bodega + pendientes), no se
+  // puede registrar en absoluto y el aviso cambia a modo "bloqueo".
   const aviso = document.getElementById('fv-preventa-aviso');
+  const btnGuardar = document.getElementById('fv-btn-guardar');
   if (aviso) {
-    const stockFisico = window._fvStockFisico ?? 0;
-    if (cant > stockFisico) {
+    const stockFisico     = window._fvStockFisico ?? 0;
+    const disponibleVenta = window._fvDisponibleVenta ?? Infinity;
+    const pendientes      = window._fvPendientesLlegar ?? 0;
+    if (cant > disponibleVenta) {
       aviso.style.display = '';
+      aviso.style.background = '#fef2f2';
+      aviso.style.borderColor = '#fecaca';
+      aviso.style.color = 'var(--red)';
+      if (pendientes <= 0) {
+        aviso.innerHTML = `No puedes registrar esta cantidad: no tienes unidades en bodega ni pedidos pendientes por llegar. Disponible: ${fmtNum(disponibleVenta)} uds.`;
+      } else {
+        aviso.innerHTML = `No puedes registrar esta cantidad: solo hay ${fmtNum(disponibleVenta)} uds disponibles entre bodega (${fmtNum(stockFisico)}) y pendientes por llegar (${fmtNum(pendientes)}).`;
+      }
+    } else if (cant > stockFisico) {
+      aviso.style.display = '';
+      aviso.style.background = '#fff7ed';
+      aviso.style.borderColor = '#fde4c0';
+      aviso.style.color = '#b45309';
       aviso.innerHTML = `Esta venta es una <strong>preventa</strong>: solo tienes ${fmtNum(stockFisico)} uds físicas en bodega. Las ${fmtNum(cant - stockFisico)} uds restantes quedan vendidas contra el pedido que aún está en camino — entrégalas cuando registres su llegada a bodega.`;
     } else {
       aviso.style.display = 'none';
+    }
+    if (btnGuardar) {
+      btnGuardar.textContent = (cant > stockFisico && cant <= disponibleVenta) ? 'Registrar preventa' : 'Registrar venta';
     }
   }
 
@@ -4804,7 +4827,7 @@ function onFvBilleteraChange() {
   }
 }
 
-async function guardarVentaInv(invId, disponibleVenta, stockFisico) {
+async function guardarVentaInv(invId, disponibleVenta, stockFisico, pendientesLlegar) {
   const fecha    = document.getElementById('fv-fecha')?.value;
   const cantidad = parseInt(document.getElementById('fv-cant')?.value)||0;
   const precio   = getPrecioUnitarioVenta();
@@ -4815,8 +4838,20 @@ async function guardarVentaInv(invId, disponibleVenta, stockFisico) {
   if(!fecha)    return toast('La fecha es obligatoria','error');
   if(!cantidad) return toast('La cantidad debe ser mayor a 0','error');
   // El tope ya NO es solo lo físico en bodega: también se puede vender contra
-  // unidades que ya fueron pedidas y están en camino (preventa).
-  if(cantidad>disponibleVenta) return toast('No tienes suficientes unidades pedidas para vender esa cantidad. Disponible (bodega + en camino): '+disponibleVenta,'error');
+  // unidades que ya fueron pedidas y están en camino (preventa). Pero si ni
+  // sumando lo pendiente por llegar alcanza, se bloquea por completo con una
+  // alerta — no se deja pasar como un simple toast.
+  if(cantidad>disponibleVenta) {
+    const sinPendientes = !pendientesLlegar || pendientesLlegar<=0;
+    await appConfirm(
+      'No se puede registrar la venta',
+      sinPendientes
+        ? `No tienes unidades en bodega ni pedidos pendientes por llegar para cubrir esta venta. Disponible actualmente: ${disponibleVenta} uds.`
+        : `La cantidad ingresada supera lo disponible entre bodega (${stockFisico} uds) y lo pendiente por llegar (${pendientesLlegar} uds). Disponible total: ${disponibleVenta} uds.`,
+      { tipo: 'danger', textoConfirmar: 'Entendido', textoCancelar: 'Cerrar' }
+    );
+    return;
+  }
   if(!precio)   return toast('El precio de venta es obligatorio','error');
   if(!billeteraId) {
     const sel = document.getElementById('fv-billetera');
@@ -4854,6 +4889,15 @@ async function guardarVentaInv(invId, disponibleVenta, stockFisico) {
 
   renderAll();
   closeInvModal();
+  // Animación suave de confirmación sobre la fila de la venta recién creada
+  setTimeout(() => {
+    const fila = document.getElementById('venta-fila-'+ventaId);
+    if (fila) {
+      fila.style.transition = 'background-color .4s ease';
+      fila.style.backgroundColor = 'var(--green-light)';
+      setTimeout(() => { fila.style.backgroundColor = ''; }, 900);
+    }
+  }, 60);
   await saveDb(['ventasInv','ingresos']);
   const destino = billNombre ? ` → ${billNombre}` : '';
   const etiquetaPreventa = esPreventa ? ' (preventa — pendiente de entrega)' : '';
@@ -5226,17 +5270,19 @@ function editarVentaInv(ventaId, invId) {
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeInvModal()">Cancelar</button>
-        <button class="btn btn-primary" onclick="confirmarEditarVentaInv('${ventaId}','${invId}',${disponibleParaEditar},${stockFisicoParaEditar})">Guardar cambios</button>
+        <button class="btn btn-primary" onclick="confirmarEditarVentaInv('${ventaId}','${invId}',${disponibleParaEditar},${stockFisicoParaEditar},${p.unidadesPendientesLlegar})">Guardar cambios</button>
       </div>
     </div>`;
   overlay.style.display='flex';
   window._fvPrecioSugerido = inv.precioSugerido || 0;
   window._fvStockFisico = stockFisicoParaEditar;
+  window._fvDisponibleVenta = disponibleParaEditar;
+  window._fvPendientesLlegar = p.unidadesPendientesLlegar;
   window._fvModoPrecio = 'unitario';
   setTimeout(() => { setModoPrecioVenta('unitario'); }, 50);
 }
 
-async function confirmarEditarVentaInv(ventaId, invId, disponibleParaEditar, stockFisicoParaEditar) {
+async function confirmarEditarVentaInv(ventaId, invId, disponibleParaEditar, stockFisicoParaEditar, pendientesLlegar) {
   const fecha    = document.getElementById('fv-fecha')?.value;
   const cantidad = parseInt(document.getElementById('fv-cant')?.value)||0;
   const precio   = getPrecioUnitarioVenta();
@@ -5246,7 +5292,17 @@ async function confirmarEditarVentaInv(ventaId, invId, disponibleParaEditar, sto
 
   if(!fecha)    return toast('La fecha es obligatoria','error');
   if(!cantidad) return toast('La cantidad debe ser mayor a 0','error');
-  if(cantidad>disponibleParaEditar) return toast('No tienes suficientes unidades pedidas para esa cantidad. Disponible: '+disponibleParaEditar,'error');
+  if(cantidad>disponibleParaEditar) {
+    const sinPendientes = !pendientesLlegar || pendientesLlegar<=0;
+    await appConfirm(
+      'No se puede registrar la venta',
+      sinPendientes
+        ? `No tienes unidades en bodega ni pedidos pendientes por llegar para cubrir esta venta. Disponible actualmente: ${disponibleParaEditar} uds.`
+        : `La cantidad ingresada supera lo disponible entre bodega (${stockFisicoParaEditar} uds) y lo pendiente por llegar (${pendientesLlegar} uds). Disponible total: ${disponibleParaEditar} uds.`,
+      { tipo: 'danger', textoConfirmar: 'Entendido', textoCancelar: 'Cerrar' }
+    );
+    return;
+  }
   if(!precio)   return toast('El precio de venta es obligatorio','error');
   if(!billeteraId) {
     const sel = document.getElementById('fv-billetera');
