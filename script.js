@@ -4899,6 +4899,8 @@ async function guardarVentaInv(invId, disponibleVenta, stockFisico, pendientesLl
     origenVentaId: ventaId   // ← AGREGA ESTA LÍNEA
   });
 
+  window._vhPage = 1;
+  window._vhSoloPendientes = false;
   renderAll();
   closeInvModal();
   // Animación suave de confirmación sobre la fila de la venta recién creada
@@ -4933,6 +4935,7 @@ function renderDetalleInv(invId) {
     window._invDetLastId = invId;
     window._invActiveTab = 'ventas';
     window._vhSoloPendientes = false;
+    window._vhPage = 1;
   }
   const tab = window._invActiveTab || 'ventas';
 
@@ -4979,133 +4982,106 @@ function renderDetalleInv(invId) {
       </div>
     </div>
 
-    <!-- Fila: foto+kpis / info (+ progreso ventas) / costos / stock físico -->
-    <div style="display:grid;grid-template-columns:260px 1fr 1fr 1fr;gap:12px;margin-bottom:12px;" class="inv-det-grid">
-      <!-- Foto + KPIs -->
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
-        <div style="width:100%;aspect-ratio:1;max-height:150px;overflow:hidden;border-radius:8px;background:var(--bg2);">${avatarImg}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px;">${invBadgeEstado(p.estado)}${invBadgeStock(p.estadoStock)}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;padding-top:10px;border-top:1px solid var(--border-light);">
-          ${[['Capital',fmtCOP(totalCapital),'var(--text)'],['Envíos',fmtCOP(totalEnvios),'var(--orange)'],['Recuperado',fmtCOP(p.totalRecuperado),'var(--green)'],[`Ganancia${p.ganancia>=0?'':' ↓'}`,fmtCOP(p.ganancia),p.ganancia>=0?'var(--green)':'var(--red)']].map(([l,v,c])=>`
-            <div style="min-width:0;">
-              <div style="font-size:.6rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;">${l}</div>
-              <div style="font-size:.78rem;font-weight:800;color:${c};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${v}</div>
+    <!-- Layout: sidebar (foto/info/costos/stock) + contenido principal (kpis + pestañas) -->
+    <div style="display:grid;grid-template-columns:340px 1fr;gap:16px;align-items:start;margin-bottom:12px;" class="inv-det-layout">
+      <!-- Sidebar -->
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <!-- Foto -->
+        <div class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;display:flex;flex-direction:column;gap:10px;">
+          <div style="width:100%;aspect-ratio:1;max-height:180px;overflow:hidden;border-radius:8px;background:var(--bg2);">${avatarImg}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;">${invBadgeEstado(p.estado)}${invBadgeStock(p.estadoStock)}</div>
+        </div>
+        <!-- Info -->
+        <div class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;">
+          <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px;">Información del producto</div>
+          ${[['SKU',p.sku?`<code style="font-size:.73rem;background:var(--bg2);border:1px solid var(--border);padding:1px 5px;border-radius:4px;">${p.sku}</code>`:'—'],['Categoría',p.categoria||'—'],['Proveedor',p.plataforma||'—'],['Compra',p.fecha||'—'],['Link',p.link?`<a href="${p.link}" target="_blank" style="color:var(--accent);font-size:.8rem;">Ver ↗</a>`:'—']].map(([l,v])=>`
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-light);font-size:.82rem;">
+              <span style="color:var(--muted);">${l}</span><span>${v}</span></div>`).join('')}
+          ${p.notas?`<div style="margin-top:8px;font-size:.76rem;color:var(--muted);font-style:italic;">${p.notas}</div>`:''}
+          ${p.unidades>0?`
+          <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border-light);">
+            <div style="display:flex;justify-content:space-between;font-size:.74rem;color:var(--muted);margin-bottom:4px;">
+              <span>${p.unidadesVendidas} / ${p.unidades} unidades vendidas</span>
+              <span style="font-weight:700;color:var(--accent);">${ventasPct}%</span>
+            </div>
+            <div class="progress-bar" style="height:7px;border-radius:10px;">
+              <div class="progress-fill" style="width:${ventasPct}%;background:${ventasPct>=100?'var(--green)':ventasPct>60?'var(--yellow)':'var(--accent)'};border-radius:10px;"></div>
+            </div>
+          </div>`:''}
+        </div>
+        <!-- Costos -->
+        <div class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;">
+          <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px;">Estructura de costos</div>
+          ${[['USD c/u',`$${p.precioUSD||0} USD`],['Tasa',fmtCOP(p.tasa||0)],['Costo COP',fmtCOP(p.costoUnitario)],['Envío',fmtCOP(totalEnvios)],['Otros',fmtCOP(rawInv.otrosCostos||0)],['Precio sugerido',`<strong style="color:var(--accent);">${fmtCOP(p.precioSugerido||0)}</strong>`]].map(([l,v])=>`
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-light);font-size:.82rem;">
+              <span style="color:var(--muted);">${l}</span><span>${v}</span></div>`).join('')}
+        </div>
+        <!-- Stock físico en bodega -->
+        <div class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;display:flex;flex-direction:column;">
+          <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px;">Stock físico en bodega</div>
+          <div style="display:flex;align-items:baseline;gap:6px;">
+            <span style="font-size:1.4rem;font-weight:800;color:var(--text);">${fmtNum(p.stockActual)}</span>
+            <span style="font-size:.76rem;color:var(--muted);">uds disponibles</span>
+          </div>
+          <div style="font-size:.71rem;color:var(--muted);margin-top:3px;margin-bottom:10px;">Llegadas: ${fmtNum(p.unidadesLlegadas)} / ${fmtNum(p.unidadesPedidas)} pedidas${p.unidadesVendidas>0?` · Vendidas: ${fmtNum(p.unidadesVendidas)}`:''}</div>
+          ${p.unidadesPendientesLlegar>0?`
+          <div style="font-size:.68rem;color:var(--muted);margin-bottom:6px;">En camino (envío): <strong style="color:var(--text)">${fmtNum(p.unidadesPendientesLlegar)}</strong> uds</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:7px;background:${capacidadPreventa>0?'#fff7ed':'var(--bg2)'};border:1px solid ${capacidadPreventa>0?'#fde4c0':'var(--border)'};margin-bottom:8px;">
+            <span style="font-size:.71rem;color:${capacidadPreventa>0?'#b45309':'var(--muted)'};font-weight:700;">Disponible para preventa</span>
+            <span style="font-size:.82rem;color:${capacidadPreventa>0?'#b45309':'var(--muted)'};font-weight:800;">${fmtNum(capacidadPreventa)} uds</span>
+          </div>
+          <div class="progress-bar" style="height:5px;border-radius:10px;margin-bottom:10px;">
+            <div class="progress-fill" style="width:${p.unidadesPedidas>0?Math.round(p.unidadesLlegadas/p.unidadesPedidas*100):0}%;background:#b45309;border-radius:10px;"></div>
+          </div>
+          <div style="margin-top:auto;display:flex;gap:6px;">
+            <button onclick="marcarTodoRecibido('${p.id}')" style="flex:1;height:28px;border:1px solid var(--border);border-radius:6px;background:none;cursor:default;font-size:.68rem;color:var(--muted);font-weight:600;">Ya llegó todo</button>
+            <button onclick="openModalLlegadaBodega('${p.id}')" style="flex:1;height:28px;border:none;border-radius:6px;background:#b45309;color:#fff;cursor:default;font-size:.7rem;font-weight:700;">Llegó a bodega</button>
+          </div>`:`<div style="margin-top:auto;font-size:.72rem;color:var(--muted);">Sin pedidos pendientes por llegar</div>`}
+        </div>
+      </div>
+
+      <!-- Contenido principal: KPIs + pestañas -->
+      <div style="display:flex;flex-direction:column;gap:12px;min-width:0;">
+        <!-- KPIs con ícono -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">
+          ${[
+            ['Capital',fmtCOP(totalCapital),'var(--text)','var(--bg2)','<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>'],
+            ['Envíos',fmtCOP(totalEnvios),'#b45309','#fff7ed','<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>'],
+            ['Recuperado',fmtCOP(p.totalRecuperado),'var(--green)','var(--green-light)','<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>'],
+            [`Ganancia${p.ganancia>=0?'':' ↓'}`,fmtCOP(p.ganancia),p.ganancia>=0?'var(--green)':'var(--red)',p.ganancia>=0?'var(--green-light)':'#fef2f2','<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>'],
+            ['Stock',fmtNum(p.stockActual)+' uds','#b45309','#fff7ed','<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>'],
+            ['Vendidas',fmtNum(p.unidadesVendidas)+' uds','var(--accent)','var(--accent-light)','<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>'],
+          ].map(([l,v,c,bg,icon])=>`
+            <div class="inv-kpi-card inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:13px 14px;display:flex;align-items:center;gap:11px;">
+              <div style="width:38px;height:38px;flex-shrink:0;border-radius:10px;background:${bg};display:flex;align-items:center;justify-content:center;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2">${icon}</svg>
+              </div>
+              <div style="min-width:0;">
+                <div style="font-size:.66rem;color:var(--muted);font-weight:600;">${l}</div>
+                <div style="font-size:.88rem;font-weight:800;color:${c};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${v}</div>
+              </div>
             </div>`).join('')}
         </div>
-        <div style="display:flex;gap:14px;padding-top:8px;border-top:1px solid var(--border-light);">
-          <div>
-            <div style="font-size:.6rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Stock</div>
-            <div style="font-size:.8rem;font-weight:800;color:var(--orange);">${fmtNum(p.stockActual)} uds</div>
-          </div>
-          <div>
-            <div style="font-size:.6rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;">Vendidas</div>
-            <div style="font-size:.8rem;font-weight:800;color:var(--accent);">${fmtNum(p.unidadesVendidas)} uds</div>
-          </div>
-        </div>
-      </div>
-      <!-- Info -->
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;">
-        <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px;">Información del producto</div>
-        ${[['SKU',p.sku?`<code style="font-size:.73rem;background:var(--bg2);border:1px solid var(--border);padding:1px 5px;border-radius:4px;">${p.sku}</code>`:'—'],['Categoría',p.categoria||'—'],['Proveedor',p.plataforma||'—'],['Compra',p.fecha||'—'],['Link',p.link?`<a href="${p.link}" target="_blank" style="color:var(--accent);font-size:.8rem;">Ver ↗</a>`:'—']].map(([l,v])=>`
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-light);font-size:.82rem;">
-            <span style="color:var(--muted);">${l}</span><span>${v}</span></div>`).join('')}
-        ${p.notas?`<div style="margin-top:8px;font-size:.76rem;color:var(--muted);font-style:italic;">${p.notas}</div>`:''}
-        ${p.unidades>0?`
-        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border-light);">
-          <div style="display:flex;justify-content:space-between;font-size:.74rem;color:var(--muted);margin-bottom:4px;">
-            <span>${p.unidadesVendidas} / ${p.unidades} unidades vendidas</span>
-            <span style="font-weight:700;color:var(--accent);">${ventasPct}%</span>
-          </div>
-          <div class="progress-bar" style="height:7px;border-radius:10px;">
-            <div class="progress-fill" style="width:${ventasPct}%;background:${ventasPct>=100?'var(--green)':ventasPct>60?'var(--yellow)':'var(--accent)'};border-radius:10px;"></div>
-          </div>
-        </div>`:''}
-      </div>
-      <!-- Costos -->
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;">
-        <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px;">Estructura de costos</div>
-        ${[['USD c/u',`$${p.precioUSD||0} USD`],['Tasa',fmtCOP(p.tasa||0)],['Costo COP',fmtCOP(p.costoUnitario)],['Envío',fmtCOP(totalEnvios)],['Otros',fmtCOP(rawInv.otrosCostos||0)],['Precio sugerido',`<strong style="color:var(--accent);">${fmtCOP(p.precioSugerido||0)}</strong>`]].map(([l,v])=>`
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border-light);font-size:.82rem;">
-            <span style="color:var(--muted);">${l}</span><span>${v}</span></div>`).join('')}
-      </div>
-      <!-- Stock físico en bodega -->
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;display:flex;flex-direction:column;">
-        <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px;">Stock físico en bodega</div>
-        <div style="display:flex;align-items:baseline;gap:6px;">
-          <span style="font-size:1.4rem;font-weight:800;color:var(--text);">${fmtNum(p.stockActual)}</span>
-          <span style="font-size:.76rem;color:var(--muted);">uds disponibles</span>
-        </div>
-        <div style="font-size:.71rem;color:var(--muted);margin-top:3px;margin-bottom:10px;">Llegadas: ${fmtNum(p.unidadesLlegadas)} / ${fmtNum(p.unidadesPedidas)} pedidas${p.unidadesVendidas>0?` · Vendidas: ${fmtNum(p.unidadesVendidas)}`:''}</div>
-        ${p.unidadesPendientesLlegar>0?`
-        <div style="font-size:.68rem;color:var(--muted);margin-bottom:6px;">En camino (envío): <strong style="color:var(--text)">${fmtNum(p.unidadesPendientesLlegar)}</strong> uds</div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:7px;background:${capacidadPreventa>0?'#fff7ed':'var(--bg2)'};border:1px solid ${capacidadPreventa>0?'#fde4c0':'var(--border)'};margin-bottom:8px;">
-          <span style="font-size:.71rem;color:${capacidadPreventa>0?'#b45309':'var(--muted)'};font-weight:700;">Disponible para preventa</span>
-          <span style="font-size:.82rem;color:${capacidadPreventa>0?'#b45309':'var(--muted)'};font-weight:800;">${fmtNum(capacidadPreventa)} uds</span>
-        </div>
-        <div class="progress-bar" style="height:5px;border-radius:10px;margin-bottom:10px;">
-          <div class="progress-fill" style="width:${p.unidadesPedidas>0?Math.round(p.unidadesLlegadas/p.unidadesPedidas*100):0}%;background:#b45309;border-radius:10px;"></div>
-        </div>
-        <div style="margin-top:auto;display:flex;gap:6px;">
-          <button onclick="marcarTodoRecibido('${p.id}')" style="flex:1;height:28px;border:1px solid var(--border);border-radius:6px;background:none;cursor:default;font-size:.68rem;color:var(--muted);font-weight:600;">Ya llegó todo</button>
-          <button onclick="openModalLlegadaBodega('${p.id}')" style="flex:1;height:28px;border:none;border-radius:6px;background:#b45309;color:#fff;cursor:default;font-size:.7rem;font-weight:700;">Llegó a bodega</button>
-        </div>`:`<div style="margin-top:auto;font-size:.72rem;color:var(--muted);">Sin pedidos pendientes por llegar</div>`}
-      </div>
-    </div>
 
-    <!-- Pestañas: ventas / gastos / llegadas / renovaciones -->
-    <div class="section" style="padding:0;overflow:hidden;">
-      <div style="display:flex;border-bottom:1px solid var(--border);overflow-x:auto;">
-        ${[['ventas','Historial de ventas',p.ventas.length],['gastos','Gastos adicionales',(p.gastosAdicionales||[]).length],['llegadas','Llegadas a bodega',(p.llegadasBodega||[]).length],['renovaciones','Renovaciones de stock',(p.renovaciones||[]).length]].map(([key,label,count])=>`
-          <button onclick="switchInvTab('${p.id}','${key}')" style="padding:11px 16px;border:none;border-bottom:2px solid ${tab===key?'var(--accent)':'transparent'};background:none;cursor:default;font-size:.8rem;font-weight:${tab===key?'700':'600'};color:${tab===key?'var(--text)':'var(--muted)'};white-space:nowrap;">${label}${count?` <span style="font-weight:700;">(${count})</span>`:''}</button>`).join('')}
-      </div>
+        <!-- Pestañas: ventas / gastos / llegadas / renovaciones -->
+        <div class="section" style="padding:0;overflow:hidden;">
+          <div style="display:flex;border-bottom:1px solid var(--border);overflow-x:auto;">
+            ${[['ventas','Historial de ventas',p.ventas.length],['gastos','Gastos adicionales',(p.gastosAdicionales||[]).length],['llegadas','Llegadas a bodega',(p.llegadasBodega||[]).length],['renovaciones','Renovaciones de stock',(p.renovaciones||[]).length]].map(([key,label,count])=>`
+              <button onclick="switchInvTab('${p.id}','${key}')" style="padding:11px 16px;border:none;border-bottom:2px solid ${tab===key?'var(--accent)':'transparent'};background:none;cursor:default;font-size:.8rem;font-weight:${tab===key?'700':'600'};color:${tab===key?'var(--text)':'var(--muted)'};white-space:nowrap;transition:color .15s,border-color .15s;">${label}${count?` <span style="font-weight:700;">(${count})</span>`:''}</button>`).join('')}
+          </div>
 
-      ${tab==='ventas' ? `
-      <div style="padding:14px 18px 6px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <input type="text" id="vh-buscar" placeholder="Buscar por ID de venta..." oninput="filtrarHistorialVentas('${p.id}')" style="height:32px;padding:0 10px;border:1px solid var(--border);border-radius:7px;font-size:.78rem;width:200px;background:var(--card);color:var(--text);">
-          <button id="vh-toggle-pendientes" onclick="toggleFiltroPendientes('${p.id}')" style="height:32px;padding:0 12px;border:1px solid ${window._vhSoloPendientes?'#b45309':'var(--border)'};border-radius:7px;background:${window._vhSoloPendientes?'#b45309':'none'};cursor:default;font-size:.74rem;font-weight:600;color:${window._vhSoloPendientes?'#fff':'var(--muted)'};white-space:nowrap;">Por despachar</button>
-        </div>
-        <span style="font-size:.8rem;color:var(--muted)"><strong style="color:var(--green)">${fmtCOP(p.totalRecuperado)}</strong> recuperado</span>
-      </div>
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead><tr><th>Fecha</th><th>Cantidad</th><th>Precio unit.</th><th>Total</th><th>Ganancia</th><th>ID de venta</th><th>Observación</th><th>Estado</th><th></th></tr></thead>
-          <tbody>
-            ${!p.ventas.length
-              ? '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:28px;font-style:italic">Sin ventas registradas</td></tr>'
-              : [...p.ventas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).map(v=>{
-                  const totalVenta   = (v.cantidad||0)*(v.precioUnitario||0);
-                  const gananciaVenta = ((v.precioUnitario||0) - p.costoUnitario) * (v.cantidad||0);
-                  const pendiente = v.despachado === false;
-                  return `
-                <tr id="venta-fila-${v.id}" data-venta-row data-id-venta="${(v.cliente||'').toLowerCase().replace(/"/g,'&quot;')}" data-pendiente="${pendiente}">
-                  <td>${v.fecha||'—'}${v.preventa?'<br><span style="display:inline-block;margin-top:2px;padding:1px 6px;border-radius:4px;background:#fff7ed;color:#b45309;font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">Preventa</span>':''}</td>
-                  <td style="font-weight:600">${v.cantidad}</td>
-                  <td>${fmtCOP(v.precioUnitario)}</td>
-                  <td style="font-weight:700;color:var(--green)">${fmtCOP(totalVenta)}</td>
-                  <td style="font-weight:700;color:${gananciaVenta>=0?'var(--green)':'var(--red)'}">${gananciaVenta>=0?'+':''}${fmtCOP(gananciaVenta)}</td>
-                  <td style="color:var(--muted)">${v.cliente||'—'}</td>
-                  <td style="color:var(--muted)">${v.obs||'—'}</td>
-                  <td id="venta-estado-${v.id}">
-                    ${pendiente
-                      ? `<button onclick="despacharVentaInv('${v.id}','${p.id}')" style="border:1px solid #fde4c0;background:#fff7ed;color:#b45309;font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:12px;cursor:default;white-space:nowrap;transition:background .3s,color .3s;">Pendiente</button>`
-                      : `<span style="display:inline-block;border:1px solid var(--green-light);background:var(--green-light);color:var(--green);font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:12px;white-space:nowrap;transition:background .3s,color .3s;">Despachado</span>`}
-                  </td>
-                  <td><div style="display:flex;gap:4px;">
-                    <button class="btn btn-ghost btn-sm" onclick="editarVentaInv('${v.id}','${p.id}')" style="padding:4px 8px;">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                    </button>
-                    <button class="btn btn-danger btn-sm" onclick="eliminarVentaInv('${v.id}','${p.id}')">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                    </button>
-                  </div></td>
-                </tr>`;}).join('')}
-            <tr id="vh-sin-resultados" style="display:none;"><td colspan="9" style="text-align:center;color:var(--muted);padding:28px;font-style:italic">No hay ventas que coincidan con el filtro</td></tr>
-          </tbody>
-        </table>
-      </div>` : ''}
+          <div class="inv-tab-panel">
+          ${tab==='ventas' ? `
+          <div style="padding:14px 18px 6px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <input type="text" id="vh-buscar" placeholder="Buscar por ID de venta..." oninput="filtrarHistorialVentas('${p.id}')" style="height:32px;padding:0 10px;border:1px solid var(--border);border-radius:7px;font-size:.78rem;width:200px;background:var(--card);color:var(--text);transition:border-color .15s;">
+              <button id="vh-toggle-pendientes" onclick="toggleFiltroPendientes('${p.id}')" style="height:32px;padding:0 12px;border:1px solid ${window._vhSoloPendientes?'#b45309':'var(--border)'};border-radius:7px;background:${window._vhSoloPendientes?'#b45309':'none'};cursor:default;font-size:.74rem;font-weight:600;color:${window._vhSoloPendientes?'#fff':'var(--muted)'};white-space:nowrap;transition:background .15s,color .15s,border-color .15s;">Por despachar</button>
+            </div>
+            <span style="font-size:.8rem;color:var(--muted)"><strong style="color:var(--green)">${fmtCOP(p.totalRecuperado)}</strong> recuperado</span>
+          </div>
+          <div id="vh-tabla-container" class="inv-tabla-fade">${renderVentasTablaHTML(p, p.id)}</div>` : ''}
 
-      ${tab==='gastos' ? `
+          ${tab==='gastos' ? `
       <div style="padding:14px 18px 6px;display:flex;align-items:center;justify-content:flex-end;gap:10px;">
         <span style="font-size:.8rem;color:var(--muted)">${(p.gastosAdicionales||[]).length} registros · Total: <strong style="color:var(--red)">${fmtCOP(totalGastosAdic)}</strong></span>
         <button class="btn btn-danger btn-sm" onclick="openModalGastoAdicionalInv('${p.id}')">+ Agregar</button>
@@ -5181,42 +5157,137 @@ function renderDetalleInv(invId) {
           </tbody>
         </table>
       </div>` : ''}
+          </div>
+        </div>
+      </div>
     </div>
   `;
+}
+
+// ─── Buscador/filtro/paginación del historial de ventas ───────
+function generarListaPaginas(actual, total) {
+  if (total <= 7) return Array.from({length: total}, (_,i)=>i+1);
+  if (actual <= 4) return [1,2,3,4,5,'...',total];
+  if (actual >= total-3) return [1,'...',total-4,total-3,total-2,total-1,total];
+  return [1,'...',actual-1,actual,actual+1,'...',total];
+}
+
+function renderVentasTablaHTML(p, invId) {
+  const q = (document.getElementById('vh-buscar')?.value || '').trim().toLowerCase();
+  const soloPendientes = !!window._vhSoloPendientes;
+  const todas = [...p.ventas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+  const filtradas = todas.filter(v => {
+    const idVenta = (v.cliente||'').toLowerCase();
+    const pendiente = v.despachado === false;
+    return (!q || idVenta.includes(q)) && (!soloPendientes || pendiente);
+  });
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(filtradas.length / pageSize));
+  let page = window._vhPage || 1;
+  if (page > totalPages) page = totalPages;
+  if (page < 1) page = 1;
+  window._vhPage = page;
+  const inicio = (page-1)*pageSize;
+  const pagina = filtradas.slice(inicio, inicio+pageSize);
+
+  const filasHtml = !filtradas.length
+    ? `<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:28px;font-style:italic">${todas.length ? 'No hay ventas que coincidan con el filtro' : 'Sin ventas registradas'}</td></tr>`
+    : pagina.map(v=>{
+        const totalVenta   = (v.cantidad||0)*(v.precioUnitario||0);
+        const gananciaVenta = ((v.precioUnitario||0) - p.costoUnitario) * (v.cantidad||0);
+        const pendiente = v.despachado === false;
+        return `
+      <tr id="venta-fila-${v.id}">
+        <td>${v.fecha||'—'}${v.preventa?'<br><span style="display:inline-block;margin-top:2px;padding:1px 6px;border-radius:4px;background:#fff7ed;color:#b45309;font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">Preventa</span>':''}</td>
+        <td style="font-weight:600">${v.cantidad}</td>
+        <td>${fmtCOP(v.precioUnitario)}</td>
+        <td style="font-weight:700;color:var(--green)">${fmtCOP(totalVenta)}</td>
+        <td style="font-weight:700;color:${gananciaVenta>=0?'var(--green)':'var(--red)'}">${gananciaVenta>=0?'+':''}${fmtCOP(gananciaVenta)}</td>
+        <td style="color:var(--muted)">${v.cliente||'—'}</td>
+        <td style="color:var(--muted)">${v.obs||'—'}</td>
+        <td id="venta-estado-${v.id}">
+          ${pendiente
+            ? `<button onclick="despacharVentaInv('${v.id}','${invId}')" style="border:1px solid #fde4c0;background:#fff7ed;color:#b45309;font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:12px;cursor:default;white-space:nowrap;transition:background .3s,color .3s;">Pendiente</button>`
+            : `<span style="display:inline-block;border:1px solid var(--green-light);background:var(--green-light);color:var(--green);font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:12px;white-space:nowrap;transition:background .3s,color .3s;">Despachado</span>`}
+        </td>
+        <td><div style="display:flex;gap:4px;">
+          <button class="btn btn-ghost btn-sm" onclick="editarVentaInv('${v.id}','${invId}')" style="padding:4px 8px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="eliminarVentaInv('${v.id}','${invId}')">
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          </button>
+        </div></td>
+      </tr>`;}).join('');
+
+  const paginacionHtml = filtradas.length > pageSize ? `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--border);flex-wrap:wrap;gap:10px;">
+      <span style="font-size:.76rem;color:var(--muted)">Mostrando ${pagina.length} de ${filtradas.length} ventas</span>
+      <div style="display:flex;align-items:center;gap:4px;">
+        <button class="inv-page-btn" onclick="cambiarPaginaVentas('${invId}',${page-1})" ${page<=1?'disabled':''} style="width:28px;height:28px;border:1px solid var(--border);border-radius:6px;background:var(--card);cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;${page<=1?'opacity:.4;':''}">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        ${generarListaPaginas(page, totalPages).map(n => n==='...'
+          ? `<span style="padding:0 4px;color:var(--muted);font-size:.78rem;">…</span>`
+          : `<button class="inv-page-btn" onclick="cambiarPaginaVentas('${invId}',${n})" style="min-width:28px;height:28px;padding:0 6px;border:1px solid ${n===page?'var(--accent)':'var(--border)'};border-radius:6px;background:${n===page?'var(--accent)':'var(--card)'};color:${n===page?'#fff':'var(--text)'};font-size:.78rem;font-weight:${n===page?'700':'600'};cursor:default;">${n}</button>`
+        ).join('')}
+        <button class="inv-page-btn" onclick="cambiarPaginaVentas('${invId}',${page+1})" ${page>=totalPages?'disabled':''} style="width:28px;height:28px;border:1px solid var(--border);border-radius:6px;background:var(--card);cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;${page>=totalPages?'opacity:.4;':''}">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+    </div>` : '';
+
+  return `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Fecha</th><th>Cantidad</th><th>Precio unit.</th><th>Total</th><th>Ganancia</th><th>ID de venta</th><th>Observación</th><th>Estado</th><th></th></tr></thead>
+        <tbody>${filasHtml}</tbody>
+      </table>
+    </div>
+    ${paginacionHtml}`;
+}
+
+function refrescarVentasTabla(invId) {
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  if (!inv) return;
+  const p = enriquecerInversion(inv);
+  const cont = document.getElementById('vh-tabla-container');
+  if (cont) {
+    cont.innerHTML = renderVentasTablaHTML(p, invId);
+    cont.classList.remove('inv-tabla-fade');
+    void cont.offsetWidth;
+    cont.classList.add('inv-tabla-fade');
+  }
+}
+
+function cambiarPaginaVentas(invId, page) {
+  window._vhPage = page;
+  refrescarVentasTabla(invId);
 }
 
 // ─── Pestañas del detalle de inversión (ventas / gastos / llegadas / renovaciones) ──
 function switchInvTab(invId, tab) {
   window._invActiveTab = tab;
+  if (tab === 'ventas') window._vhPage = 1;
   renderDetalleInv(invId);
 }
 
-// ─── Buscador y filtro del historial de ventas (no recarga la tabla, solo filtra) ──
+// ─── Buscador y filtro del historial de ventas (recalcula y pagina) ───
 function filtrarHistorialVentas(invId) {
-  const q = (document.getElementById('vh-buscar')?.value || '').trim().toLowerCase();
-  const soloPendientes = !!window._vhSoloPendientes;
-  const filas = document.querySelectorAll('tr[data-venta-row]');
-  let visibles = 0;
-  filas.forEach(tr => {
-    const idVenta = tr.getAttribute('data-id-venta') || '';
-    const pendiente = tr.getAttribute('data-pendiente') === 'true';
-    const match = (!q || idVenta.includes(q)) && (!soloPendientes || pendiente);
-    tr.style.display = match ? '' : 'none';
-    if (match) visibles++;
-  });
-  const sinResultados = document.getElementById('vh-sin-resultados');
-  if (sinResultados) sinResultados.style.display = (filas.length && !visibles) ? '' : 'none';
+  window._vhPage = 1;
+  refrescarVentasTabla(invId);
 }
 
 function toggleFiltroPendientes(invId) {
   window._vhSoloPendientes = !window._vhSoloPendientes;
+  window._vhPage = 1;
   const btn = document.getElementById('vh-toggle-pendientes');
   if (btn) {
     btn.style.background = window._vhSoloPendientes ? '#b45309' : 'none';
     btn.style.color = window._vhSoloPendientes ? '#fff' : 'var(--muted)';
     btn.style.borderColor = window._vhSoloPendientes ? '#b45309' : 'var(--border)';
   }
-  filtrarHistorialVentas(invId);
+  refrescarVentasTabla(invId);
 }
 async function eliminarVentaInv(ventaId, invId) {
   if(!await appConfirm('Eliminar venta', '¿Seguro que quieres eliminar esta venta? También se eliminará el ingreso que generó.', { tipo: 'danger', textoConfirmar: 'Eliminar', textoCancelar: 'Cancelar' })) return;

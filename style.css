@@ -1413,12 +1413,48 @@ input:hover, select:hover, textarea:hover, label:hover { filter: none; }
   .rep-charts-grid { grid-template-columns: 1fr !important; }
 }
 
-/* ── Inversiones detalle grid responsive ── */
-@media (max-width: 700px) {
-  .inv-det-grid {
+/* ── Inversiones detalle: layout sidebar + contenido responsive ── */
+@media (max-width: 960px) {
+  .inv-det-layout {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* ── Animaciones suaves del detalle de inversión ── */
+@keyframes invCardIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.inv-card-anim {
+  animation: invCardIn .4s cubic-bezier(.22,.68,0,1.1) both;
+}
+.inv-card-anim:nth-child(1) { animation-delay: .01s; }
+.inv-card-anim:nth-child(2) { animation-delay: .06s; }
+.inv-card-anim:nth-child(3) { animation-delay: .11s; }
+.inv-card-anim:nth-child(4) { animation-delay: .16s; }
+.inv-card-anim:nth-child(5) { animation-delay: .21s; }
+.inv-card-anim:nth-child(6) { animation-delay: .26s; }
+
+.inv-kpi-card {
+  transition: transform .18s cubic-bezier(.22,.68,0,1.1), box-shadow .18s ease;
+}
+.inv-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0,0,0,.08);
+}
+
+@keyframes invTabFade {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.inv-tab-panel { animation: invTabFade .3s ease both; }
+
+.inv-tabla-fade { animation: invTabFade .25s ease both; }
+
+.inv-page-btn {
+  transition: background .15s ease, color .15s ease, border-color .15s ease, transform .12s ease;
+}
+.inv-page-btn:hover:not(:disabled) { transform: translateY(-1px); }
 
 /* ── Configuración: una sola columna centrada ── */
 .config-grid-2col {
