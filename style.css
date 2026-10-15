@@ -1824,7 +1824,14 @@ input:hover, select:hover, textarea:hover, label:hover { filter: none; }
 }
 .vh-despacho-pop { animation: vhDespachoPop .6s cubic-bezier(.22,.8,.3,1) both; }
 
-/* Re-render "silencioso" del detalle (tras registrar venta o despachar): sin animaciones de entrada */
-.inv-det-silencioso .inv-card-anim,
-.inv-det-silencioso .inv-tab-panel,
-.inv-det-silencioso .inv-tabla-fade { animation: none !important; }
+/* Venta eliminada: se desvanece deslizándose a la derecha */
+.inv-ventas-table tbody tr.vh-fila-sale {
+  transition: opacity .3s ease, transform .3s cubic-bezier(.4,0,.2,1);
+  opacity: 0; transform: translateX(24px);
+}
+.inv-ventas-table tbody tr.vh-fila-sale td { background: #fef2f2 !important; transition: background-color .15s ease; }
+
+/* Números que cambian: leve tinte mientras cuentan */
+[data-numkey] { transition: color .4s ease; font-variant-numeric: tabular-nums; }
+[data-numkey].num-sube { color: var(--green); }
+[data-numkey].num-baja { color: var(--red); }

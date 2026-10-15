@@ -4942,11 +4942,9 @@ async function guardarVentaInv(invId, disponibleVenta, stockFisico, pendientesLl
   // Si estamos viendo el detalle de este producto con el historial abierto, la
   // venta se inserta en la tabla con animación (sin redibujar la tabla entera);
   // el resto del detalle (KPIs, stock) se actualiza sin animaciones.
-  const enDetalle = STATE.currentPage === 'detalle-inv' && STATE.navParam === invId
-    && (window._invActiveTab || 'ventas') === 'ventas' && document.getElementById('vh-tbody');
-  if (enDetalle) {
-    renderDetalleInvSilencioso(invId);
-    if (!insertarFilaVentaAnimada(ventaId, invId)) renderDetalleInv(invId);
+  const enDetalle = STATE.currentPage === 'detalle-inv' && STATE.navParam === invId;
+  if (enDetalle && actualizarDetalleInvEnSitio(invId)) {
+    if (document.getElementById('vh-tbody') && !insertarFilaVentaAnimada(ventaId, invId)) renderDetalleInv(invId);
   } else {
     window._vhEstadoFiltro = 'todos';
     window._vhQuery = '';
@@ -4984,18 +4982,7 @@ function renderDetalleInv(invId) {
   }
   const tab = window._invActiveTab || 'ventas';
 
-  const pct = p.inversionTotal>0?((p.totalRecuperado/p.inversionTotal)*100).toFixed(1):0;
-
-  // Calcular totales de movimientos del producto
-  const totalGastosAdic = (p.gastosAdicionales||[]).reduce((a,g)=>a+Number(g.monto),0);
-  // Gastos adicionales marcados con motivo "Envío" (ej. el flete que se registra
-  // después, aparte) también cuentan como envío, no como gasto genérico.
-  const gastosEnvioAdic = (p.gastosAdicionales||[]).filter(g=>g.motivo==='Envío').reduce((a,g)=>a+Number(g.monto),0);
-  const gastosOtrosAdic = totalGastosAdic - gastosEnvioAdic;
-  const totalEnvios = Number(rawInv.envio||0) + (rawInv.renovaciones||[]).reduce((a,r)=>a+Number(r.envio||0),0) + gastosEnvioAdic;
-  const totalCapital = p.inversionTotal - gastosOtrosAdic - totalEnvios;
-
-  const ventasPct = p.unidades>0 ? Math.min(100,Math.round((p.unidadesVendidas/p.unidades)*100)) : 0;
+  const { totalEnvios } = calcTotalesDetalleInv(p, rawInv);
   // Capacidad real que aún se puede vender como preventa: lo pedido menos lo ya
   // vendido, menos lo que ya está físicamente en bodega (eso ya no es "preventa").
   // OJO: esto NO es igual a "unidadesPendientesLlegar" (que es solo logística de
@@ -5006,17 +4993,8 @@ function renderDetalleInv(invId) {
          onerror="this.style.display='none'">`
     : `<div style="width:100%;aspect-ratio:1;max-height:260px;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;color:var(--accent);background:var(--accent-light);border-radius:8px;">${(p.nombre||'?')[0].toUpperCase()}</div>`;
 
-  // Modo "silencioso": se redibuja la página sin animaciones de entrada y
-  // conservando el MISMO nodo de la tabla de ventas (scroll, fila seleccionada),
-  // para que al registrar/despachar una venta no se vea un refresco completo.
-  const silencioso = !!window._invDetSilencioso && window._invDetLastRenderId === invId;
-  window._invDetLastRenderId = invId;
-  const tablaPrevia = silencioso && tab === 'ventas' ? document.getElementById('vh-tabla-container') : null;
-  const scrollPrevio = tablaPrevia?.querySelector('.inv-tab-scroll')?.scrollTop || 0;
-  if (tablaPrevia) tablaPrevia.remove();
-
   document.getElementById('page-detalle-inv').innerHTML = `
-    <div style="zoom:0.92;" class="${silencioso?'inv-det-silencioso':''}">
+    <div style="zoom:0.92;">
     <!-- Header -->
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
       <button onclick="navigate('inversiones')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:default;font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:5px;">
@@ -5043,28 +5021,12 @@ function renderDetalleInv(invId) {
         <!-- Foto -->
         <div class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
           <div style="width:100%;display:flex;align-items:center;justify-content:center;max-height:260px;overflow:hidden;border-radius:8px;">${avatarImg}</div>
-          <div style="display:flex;flex-wrap:wrap;gap:4px;">${invBadgeEstado(p.estado)}${invBadgeStock(p.estadoStock)}</div>
+          <div id="inv-det-badges" style="display:flex;flex-wrap:wrap;gap:4px;">${invBadgeEstado(p.estado)}${invBadgeStock(p.estadoStock)}</div>
         </div>
         <!-- Stock físico en bodega -->
         <div id="inv-stock-card" class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;display:flex;flex-direction:column;">${renderStockBodegaHTML(p)}</div>
         <!-- Info -->
-        <div class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;">
-          <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px;">Información del producto</div>
-          ${[['SKU',p.sku?`<code style="font-size:.73rem;background:var(--bg2);border:1px solid var(--border);padding:1px 5px;border-radius:4px;">${p.sku}</code>`:'—'],['Categoría',p.categoria||'—'],['Proveedor',p.plataforma||'—'],['Compra',p.fecha||'—'],['Link',p.link?`<a href="${p.link}" target="_blank" style="color:var(--accent);font-size:.8rem;">Ver ↗</a>`:'—']].map(([l,v])=>`
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border-light);font-size:.8rem;">
-              <span style="color:var(--muted);">${l}</span><span>${v}</span></div>`).join('')}
-          ${p.notas?`<div style="margin-top:6px;font-size:.75rem;color:var(--muted);font-style:italic;">${p.notas}</div>`:''}
-          ${p.unidades>0?`
-          <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border-light);">
-            <div style="display:flex;justify-content:space-between;font-size:.73rem;color:var(--muted);margin-bottom:4px;">
-              <span>${p.unidadesVendidas} / ${p.unidades} unidades vendidas</span>
-              <span style="font-weight:700;color:var(--accent);">${ventasPct}%</span>
-            </div>
-            <div class="progress-bar" style="height:6px;border-radius:10px;">
-              <div class="progress-fill" style="width:${ventasPct}%;background:${ventasPct>=100?'var(--green)':ventasPct>60?'var(--yellow)':'var(--accent)'};border-radius:10px;"></div>
-            </div>
-          </div>`:''}
-        </div>
+        <div id="inv-info-card" class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;">${renderInfoProductoHTML(p)}</div>
         <!-- Costos (desplegable hacia ARRIBA, para no ocupar espacio vertical ni taparse con el contenido principal) -->
         <div class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;position:relative;isolation:isolate;">
           <div onclick="toggleCostosCard(event)" style="display:flex;align-items:center;justify-content:space-between;cursor:default;">
@@ -5084,34 +5046,12 @@ function renderDetalleInv(invId) {
       <!-- Contenido principal: KPIs + pestañas -->
       <div style="display:flex;flex-direction:column;gap:10px;min-width:0;">
         <!-- KPIs con ícono -->
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">
-          ${[
-            ['Capital',fmtCOP(totalCapital),'var(--text)','var(--bg2)','<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>'],
-            ['Costo unitario',fmtCOP(p.costoUnitarioActual),'var(--text)','var(--bg2)','<path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>'],
-            ['Envíos',fmtCOP(totalEnvios),'#b45309','#fff7ed','<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>'],
-            ['Recuperado',fmtCOP(p.totalRecuperado),'var(--green)','var(--green-light)','<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>'],
-            [`Ganancia${p.ganancia>=0?'':' ↓'}`,fmtCOP(p.ganancia),p.ganancia>=0?'var(--green)':'var(--red)',p.ganancia>=0?'var(--green-light)':'#fef2f2','<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>'],
-            ['Stock',fmtNum(p.stockActual)+' uds','#b45309','#fff7ed','<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>'],
-            ['Vendidas',fmtNum(p.unidadesVendidas)+' uds','var(--accent)','var(--accent-light)','<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>'],
-          ].map(([l,v,c,bg,icon])=>`
-            <div class="inv-kpi-card inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:13px 14px;display:flex;align-items:center;gap:11px;">
-              <div style="width:38px;height:38px;flex-shrink:0;border-radius:10px;background:${bg};display:flex;align-items:center;justify-content:center;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2">${icon}</svg>
-              </div>
-              <div style="min-width:0;">
-                <div style="font-size:.66rem;color:var(--muted);font-weight:600;">${l}</div>
-                <div style="font-size:.88rem;font-weight:800;color:${c};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${v}</div>
-              </div>
-            </div>`).join('')}
-        </div>
+        <div id="inv-det-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">${renderKpisDetalleHTML(p, rawInv, true)}</div>
 
         <!-- Pestañas: ventas / gastos / llegadas / renovaciones -->
         <div class="section" style="padding:0;overflow:hidden;">
           <div id="inv-tab-bar" style="position:relative;display:flex;border-bottom:1px solid var(--border);overflow-x:auto;align-items:center;justify-content:space-between;gap:10px;">
-            <div style="display:flex;overflow-x:auto;">
-              ${[['ventas','Historial de ventas',p.ventas.length],['gastos','Gastos adicionales',(p.gastosAdicionales||[]).length],['llegadas','Llegadas a bodega',(p.llegadasBodega||[]).length],['renovaciones','Renovaciones de stock',(p.renovaciones||[]).length]].map(([key,label,count])=>`
-                <button data-tab="${key}" onclick="switchInvTab('${p.id}','${key}')" style="padding:11px 16px;border:none;background:none;cursor:default;font-size:.8rem;font-weight:${tab===key?'700':'600'};color:${tab===key?'var(--text)':'var(--muted)'};white-space:nowrap;transition:color .15s;">${label}${count?` <span style="font-weight:700;">(${count})</span>`:''}</button>`).join('')}
-            </div>
+            <div id="inv-tab-btns" style="display:flex;overflow-x:auto;">${renderTabBtnsDetalleHTML(p, tab)}</div>
             <span id="inv-tab-info-label" style="font-size:.78rem;color:var(--muted);white-space:nowrap;padding-right:16px;display:${(tab==='ventas'||tab==='gastos')?'':'none'};">${renderInvTabInfoLabelHTML(p, tab)}</span>
             <div id="inv-tab-indicator" style="position:absolute;bottom:0;left:0;width:0;height:2px;background:var(--accent);"></div>
           </div>
@@ -5122,22 +5062,134 @@ function renderDetalleInv(invId) {
     </div>
     </div>
   `;
-  if (tablaPrevia) {
-    const nuevo = document.getElementById('vh-tabla-container');
-    if (nuevo) {
-      nuevo.replaceWith(tablaPrevia);
-      const sc = tablaPrevia.querySelector('.inv-tab-scroll');
-      if (sc) sc.scrollTop = scrollPrevio;
-    }
-  }
   posicionarIndicadorPestana(p.id, tab, true);
   programarAjusteAlturasInv();
 }
 
-// Redibuja el detalle sin animaciones y sin tocar la tabla de ventas.
-function renderDetalleInvSilencioso(invId) {
-  window._invDetSilencioso = true;
-  try { renderAll(); } finally { window._invDetSilencioso = false; }
+
+// ─── Números animados del detalle ─────────────────────────────
+// Cada número se pinta dentro de un <span data-numkey> con su valor crudo;
+// al actualizar en sitio, el número "cuenta" suavemente del valor anterior al nuevo.
+const NUM_FMTS = { cop: v => fmtCOP(Math.round(v)), num: v => fmtNum(Math.round(v)), pct: v => Math.round(v) + '%' };
+function numSpan(key, val, fmt = 'num') {
+  const v = Number(val) || 0;
+  return `<span data-numkey="${key}" data-num="${v}" data-fmt="${fmt}">${NUM_FMTS[fmt](v)}</span>`;
+}
+function animarNumero(el, desde, hasta, fmt = 'num', dur = 650) {
+  const f = NUM_FMTS[fmt] || NUM_FMTS.num;
+  const t0 = performance.now();
+  const ease = t => 1 - Math.pow(1 - t, 3);
+  el.classList.add(hasta > desde ? 'num-sube' : 'num-baja');
+  const paso = now => {
+    if (!el.isConnected) return;
+    const t = Math.min(1, (now - t0) / dur);
+    el.textContent = f(desde + (hasta - desde) * ease(t));
+    if (t < 1) requestAnimationFrame(paso);
+    else { el.textContent = f(hasta); setTimeout(() => el.classList.remove('num-sube', 'num-baja'), 250); }
+  };
+  el.textContent = f(desde);
+  requestAnimationFrame(paso);
+}
+// Reemplaza el contenido de "el" por "html" sin parpadeo: los números que
+// cambian se animan desde su valor anterior y las barras de progreso se
+// deslizan desde su ancho anterior.
+function morphNumerosHTML(el, html) {
+  if (!el) return;
+  const prevNum = {}, prevW = {};
+  el.querySelectorAll('[data-numkey]').forEach(n => { prevNum[n.dataset.numkey] = Number(n.dataset.num); });
+  el.querySelectorAll('[data-wkey]').forEach(n => { prevW[n.dataset.wkey] = n.style.width; });
+  el.innerHTML = html;
+  el.querySelectorAll('[data-numkey]').forEach(n => {
+    const a = prevNum[n.dataset.numkey], b = Number(n.dataset.num);
+    if (a !== undefined && a !== b) animarNumero(n, a, b, n.dataset.fmt);
+  });
+  el.querySelectorAll('[data-wkey]').forEach(n => {
+    const w = prevW[n.dataset.wkey], destino = n.style.width;
+    if (w === undefined || w === destino) return;
+    n.style.transition = 'none';
+    n.style.width = w;
+    void n.offsetWidth;
+    n.style.transition = 'width .7s cubic-bezier(.22,.8,.3,1)';
+    n.style.width = destino;
+  });
+}
+
+function calcTotalesDetalleInv(p, rawInv) {
+  const totalGastosAdic = (p.gastosAdicionales||[]).reduce((a,g)=>a+Number(g.monto),0);
+  // Gastos adicionales marcados con motivo "Envío" (ej. el flete que se registra
+  // después, aparte) también cuentan como envío, no como gasto genérico.
+  const gastosEnvioAdic = (p.gastosAdicionales||[]).filter(g=>g.motivo==='Envío').reduce((a,g)=>a+Number(g.monto),0);
+  const gastosOtrosAdic = totalGastosAdic - gastosEnvioAdic;
+  const totalEnvios = Number(rawInv.envio||0) + (rawInv.renovaciones||[]).reduce((a,r)=>a+Number(r.envio||0),0) + gastosEnvioAdic;
+  const totalCapital = p.inversionTotal - gastosOtrosAdic - totalEnvios;
+  return { totalEnvios, totalCapital };
+}
+
+function renderKpisDetalleHTML(p, rawInv, anim) {
+  const { totalEnvios, totalCapital } = calcTotalesDetalleInv(p, rawInv);
+  return [
+    ['capital','Capital',numSpan('kpi-capital',totalCapital,'cop'),'var(--text)','var(--bg2)','<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>'],
+    ['costo','Costo unitario',numSpan('kpi-costo',p.costoUnitarioActual,'cop'),'var(--text)','var(--bg2)','<path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>'],
+    ['envios','Envíos',numSpan('kpi-envios',totalEnvios,'cop'),'#b45309','#fff7ed','<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>'],
+    ['recuperado','Recuperado',numSpan('kpi-recuperado',p.totalRecuperado,'cop'),'var(--green)','var(--green-light)','<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>'],
+    ['ganancia',`Ganancia${p.ganancia>=0?'':' ↓'}`,numSpan('kpi-ganancia',p.ganancia,'cop'),p.ganancia>=0?'var(--green)':'var(--red)',p.ganancia>=0?'var(--green-light)':'#fef2f2','<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>'],
+    ['stock','Stock',numSpan('kpi-stock',p.stockActual)+' uds','#b45309','#fff7ed','<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>'],
+    ['vendidas','Vendidas',numSpan('kpi-vendidas',p.unidadesVendidas)+' uds','var(--accent)','var(--accent-light)','<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>'],
+  ].map(([key,l,v,c,bg,icon])=>`
+            <div class="inv-kpi-card${anim?' inv-card-anim':''}" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:13px 14px;display:flex;align-items:center;gap:11px;">
+              <div style="width:38px;height:38px;flex-shrink:0;border-radius:10px;background:${bg};display:flex;align-items:center;justify-content:center;transition:background .4s ease;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2">${icon}</svg>
+              </div>
+              <div style="min-width:0;">
+                <div style="font-size:.66rem;color:var(--muted);font-weight:600;">${l}</div>
+                <div style="font-size:.88rem;font-weight:800;color:${c};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .4s ease;">${v}</div>
+              </div>
+            </div>`).join('');
+}
+
+function renderInfoProductoHTML(p) {
+  const ventasPct = p.unidades>0 ? Math.min(100,Math.round((p.unidadesVendidas/p.unidades)*100)) : 0;
+  return `
+          <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px;">Información del producto</div>
+          ${[['SKU',p.sku?`<code style="font-size:.73rem;background:var(--bg2);border:1px solid var(--border);padding:1px 5px;border-radius:4px;">${p.sku}</code>`:'—'],['Categoría',p.categoria||'—'],['Proveedor',p.plataforma||'—'],['Compra',p.fecha||'—'],['Link',p.link?`<a href="${p.link}" target="_blank" style="color:var(--accent);font-size:.8rem;">Ver ↗</a>`:'—']].map(([l,v])=>`
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border-light);font-size:.8rem;">
+              <span style="color:var(--muted);">${l}</span><span>${v}</span></div>`).join('')}
+          ${p.notas?`<div style="margin-top:6px;font-size:.75rem;color:var(--muted);font-style:italic;">${p.notas}</div>`:''}
+          ${p.unidades>0?`
+          <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border-light);">
+            <div style="display:flex;justify-content:space-between;font-size:.73rem;color:var(--muted);margin-bottom:4px;">
+              <span>${numSpan('info-vendidas', p.unidadesVendidas)} / ${numSpan('info-unidades', p.unidades)} unidades vendidas</span>
+              <span style="font-weight:700;color:var(--accent);">${numSpan('info-pct', ventasPct, 'pct')}</span>
+            </div>
+            <div class="progress-bar" style="height:6px;border-radius:10px;">
+              <div class="progress-fill" data-wkey="info-pct" style="width:${ventasPct}%;background:${ventasPct>=100?'var(--green)':ventasPct>60?'var(--yellow)':'var(--accent)'};border-radius:10px;"></div>
+            </div>
+          </div>`:''}`;
+}
+
+function renderTabBtnsDetalleHTML(p, tab) {
+  return [['ventas','Historial de ventas',p.ventas.length],['gastos','Gastos adicionales',(p.gastosAdicionales||[]).length],['llegadas','Llegadas a bodega',(p.llegadasBodega||[]).length],['renovaciones','Renovaciones de stock',(p.renovaciones||[]).length]].map(([key,label,count])=>`
+                <button data-tab="${key}" onclick="switchInvTab('${p.id}','${key}')" style="padding:11px 16px;border:none;background:none;cursor:default;font-size:.8rem;font-weight:${tab===key?'700':'600'};color:${tab===key?'var(--text)':'var(--muted)'};white-space:nowrap;transition:color .15s;">${label}${count?` <span style="font-weight:700;">(${numSpan('tab-'+key, count)})</span>`:''}</button>`).join('');
+}
+
+// Actualiza el detalle EN SITIO tras registrar/eliminar/despachar una venta:
+// no se redibuja la página (ni la foto, ni la tabla); solo cambian los números
+// (animados), las tarjetas laterales y las etiquetas. Sin parpadeos.
+function actualizarDetalleInvEnSitio(invId) {
+  const raw = STATE.db.inversiones.find(i=>i.id===invId);
+  if (!raw || !document.getElementById('inv-det-kpis')) return false;
+  const p = enriquecerInversion(raw);
+  const tab = window._invActiveTab || 'ventas';
+  morphNumerosHTML(document.getElementById('inv-det-kpis'), renderKpisDetalleHTML(p, raw, false));
+  morphNumerosHTML(document.getElementById('inv-stock-card'), renderStockBodegaHTML(p));
+  morphNumerosHTML(document.getElementById('inv-info-card'), renderInfoProductoHTML(p));
+  morphNumerosHTML(document.getElementById('inv-tab-btns'), renderTabBtnsDetalleHTML(p, tab));
+  morphNumerosHTML(document.getElementById('inv-tab-info-label'), renderInvTabInfoLabelHTML(p, tab));
+  const badges = document.getElementById('inv-det-badges');
+  const badgesHtml = invBadgeEstado(p.estado) + invBadgeStock(p.estadoStock);
+  if (badges && badges.innerHTML !== badgesHtml) badges.innerHTML = badgesHtml;
+  posicionarIndicadorPestana(invId, tab, true);
+  return true;
 }
 
 // Contenido de la tarjeta "Stock físico en bodega". Separado para poder
@@ -5149,27 +5201,27 @@ function renderStockBodegaHTML(p) {
   return `
           <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px;">Stock físico en bodega</div>
           <div style="display:flex;align-items:baseline;gap:6px;">
-            <span style="font-size:1.3rem;font-weight:800;color:var(--text);">${fmtNum(p.stockActual)}</span>
+            <span style="font-size:1.3rem;font-weight:800;color:var(--text);">${numSpan('stk-actual', p.stockActual)}</span>
             <span style="font-size:.74rem;color:var(--muted);">uds disponibles</span>
           </div>
-          <div style="font-size:.7rem;color:var(--muted);margin-top:2px;margin-bottom:8px;">Llegadas: ${fmtNum(p.unidadesLlegadas)} / ${fmtNum(p.unidadesPedidas)} pedidas${p.unidadesVendidas>0?` · Vendidas: ${fmtNum(p.unidadesVendidas)}`:''}</div>
+          <div style="font-size:.7rem;color:var(--muted);margin-top:2px;margin-bottom:8px;">Llegadas: ${numSpan('stk-llegadas', p.unidadesLlegadas)} / ${numSpan('stk-pedidas', p.unidadesPedidas)} pedidas${p.unidadesVendidas>0?` · Vendidas: ${numSpan('stk-vendidas', p.unidadesVendidas)}`:''}</div>
           ${p.unidadesPendientesDespacho>0?`
           <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:7px;background:${p.porDespacharAhora>0?'var(--green-light)':'var(--bg2)'};border:1px solid ${p.porDespacharAhora>0?'rgba(22,163,74,.25)':'var(--border)'};margin-bottom:${p.esperandoLlegada>0?'4px':'8px'};">
             <span style="font-size:.7rem;color:${p.porDespacharAhora>0?'var(--green)':'var(--muted)'};font-weight:700;display:flex;align-items:center;gap:5px;">
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/></svg>
               Por despachar ahora
             </span>
-            <span style="font-size:.82rem;color:${p.porDespacharAhora>0?'var(--green)':'var(--muted)'};font-weight:800;">${fmtNum(p.porDespacharAhora)} uds</span>
+            <span style="font-size:.82rem;color:${p.porDespacharAhora>0?'var(--green)':'var(--muted)'};font-weight:800;">${numSpan('stk-despachar', p.porDespacharAhora)} uds</span>
           </div>
-          ${p.esperandoLlegada>0?`<div style="font-size:.67rem;color:var(--muted);margin-bottom:8px;padding-left:2px;">Preventas esperando llegada: <strong style="color:var(--text)">${fmtNum(p.esperandoLlegada)}</strong> uds</div>`:''}`:''}
+          ${p.esperandoLlegada>0?`<div style="font-size:.67rem;color:var(--muted);margin-bottom:8px;padding-left:2px;">Preventas esperando llegada: <strong style="color:var(--text)">${numSpan('stk-esperando', p.esperandoLlegada)}</strong> uds</div>`:''}`:''}
           ${p.unidadesPendientesLlegar>0?`
-          <div style="font-size:.67rem;color:var(--muted);margin-bottom:5px;">En camino (envío): <strong style="color:var(--text)">${fmtNum(p.unidadesPendientesLlegar)}</strong> uds</div>
+          <div style="font-size:.67rem;color:var(--muted);margin-bottom:5px;">En camino (envío): <strong style="color:var(--text)">${numSpan('stk-camino', p.unidadesPendientesLlegar)}</strong> uds</div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;border-radius:7px;background:${capacidadPreventa>0?'#fff7ed':'var(--bg2)'};border:1px solid ${capacidadPreventa>0?'#fde4c0':'var(--border)'};margin-bottom:7px;">
             <span style="font-size:.7rem;color:${capacidadPreventa>0?'#b45309':'var(--muted)'};font-weight:700;">Disponible para preventa</span>
-            <span style="font-size:.8rem;color:${capacidadPreventa>0?'#b45309':'var(--muted)'};font-weight:800;">${fmtNum(capacidadPreventa)} uds</span>
+            <span style="font-size:.8rem;color:${capacidadPreventa>0?'#b45309':'var(--muted)'};font-weight:800;">${numSpan('stk-preventa', capacidadPreventa)} uds</span>
           </div>
           <div class="progress-bar" style="height:5px;border-radius:10px;margin-bottom:8px;">
-            <div class="progress-fill" style="width:${p.unidadesPedidas>0?Math.round(p.unidadesLlegadas/p.unidadesPedidas*100):0}%;background:#b45309;border-radius:10px;"></div>
+            <div class="progress-fill" data-wkey="stk-llegadas" style="width:${p.unidadesPedidas>0?Math.round(p.unidadesLlegadas/p.unidadesPedidas*100):0}%;background:#b45309;border-radius:10px;"></div>
           </div>
           <div style="display:flex;gap:6px;">
             <button onclick="marcarTodoRecibido('${p.id}')" style="flex:1;height:26px;border:1px solid var(--border);border-radius:6px;background:none;cursor:default;font-size:.67rem;color:var(--muted);font-weight:600;">Ya llegó todo</button>
@@ -5180,7 +5232,7 @@ function renderStockBodegaHTML(p) {
 // Texto informativo que se muestra en la barra de pestañas (a la derecha), según la
 // pestaña activa — reemplaza lo que antes era una fila aparte encima de cada tabla.
 function renderInvTabInfoLabelHTML(p, tab) {
-  if (tab === 'ventas') return `<strong style="color:var(--green)">${fmtCOP(p.totalRecuperado)}</strong> recuperado`;
+  if (tab === 'ventas') return `<strong style="color:var(--green)">${numSpan('lbl-recuperado', p.totalRecuperado, 'cop')}</strong> recuperado`;
   if (tab === 'gastos') {
     const totalGastosAdic = (p.gastosAdicionales||[]).reduce((a,g)=>a+Number(g.monto),0);
     return `${(p.gastosAdicionales||[]).length} registros · Total: <strong style="color:var(--red)">${fmtCOP(totalGastosAdic)}</strong>`;
@@ -5467,6 +5519,36 @@ function insertarFilaVentaAnimada(ventaId, invId) {
   return true;
 }
 
+// Saca una fila de la tabla: se desvanece y se desliza; luego las filas de
+// abajo suben suavemente a ocupar su lugar (FLIP). Si era la última, aparece
+// el mensaje de "Sin ventas".
+function quitarFilaVentaAnimada(fila, invId) {
+  const tbody = fila.parentElement;
+  fila.style.pointerEvents = 'none';
+  fila.classList.add('vh-fila-sale');
+  setTimeout(() => {
+    if (!tbody) return;
+    const resto = [...tbody.querySelectorAll('tr')].filter(tr => tr !== fila);
+    const antes = new Map(resto.map(tr => [tr, tr.getBoundingClientRect().top]));
+    fila.remove();
+    if (!resto.length) { refrescarVentasTabla(invId); return; }
+    resto.forEach(tr => {
+      const dy = antes.get(tr) - tr.getBoundingClientRect().top;
+      if (!dy) return;
+      tr.style.transition = 'none';
+      tr.style.transform = `translateY(${dy}px)`;
+    });
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      resto.forEach(tr => {
+        if (!tr.style.transform) return;
+        tr.style.transition = 'transform .4s cubic-bezier(.22,.8,.3,1)';
+        tr.style.transform = '';
+        tr.addEventListener('transitionend', () => { tr.style.transition = ''; }, { once: true });
+      });
+    }));
+  }, 320);
+}
+
 function refrescarVentasTabla(invId) {
   const inv = STATE.db.inversiones.find(i=>i.id===invId);
   if (!inv) return;
@@ -5608,8 +5690,15 @@ async function eliminarVentaInv(ventaId, invId) {
   if (idx !== -1) STATE.db.ingresos.splice(idx, 1);
 
   deleteVentaInv(ventaId);
-  renderDetalleInv(invId);
-  renderAll();
+  // En el detalle: la fila sale con animación y los números bajan suavemente,
+  // sin redibujar la página.
+  const fila = document.getElementById('venta-fila-'+ventaId);
+  if (STATE.currentPage === 'detalle-inv' && STATE.navParam === invId && fila && actualizarDetalleInvEnSitio(invId)) {
+    if (window._vhSelId === ventaId) window._vhSelId = null;
+    quitarFilaVentaAnimada(fila, invId);
+  } else {
+    renderAll();
+  }
   await saveDb(['ventasInv', 'ingresos']);
   toast('Venta e ingreso asociado eliminados', 'info');
 }
@@ -5631,12 +5720,11 @@ async function despacharVentaInv(ventaId, invId) {
   // Solo cambia la celda de estado (con una pequeña animación) y la tarjeta de
   // stock; el resto de la tabla NO se vuelve a dibujar.
   const celda = document.getElementById('venta-estado-'+ventaId);
-  const stockCard = document.getElementById('inv-stock-card');
   const inv = STATE.db.inversiones.find(i=>i.id===invId);
   if (celda && inv) {
     celda.innerHTML = renderEstadoVentaHTML(venta, invId);
     celda.querySelector('.vh-estado-despachado')?.classList.add('vh-despacho-pop');
-    if (stockCard) stockCard.innerHTML = renderStockBodegaHTML(enriquecerInversion(inv));
+    actualizarDetalleInvEnSitio(invId);
     // Si la tabla está filtrada por "Pendiente", la fila sale con un desvanecido
     if ((window._vhEstadoFiltro||'todos') === 'pendiente') {
       const fila = document.getElementById('venta-fila-'+ventaId);
