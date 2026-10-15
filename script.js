@@ -3872,6 +3872,14 @@ function enriquecerInversion(inv) {
   // preventa válida — el cliente paga, pero la entrega queda pendiente hasta
   // que la mercancía llegue a bodega.
   const disponibleVenta = Math.max(0, cantidad - unidadesVendidas);
+  // Ventas (normalmente preventas) que aún no se han despachado al cliente.
+  // De ellas, las que ya tienen mercancía física en bodega se pueden despachar
+  // YA ("por despachar ahora"); el resto sigue esperando que llegue el pedido.
+  const unidadesPendientesDespacho = ventas.filter(v=>v.despachado===false).reduce((s,v)=>s+(v.cantidad||0), 0);
+  const unidadesDespachadas = Math.max(0, unidadesVendidas - unidadesPendientesDespacho);
+  const fisicoEnBodega = Math.max(0, unidadesLlegadas - unidadesDespachadas);
+  const porDespacharAhora = Math.min(unidadesPendientesDespacho, fisicoEnBodega);
+  const esperandoLlegada = Math.max(0, unidadesPendientesDespacho - porDespacharAhora);
   const costoVendido   = costoUnitarioActual * unidadesVendidas;
   const ganancia       = totalRecuperado - costoVendido;
   const recuperacionPct = inversionTotal > 0 ? (totalRecuperado/inversionTotal)*100 : 0;
@@ -3882,6 +3890,7 @@ function enriquecerInversion(inv) {
     totalRecuperado, stockActual, ganancia, recuperacionPct, estadoStock, ventas,
     unidadesPedidas: cantidad, unidadesLlegadas, unidadesPendientesLlegar,
     unidadesPreventa, disponibleVenta,
+    unidadesPendientesDespacho, porDespacharAhora, esperandoLlegada,
     gastosAdicionales: inv.gastosAdicionales || [],
     renovaciones: inv.renovaciones || [],
     llegadasBodega: inv.llegadasBodega || [] };
@@ -3904,7 +3913,7 @@ function getResumenInversiones() {
 // ─── Badge helpers ────────────────────────────────────────────
 function invBadgeEstado(e) {
   const m = { activa:['badge-green','Activa'], cerrada:['badge-blue','Cerrada'],
-               pausada:['badge-yellow','Pausada'] };
+               pausada:['badge-yellow','Pausada'], inactiva:['badge-red','Inactiva'] };
   const [cls,lbl] = m[e]||['badge-yellow',e];
   return `<span class="badge ${cls}">${lbl}</span>`;
 }
@@ -3917,6 +3926,7 @@ function invBadgeStock(e) {
 // Estado visual combinado de la fila: el stock manda si está agotado o bajo,
 // si no, se muestra el estado propio del producto (activa/cerrada/pausada).
 function invEstadoVisual(p) {
+  if (p.estado === 'inactiva')     return { color: '#94a3b8',      label: 'Inactiva'   };
   if (p.estadoStock === 'agotado') return { color: 'var(--red)',   label: 'Agotado'    };
   if (p.estadoStock === 'bajo')    return { color: '#b45309',      label: 'Stock bajo' };
   const m = { activa: ['var(--green)', 'Activa'], cerrada: ['var(--muted)', 'Cerrada'], pausada: ['#b45309', 'Pausada'] };
@@ -3939,62 +3949,65 @@ function invTipoColor(tipo) {
   return INV_TIPO_PALETTE[hash % INV_TIPO_PALETTE.length];
 }
 
-// ─── Selección de filas (checkboxes) para acciones en lote ─────
-window._invSeleccion = window._invSeleccion || new Set();
-function toggleInvSeleccion(id, checked) {
-  if (checked) window._invSeleccion.add(id); else window._invSeleccion.delete(id);
-  actualizarInvBulkBar();
-  const all = document.getElementById('inv-check-all');
-  if (all) all.checked = document.querySelectorAll('.inv-row-check').length > 0 &&
-    document.querySelectorAll('.inv-row-check:checked').length === document.querySelectorAll('.inv-row-check').length;
-}
-function toggleTodasInvSeleccion(checkboxEl) {
-  document.querySelectorAll('.inv-row-check').forEach(cb => {
-    cb.checked = checkboxEl.checked;
-    if (checkboxEl.checked) window._invSeleccion.add(cb.dataset.id);
-    else window._invSeleccion.delete(cb.dataset.id);
-  });
-  actualizarInvBulkBar();
-}
-function actualizarInvBulkBar() {
-  const bar = document.getElementById('inv-bulk-bar');
-  const cnt = document.getElementById('inv-bulk-count');
-  if (!bar) return;
-  const n = window._invSeleccion.size;
-  if (n > 0) {
-    bar.style.display = 'flex';
-    if (cnt) cnt.textContent = `${n} inversión${n===1?'':'es'} seleccionada${n===1?'':'s'}`;
-  } else {
-    bar.style.display = 'none';
-  }
-}
-// Quita del estado la inversión y todo lo que depende de ella (ventas + los
-// ingresos que esas ventas generaron), sin guardar ni renderizar todavía —
-// así se puede reusar tanto para borrar una sola como para borrar en lote.
-function _eliminarInversionInterna(invId) {
-  const ventaIds = (STATE.db.ventasInv||[]).filter(v=>v.invId===invId).map(v=>v.id);
-  STATE.db.ventasInv = (STATE.db.ventasInv||[]).filter(v=>v.invId!==invId);
-  if (ventaIds.length) STATE.db.ingresos = STATE.db.ingresos.filter(i => !ventaIds.includes(i.origenVentaId));
-  STATE.db.inversiones = STATE.db.inversiones.filter(i => i.id !== invId);
-}
-function eliminarInversionesSeleccionadas() {
-  const ids = [...window._invSeleccion];
-  if (!ids.length) return;
-  pedirPinParaAccion(`Eliminar ${ids.length} inversión${ids.length===1?'':'es'}`, async () => {
-    ids.forEach(_eliminarInversionInterna);
-    window._invSeleccion.clear();
+// ─── Inactivar / reactivar inversión ──────────────────────────
+// Las inversiones ya NO se eliminan (se perdería el historial de ventas e
+// ingresos asociado): solo se pueden inactivar desde el menú ⋮ de la fila.
+// Al reactivar vuelve al estado que tenía antes de inactivarse.
+async function toggleInactivarInversion(invId) {
+  const inv = STATE.db.inversiones.find(i => i.id === invId);
+  if (!inv) return;
+  if (inv.estado === 'inactiva') {
+    inv.estado = inv.estadoPrevioInactivar || 'activa';
+    delete inv.estadoPrevioInactivar;
     renderAll();
-    await saveDb(['inversiones','ventasInv','ingresos']);
-    toast(`${ids.length} inversión${ids.length===1?'':'es'} eliminada${ids.length===1?'':'s'}`, 'info');
-  });
+    await saveDb(['inversiones']);
+    toast(`"${inv.nombre}" reactivada`, 'success');
+    return;
+  }
+  const ok = await appConfirm(
+    'Inactivar inversión',
+    `¿Inactivar "${inv.nombre}"? Se conserva todo su historial y la puedes reactivar cuando quieras.`,
+    { tipo: 'info', textoConfirmar: 'Inactivar', textoCancelar: 'Cancelar' }
+  );
+  if (!ok) return;
+  inv.estadoPrevioInactivar = inv.estado || 'activa';
+  inv.estado = 'inactiva';
+  renderAll();
+  await saveDb(['inversiones']);
+  toast(`"${inv.nombre}" inactivada`, 'info');
 }
+
+// Ajusta la altura de un elemento para que llegue justo hasta el borde
+// inferior de la pantalla (su contenido se desplaza por dentro). Considera el
+// "zoom" CSS de los contenedores: convierte px visuales a px de layout.
+function ajustarAlturaAPantalla(el, margenInferior = 20, minimo = 260) {
+  if (!el) return;
+  if (window.innerWidth <= 768) { el.style.height = ''; return; }
+  const rect = el.getBoundingClientRect();
+  if (!rect.height) return;
+  const factor = el.offsetHeight / rect.height || 1;
+  const topDoc = rect.top + window.scrollY;
+  const disponible = (window.innerHeight - topDoc - margenInferior) * factor;
+  el.style.height = Math.max(minimo, Math.floor(disponible)) + 'px';
+}
+function ajustarAlturasInversiones() {
+  if (STATE.currentPage === 'inversiones') ajustarAlturaAPantalla(document.getElementById('inv-tabla-card'), 20, 280);
+  if (STATE.currentPage === 'detalle-inv') ajustarAlturaAPantalla(document.querySelector('#inv-tab-panel .inv-tab-scroll'), 22, 260);
+}
+// Se recalcula también cuando termina la animación de entrada de la página
+// (mientras dura, la página está desplazada unos px hacia abajo).
+function programarAjusteAlturasInv() {
+  requestAnimationFrame(ajustarAlturasInversiones);
+  setTimeout(ajustarAlturasInversiones, 420);
+}
+window.addEventListener('resize', ajustarAlturasInversiones);
 
 // ─── Paginación de la tabla ─────────────────────────────────────
 window._invPage = window._invPage || 1;
-window._invPageSize = window._invPageSize || 10;
+window._invPageSize = window._invPageSize || 50;
 function cambiarPaginaInv(delta) { window._invPage = (window._invPage||1) + delta; renderInversiones(); }
 function irAPaginaInv(n) { window._invPage = n; renderInversiones(); }
-function cambiarTamPaginaInv(val) { window._invPageSize = Number(val)||10; window._invPage = 1; renderInversiones(); }
+function cambiarTamPaginaInv(val) { window._invPageSize = Number(val)||50; window._invPage = 1; renderInversiones(); }
 function invFiltroCambio() { window._invPage = 1; renderInversiones(); }
 
 // ─── Menú de más acciones (⋮) por fila ─────────────────────────
@@ -4060,12 +4073,14 @@ function renderInversiones() {
   if(fEst)   lista = lista.filter(p=>p.estado===fEst);
   if(fTipo)  lista = lista.filter(p=>p.tipo===fTipo);
 
-  // Siempre se muestran todos los estados (incluido "Agotado" — es un estado
-  // más, no algo que haya que ocultar). Las que tienen stock van primero.
+  // Orden: primero las que tienen más stock en bodega; a igual stock, las que
+  // tienen más unidades en camino. Las inactivas siempre van al final.
   lista.sort((a, b) => {
-    const aAgotado = a.estadoStock === 'agotado' ? 1 : 0;
-    const bAgotado = b.estadoStock === 'agotado' ? 1 : 0;
-    return aAgotado - bAgotado;
+    const aIn = a.estado === 'inactiva' ? 1 : 0;
+    const bIn = b.estado === 'inactiva' ? 1 : 0;
+    if (aIn !== bIn) return aIn - bIn;
+    if (b.stockActual !== a.stockActual) return b.stockActual - a.stockActual;
+    return b.unidadesPendientesLlegar - a.unidadesPendientesLlegar;
   });
 
   if(!lista.length) {
@@ -4093,19 +4108,17 @@ function renderInversiones() {
 
   if (tbody) {
     tbody.innerHTML = pageItems.map(p => {
-      const idx = STATE.db.inversiones.indexOf(STATE.db.inversiones.find(i=>i.id===p.id));
       const estado = invEstadoVisual(p);
+      const inactiva = p.estado === 'inactiva';
       const tipoColor = invTipoColor(p.tipo);
       const letra = (p.nombre||'?')[0].toUpperCase();
       const avatar = p.imagen
-        ? `<img src="${p.imagen}" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:8px;flex-shrink:0;" onerror="this.style.display='none'">`
+        ? `<div class="inv-thumb"><img src="${p.imagen}" alt="" loading="lazy" onerror="this.parentElement.style.display='none'"></div>`
         : `<div style="width:36px;height:36px;border-radius:8px;background:var(--bg2);border:1px solid var(--border);color:var(--muted);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;flex-shrink:0;">${letra}</div>`;
-      const sel = window._invSeleccion.has(p.id);
       const ganColor = p.ganancia>=0?'var(--green)':'var(--red)';
 
       return `
-      <tr>
-        <td><input type="checkbox" class="inv-row-check" data-id="${p.id}" ${sel?'checked':''} onchange="toggleInvSeleccion('${p.id}', this.checked)" style="width:15px;height:15px;cursor:default;"></td>
+      <tr${inactiva?' class="inv-fila-inactiva"':''}>
         <td>
           <div style="display:flex;align-items:center;gap:10px;min-width:0;">
             ${avatar}
@@ -4125,6 +4138,9 @@ function renderInversiones() {
         <td style="color:var(--green);font-weight:600;font-size:.85rem;white-space:nowrap;">${fmtCOP(p.totalRecuperado)}</td>
         <td style="color:${ganColor};font-weight:600;font-size:.85rem;white-space:nowrap;">${p.ganancia>=0?'+':''}${fmtCOP(p.ganancia)}</td>
         <td><span style="display:inline-block;min-width:26px;text-align:center;padding:2px 9px;border-radius:6px;background:#fef3c7;color:#92400e;font-size:.78rem;font-weight:600;">${fmtNum(p.stockActual)}</span></td>
+        <td>${p.unidadesPendientesLlegar>0
+          ? `<span title="Unidades que faltan por llegar a bodega" style="display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:6px;background:#f5f3ff;color:#6d28d9;font-size:.78rem;font-weight:600;white-space:nowrap;"><svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>${fmtNum(p.unidadesPendientesLlegar)}</span>`
+          : `<span style="color:var(--muted);font-size:.8rem;">—</span>`}</td>
         <td><span style="display:inline-block;min-width:26px;text-align:center;padding:2px 9px;border-radius:6px;background:#eff6ff;color:#2563eb;font-size:.78rem;font-weight:600;">${fmtNum(p.unidadesVendidas)}</span></td>
         <td><span style="display:inline-block;padding:2px 10px;border-radius:6px;background:${tipoColor.bg};color:${tipoColor.color};font-size:.76rem;font-weight:600;white-space:nowrap;">${p.tipo||'—'}</span></td>
         <td>
@@ -4143,7 +4159,7 @@ function renderInversiones() {
               <button onclick="openModalRenovarStock('${p.id}');toggleInvMenu('${p.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;border:none;background:none;cursor:default;font-size:.8rem;color:var(--text);" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='none'">Renovar stock</button>
               ${p.unidadesPendientesLlegar>0?`<button onclick="openModalLlegadaBodega('${p.id}');toggleInvMenu('${p.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;border:none;background:none;cursor:default;font-size:.8rem;color:#b45309;" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='none'">Llegó a bodega (${p.unidadesPendientesLlegar} pend.)</button>
               <button onclick="marcarTodoRecibido('${p.id}');toggleInvMenu('${p.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;border:none;background:none;cursor:default;font-size:.8rem;color:var(--muted);" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='none'">¿Ya llegó todo? Corregir</button>`:''}
-              <button onclick="deleteInversion(${idx});toggleInvMenu('${p.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;border:none;background:none;cursor:default;font-size:.8rem;color:var(--red);border-top:1px solid var(--border-light);" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='none'">Eliminar</button>
+              <button onclick="toggleInvMenu('${p.id}');toggleInactivarInversion('${p.id}')" style="display:block;width:100%;text-align:left;padding:9px 14px;border:none;background:none;cursor:default;font-size:.8rem;color:${inactiva?'var(--green)':'var(--red)'};border-top:1px solid var(--border-light);" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='none'">${inactiva?'Reactivar':'Inactivar'}</button>
             </div>
           </div>
         </td>
@@ -4174,7 +4190,7 @@ function renderInversiones() {
   if (prevBtn) prevBtn.disabled = window._invPage <= 1;
   if (nextBtn) nextBtn.disabled = window._invPage >= totalPages;
 
-  actualizarInvBulkBar();
+  programarAjusteAlturasInv();
 }
 
 // ── Dashboard de movimientos globales de inversiones ──
@@ -4503,6 +4519,7 @@ function openModalNuevaInversion(id=null) {
                 <option value="activa" ${(inv?.estado||'activa')==='activa'?'selected':''}>Activa</option>
                 <option value="pausada" ${inv?.estado==='pausada'?'selected':''}>Pausada</option>
                 <option value="cerrada" ${inv?.estado==='cerrada'?'selected':''}>Cerrada</option>
+                <option value="inactiva" ${inv?.estado==='inactiva'?'selected':''}>Inactiva</option>
               </select>
             </div>
             <div class="form-group"><label> Dinero sale de *</label>
@@ -4921,22 +4938,22 @@ async function guardarVentaInv(invId, disponibleVenta, stockFisico, pendientesLl
     origenVentaId: ventaId   // ← AGREGA ESTA LÍNEA
   });
 
-  window._vhPage = 1;
-  window._vhEstadoFiltro = 'todos';
-  window._vhQuery = '';
-  window._vhBuscarEditando = false;
-  window._vhEstadoEditando = false;
-  renderAll();
   closeInvModal();
-  // Animación suave de confirmación sobre la fila de la venta recién creada
-  setTimeout(() => {
-    const fila = document.getElementById('venta-fila-'+ventaId);
-    if (fila) {
-      fila.style.transition = 'background-color .4s ease';
-      fila.style.backgroundColor = 'var(--green-light)';
-      setTimeout(() => { fila.style.backgroundColor = ''; }, 900);
-    }
-  }, 60);
+  // Si estamos viendo el detalle de este producto con el historial abierto, la
+  // venta se inserta en la tabla con animación (sin redibujar la tabla entera);
+  // el resto del detalle (KPIs, stock) se actualiza sin animaciones.
+  const enDetalle = STATE.currentPage === 'detalle-inv' && STATE.navParam === invId
+    && (window._invActiveTab || 'ventas') === 'ventas' && document.getElementById('vh-tbody');
+  if (enDetalle) {
+    renderDetalleInvSilencioso(invId);
+    if (!insertarFilaVentaAnimada(ventaId, invId)) renderDetalleInv(invId);
+  } else {
+    window._vhEstadoFiltro = 'todos';
+    window._vhQuery = '';
+    window._vhBuscarEditando = false;
+    window._vhEstadoEditando = false;
+    renderAll();
+  }
   await saveDb(['ventasInv','ingresos']);
   const destino = billNombre ? ` → ${billNombre}` : '';
   const etiquetaPreventa = esPreventa ? ' (preventa — pendiente de entrega)' : '';
@@ -4984,14 +5001,22 @@ function renderDetalleInv(invId) {
   // OJO: esto NO es igual a "unidadesPendientesLlegar" (que es solo logística de
   // envío y no baja cuando se registra una venta) — por eso antes el número no
   // se movía al vender contra el pedido en camino.
-  const capacidadPreventa = Math.max(0, p.disponibleVenta - p.stockActual);
   const avatarImg = p.imagen
     ? `<img src="${p.imagen}" alt="${p.nombre}" style="max-width:100%;max-height:260px;width:auto;height:auto;display:block;margin:0 auto;object-fit:contain;border-radius:8px;"
          onerror="this.style.display='none'">`
     : `<div style="width:100%;aspect-ratio:1;max-height:260px;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;color:var(--accent);background:var(--accent-light);border-radius:8px;">${(p.nombre||'?')[0].toUpperCase()}</div>`;
 
+  // Modo "silencioso": se redibuja la página sin animaciones de entrada y
+  // conservando el MISMO nodo de la tabla de ventas (scroll, fila seleccionada),
+  // para que al registrar/despachar una venta no se vea un refresco completo.
+  const silencioso = !!window._invDetSilencioso && window._invDetLastRenderId === invId;
+  window._invDetLastRenderId = invId;
+  const tablaPrevia = silencioso && tab === 'ventas' ? document.getElementById('vh-tabla-container') : null;
+  const scrollPrevio = tablaPrevia?.querySelector('.inv-tab-scroll')?.scrollTop || 0;
+  if (tablaPrevia) tablaPrevia.remove();
+
   document.getElementById('page-detalle-inv').innerHTML = `
-    <div style="zoom:0.92;">
+    <div style="zoom:0.92;" class="${silencioso?'inv-det-silencioso':''}">
     <!-- Header -->
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
       <button onclick="navigate('inversiones')" style="height:34px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:default;font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:5px;">
@@ -5021,27 +5046,7 @@ function renderDetalleInv(invId) {
           <div style="display:flex;flex-wrap:wrap;gap:4px;">${invBadgeEstado(p.estado)}${invBadgeStock(p.estadoStock)}</div>
         </div>
         <!-- Stock físico en bodega -->
-        <div class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;display:flex;flex-direction:column;">
-          <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px;">Stock físico en bodega</div>
-          <div style="display:flex;align-items:baseline;gap:6px;">
-            <span style="font-size:1.3rem;font-weight:800;color:var(--text);">${fmtNum(p.stockActual)}</span>
-            <span style="font-size:.74rem;color:var(--muted);">uds disponibles</span>
-          </div>
-          <div style="font-size:.7rem;color:var(--muted);margin-top:2px;margin-bottom:8px;">Llegadas: ${fmtNum(p.unidadesLlegadas)} / ${fmtNum(p.unidadesPedidas)} pedidas${p.unidadesVendidas>0?` · Vendidas: ${fmtNum(p.unidadesVendidas)}`:''}</div>
-          ${p.unidadesPendientesLlegar>0?`
-          <div style="font-size:.67rem;color:var(--muted);margin-bottom:5px;">En camino (envío): <strong style="color:var(--text)">${fmtNum(p.unidadesPendientesLlegar)}</strong> uds</div>
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;border-radius:7px;background:${capacidadPreventa>0?'#fff7ed':'var(--bg2)'};border:1px solid ${capacidadPreventa>0?'#fde4c0':'var(--border)'};margin-bottom:7px;">
-            <span style="font-size:.7rem;color:${capacidadPreventa>0?'#b45309':'var(--muted)'};font-weight:700;">Disponible para preventa</span>
-            <span style="font-size:.8rem;color:${capacidadPreventa>0?'#b45309':'var(--muted)'};font-weight:800;">${fmtNum(capacidadPreventa)} uds</span>
-          </div>
-          <div class="progress-bar" style="height:5px;border-radius:10px;margin-bottom:8px;">
-            <div class="progress-fill" style="width:${p.unidadesPedidas>0?Math.round(p.unidadesLlegadas/p.unidadesPedidas*100):0}%;background:#b45309;border-radius:10px;"></div>
-          </div>
-          <div style="display:flex;gap:6px;">
-            <button onclick="marcarTodoRecibido('${p.id}')" style="flex:1;height:26px;border:1px solid var(--border);border-radius:6px;background:none;cursor:default;font-size:.67rem;color:var(--muted);font-weight:600;">Ya llegó todo</button>
-            <button onclick="openModalLlegadaBodega('${p.id}')" style="flex:1;height:26px;border:none;border-radius:6px;background:#b45309;color:#fff;cursor:default;font-size:.69rem;font-weight:700;">Llegó a bodega</button>
-          </div>`:`<div style="font-size:.71rem;color:var(--muted);">Sin pedidos pendientes por llegar</div>`}
-        </div>
+        <div id="inv-stock-card" class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;display:flex;flex-direction:column;">${renderStockBodegaHTML(p)}</div>
         <!-- Info -->
         <div class="inv-card-anim" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;">
           <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px;">Información del producto</div>
@@ -5117,7 +5122,59 @@ function renderDetalleInv(invId) {
     </div>
     </div>
   `;
+  if (tablaPrevia) {
+    const nuevo = document.getElementById('vh-tabla-container');
+    if (nuevo) {
+      nuevo.replaceWith(tablaPrevia);
+      const sc = tablaPrevia.querySelector('.inv-tab-scroll');
+      if (sc) sc.scrollTop = scrollPrevio;
+    }
+  }
   posicionarIndicadorPestana(p.id, tab, true);
+  programarAjusteAlturasInv();
+}
+
+// Redibuja el detalle sin animaciones y sin tocar la tabla de ventas.
+function renderDetalleInvSilencioso(invId) {
+  window._invDetSilencioso = true;
+  try { renderAll(); } finally { window._invDetSilencioso = false; }
+}
+
+// Contenido de la tarjeta "Stock físico en bodega". Separado para poder
+// actualizarla sola (p. ej. al despachar una venta) sin redibujar la página.
+function renderStockBodegaHTML(p) {
+  // Capacidad real que aún se puede vender como preventa: lo pedido menos lo ya
+  // vendido, menos lo que ya está físicamente en bodega (eso ya no es "preventa").
+  const capacidadPreventa = Math.max(0, p.disponibleVenta - p.stockActual);
+  return `
+          <div style="font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px;">Stock físico en bodega</div>
+          <div style="display:flex;align-items:baseline;gap:6px;">
+            <span style="font-size:1.3rem;font-weight:800;color:var(--text);">${fmtNum(p.stockActual)}</span>
+            <span style="font-size:.74rem;color:var(--muted);">uds disponibles</span>
+          </div>
+          <div style="font-size:.7rem;color:var(--muted);margin-top:2px;margin-bottom:8px;">Llegadas: ${fmtNum(p.unidadesLlegadas)} / ${fmtNum(p.unidadesPedidas)} pedidas${p.unidadesVendidas>0?` · Vendidas: ${fmtNum(p.unidadesVendidas)}`:''}</div>
+          ${p.unidadesPendientesDespacho>0?`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:7px;background:${p.porDespacharAhora>0?'var(--green-light)':'var(--bg2)'};border:1px solid ${p.porDespacharAhora>0?'rgba(22,163,74,.25)':'var(--border)'};margin-bottom:${p.esperandoLlegada>0?'4px':'8px'};">
+            <span style="font-size:.7rem;color:${p.porDespacharAhora>0?'var(--green)':'var(--muted)'};font-weight:700;display:flex;align-items:center;gap:5px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/></svg>
+              Por despachar ahora
+            </span>
+            <span style="font-size:.82rem;color:${p.porDespacharAhora>0?'var(--green)':'var(--muted)'};font-weight:800;">${fmtNum(p.porDespacharAhora)} uds</span>
+          </div>
+          ${p.esperandoLlegada>0?`<div style="font-size:.67rem;color:var(--muted);margin-bottom:8px;padding-left:2px;">Preventas esperando llegada: <strong style="color:var(--text)">${fmtNum(p.esperandoLlegada)}</strong> uds</div>`:''}`:''}
+          ${p.unidadesPendientesLlegar>0?`
+          <div style="font-size:.67rem;color:var(--muted);margin-bottom:5px;">En camino (envío): <strong style="color:var(--text)">${fmtNum(p.unidadesPendientesLlegar)}</strong> uds</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;border-radius:7px;background:${capacidadPreventa>0?'#fff7ed':'var(--bg2)'};border:1px solid ${capacidadPreventa>0?'#fde4c0':'var(--border)'};margin-bottom:7px;">
+            <span style="font-size:.7rem;color:${capacidadPreventa>0?'#b45309':'var(--muted)'};font-weight:700;">Disponible para preventa</span>
+            <span style="font-size:.8rem;color:${capacidadPreventa>0?'#b45309':'var(--muted)'};font-weight:800;">${fmtNum(capacidadPreventa)} uds</span>
+          </div>
+          <div class="progress-bar" style="height:5px;border-radius:10px;margin-bottom:8px;">
+            <div class="progress-fill" style="width:${p.unidadesPedidas>0?Math.round(p.unidadesLlegadas/p.unidadesPedidas*100):0}%;background:#b45309;border-radius:10px;"></div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button onclick="marcarTodoRecibido('${p.id}')" style="flex:1;height:26px;border:1px solid var(--border);border-radius:6px;background:none;cursor:default;font-size:.67rem;color:var(--muted);font-weight:600;">Ya llegó todo</button>
+            <button onclick="openModalLlegadaBodega('${p.id}')" style="flex:1;height:26px;border:none;border-radius:6px;background:#b45309;color:#fff;cursor:default;font-size:.69rem;font-weight:700;">Llegó a bodega</button>
+          </div>`:`<div style="font-size:.71rem;color:var(--muted);">Sin pedidos pendientes por llegar</div>`}`;
 }
 
 // Texto informativo que se muestra en la barra de pestañas (a la derecha), según la
@@ -5138,7 +5195,7 @@ function renderInvTabContenidoHTML(p, invId, tab) {
   }
   if (tab === 'gastos') {
     return `
-      <div class="table-wrap" style="margin-top:10px;">
+      <div class="table-wrap inv-tab-scroll" style="margin-top:10px;">
         <table class="data-table inv-table-compact">
           <thead><tr><th>Fecha</th><th>Motivo</th><th>Concepto</th><th>Monto</th><th>Billetera</th><th>Notas</th><th></th></tr></thead>
           <tbody>
@@ -5170,7 +5227,7 @@ function renderInvTabContenidoHTML(p, invId, tab) {
   }
   if (tab === 'llegadas') {
     return `
-      <div class="table-wrap" style="margin-top:10px;">
+      <div class="table-wrap inv-tab-scroll" style="margin-top:10px;">
         <table class="data-table inv-table-compact">
           <thead><tr><th>Fecha</th><th>Hora</th><th>Unidades</th><th>Notas</th></tr></thead>
           <tbody>
@@ -5189,7 +5246,7 @@ function renderInvTabContenidoHTML(p, invId, tab) {
   }
   if (tab === 'renovaciones') {
     return `
-      <div class="table-wrap" style="margin-top:10px;">
+      <div class="table-wrap inv-tab-scroll" style="margin-top:10px;">
         <table class="data-table inv-table-compact">
           <thead><tr><th>Fecha</th><th>Unidades</th><th>USD c/u</th><th>Tasa</th><th>Envío</th><th>Inversión</th><th>Notas</th><th></th></tr></thead>
           <tbody>
@@ -5258,79 +5315,96 @@ function renderThEstadoHTML(invId) {
       </div>`;
 }
 
-function renderVentasTablaHTML(p, invId) {
-  const qRaw = (window._vhQuery || '').trim();
-  const q = qRaw.toLowerCase();
+// ─── Formato de fecha de venta: "14 de octubre 2026" + hora en que se registró ──
+const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+function fmtFechaLarga(ymd) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd || '');
+  if (!m) return ymd || '—';
+  return `${Number(m[3])} de ${MESES_ES[Number(m[2])-1]} ${m[1]}`;
+}
+function fmtHoraRegistro(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return d.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+// Orden del historial: la venta más reciente arriba (por fecha de venta y,
+// dentro del mismo día, por el momento en que se registró).
+function ordenarVentasRecientes(a, b) {
+  const f = (b.fecha||'').localeCompare(a.fecha||'');
+  if (f) return f;
+  return (b.creadoEn||'').localeCompare(a.creadoEn||'');
+}
+function ventaPasaFiltros(v) {
+  const q = (window._vhQuery || '').trim().toLowerCase();
   const filtroEstado = window._vhEstadoFiltro || 'todos';
-  const todas = [...p.ventas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
-  const filtradas = todas.filter(v => {
-    const idVenta = (v.cliente||'').toLowerCase();
-    const pendiente = v.despachado === false;
-    const pasaEstado = filtroEstado==='todos' || (filtroEstado==='pendiente' ? pendiente : !pendiente);
-    return (!q || idVenta.includes(q)) && pasaEstado;
-  });
-  const pageSize = 10;
-  const totalPages = Math.max(1, Math.ceil(filtradas.length / pageSize));
-  let page = window._vhPage || 1;
-  if (page > totalPages) page = totalPages;
-  if (page < 1) page = 1;
-  window._vhPage = page;
-  const inicio = (page-1)*pageSize;
-  const pagina = filtradas.slice(inicio, inicio+pageSize);
+  const pendiente = v.despachado === false;
+  const pasaEstado = filtroEstado==='todos' || (filtroEstado==='pendiente' ? pendiente : !pendiente);
+  return (!q || (v.cliente||'').toLowerCase().includes(q)) && pasaEstado;
+}
 
-  const filasHtml = !filtradas.length
-    ? `<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:28px;font-style:italic">${todas.length ? 'No hay ventas que coincidan con el filtro' : 'Sin ventas registradas'}</td></tr>`
-    : pagina.map(v=>{
-        const totalVenta   = (v.cantidad||0)*(v.precioUnitario||0);
-        const gananciaVenta = ((v.precioUnitario||0) - p.costoUnitarioActual) * (v.cantidad||0);
-        const pendiente = v.despachado === false;
-        return `
-      <tr id="venta-fila-${v.id}">
-        <td>${v.fecha||'—'}${v.preventa?'<br><span style="display:inline-block;margin-top:2px;padding:1px 6px;border-radius:4px;background:#fff7ed;color:#b45309;font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">Preventa</span>':''}</td>
+function renderEstadoVentaHTML(v, invId) {
+  return v.despachado === false
+    ? `<button onclick="event.stopPropagation();despacharVentaInv('${v.id}','${invId}')" style="border:1px solid #fde4c0;background:#fff7ed;color:#b45309;font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:12px;cursor:default;white-space:nowrap;">Pendiente</button>`
+    : `<span class="vh-estado-despachado" style="display:inline-block;border:1px solid var(--green-light);background:var(--green-light);color:var(--green);font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:12px;white-space:nowrap;">Despachado</span>`;
+}
+
+function renderVentaFilaHTML(v, p, invId, extraClase = '') {
+  const totalVenta    = (v.cantidad||0)*(v.precioUnitario||0);
+  const gananciaVenta = ((v.precioUnitario||0) - p.costoUnitarioActual) * (v.cantidad||0);
+  // Ventas antiguas sin "creadoEn": se usa la hora del ingreso que generaron
+  const hora = fmtHoraRegistro(v.creadoEn) || (STATE.db.ingresos||[]).find(i=>i.origenVentaId===v.id)?.hora || '';
+  const sel = window._vhSelId === v.id ? ' vh-fila-sel' : '';
+  return `
+      <tr id="venta-fila-${v.id}" class="${(extraClase+sel).trim()}" onclick="seleccionarFilaVenta('${v.id}', event)">
+        <td>
+          <div class="vh-fecha">${fmtFechaLarga(v.fecha)}</div>
+          <div class="vh-hora">${hora||''}${v.preventa?'<span style="display:inline-block;padding:0 5px;border-radius:4px;background:#fff7ed;color:#b45309;font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">Preventa</span>':''}</div>
+        </td>
         <td style="font-weight:600">${v.cantidad}</td>
         <td>${fmtCOP(v.precioUnitario)}</td>
         <td style="font-weight:700;color:var(--green)">${fmtCOP(totalVenta)}</td>
         <td style="font-weight:700;color:${gananciaVenta>=0?'var(--green)':'var(--red)'}">${gananciaVenta>=0?'+':''}${fmtCOP(gananciaVenta)}</td>
         <td style="color:var(--muted)">${v.cliente||'—'}</td>
         <td style="color:var(--muted)">${v.obs||'—'}</td>
-        <td id="venta-estado-${v.id}">
-          ${pendiente
-            ? `<button onclick="despacharVentaInv('${v.id}','${invId}')" style="border:1px solid #fde4c0;background:#fff7ed;color:#b45309;font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:12px;cursor:default;white-space:nowrap;transition:background .3s,color .3s;">Pendiente</button>`
-            : `<span style="display:inline-block;border:1px solid var(--green-light);background:var(--green-light);color:var(--green);font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:12px;white-space:nowrap;transition:background .3s,color .3s;">Despachado</span>`}
-        </td>
+        <td id="venta-estado-${v.id}">${renderEstadoVentaHTML(v, invId)}</td>
         <td><div style="display:flex;gap:4px;">
-          <button class="btn btn-ghost btn-sm inv-row-action-btn" onclick="editarVentaInv('${v.id}','${invId}')" style="padding:4px 8px;">
+          <button class="btn btn-ghost btn-sm inv-row-action-btn" onclick="event.stopPropagation();editarVentaInv('${v.id}','${invId}')" style="padding:4px 8px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
-          <button class="btn btn-danger btn-sm inv-row-action-btn" onclick="eliminarVentaInv('${v.id}','${invId}')">
+          <button class="btn btn-danger btn-sm inv-row-action-btn" onclick="event.stopPropagation();eliminarVentaInv('${v.id}','${invId}')">
             <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
           </button>
         </div></td>
-      </tr>`;}).join('');
+      </tr>`;
+}
 
-  const paginacionHtml = filtradas.length > pageSize ? `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--border);flex-wrap:wrap;gap:10px;">
-      <span style="font-size:.76rem;color:var(--muted)">Mostrando ${pagina.length} de ${filtradas.length} ventas</span>
-      <div style="display:flex;align-items:center;gap:4px;">
-        <button class="inv-page-btn" onclick="cambiarPaginaVentas('${invId}',${page-1})" ${page<=1?'disabled':''} style="width:28px;height:28px;border:1px solid var(--border);border-radius:6px;background:var(--card);cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;${page<=1?'opacity:.4;':''}">
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
-        ${generarListaPaginas(page, totalPages).map(n => n==='...'
-          ? `<span style="padding:0 4px;color:var(--muted);font-size:.78rem;">…</span>`
-          : `<button class="inv-page-btn" onclick="cambiarPaginaVentas('${invId}',${n})" style="min-width:28px;height:28px;padding:0 6px;border:1px solid ${n===page?'var(--accent)':'var(--border)'};border-radius:6px;background:${n===page?'var(--accent)':'var(--card)'};color:${n===page?'#fff':'var(--text)'};font-size:.78rem;font-weight:${n===page?'700':'600'};cursor:default;">${n}</button>`
-        ).join('')}
-        <button class="inv-page-btn" onclick="cambiarPaginaVentas('${invId}',${page+1})" ${page>=totalPages?'disabled':''} style="width:28px;height:28px;border:1px solid var(--border);border-radius:6px;background:var(--card);cursor:default;color:var(--muted);display:flex;align-items:center;justify-content:center;${page>=totalPages?'opacity:.4;':''}">
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-      </div>
-    </div>` : '';
+// Clic en una fila: queda marcada (color fijo) para saber cuál estás viendo.
+// Un segundo clic sobre la misma la desmarca.
+function seleccionarFilaVenta(ventaId, ev) {
+  if (ev && ev.target.closest('button, a, input, select')) return;
+  const nuevaSel = window._vhSelId === ventaId ? null : ventaId;
+  document.querySelectorAll('.inv-ventas-table tr.vh-fila-sel').forEach(tr => tr.classList.remove('vh-fila-sel'));
+  window._vhSelId = nuevaSel;
+  if (nuevaSel) document.getElementById('venta-fila-'+nuevaSel)?.classList.add('vh-fila-sel');
+}
+
+// Sin paginación: se muestran todas las ventas y la tabla se desplaza por
+// dentro (su altura llega justo hasta el borde inferior de la pantalla).
+function renderVentasTablaHTML(p, invId) {
+  const todas = [...p.ventas].sort(ordenarVentasRecientes);
+  const filtradas = todas.filter(ventaPasaFiltros);
+
+  const filasHtml = !filtradas.length
+    ? `<tr id="vh-fila-vacia"><td colspan="9" style="text-align:center;color:var(--muted);padding:28px;font-style:italic">${todas.length ? 'No hay ventas que coincidan con el filtro' : 'Sin ventas registradas'}</td></tr>`
+    : filtradas.map(v => renderVentaFilaHTML(v, p, invId)).join('');
 
   return `
-    <div class="table-wrap">
+    <div class="table-wrap inv-tab-scroll">
       <table class="data-table inv-table-compact inv-ventas-table">
         <colgroup>
-          <col style="width:92px;"><col style="width:62px;"><col style="width:92px;"><col style="width:92px;"><col style="width:92px;">
-          <col style="width:135px;"><col style="width:135px;"><col style="width:105px;"><col style="width:58px;">
+          <col style="width:132px;"><col style="width:62px;"><col style="width:92px;"><col style="width:92px;"><col style="width:92px;">
+          <col style="width:135px;"><col style="width:125px;"><col style="width:105px;"><col style="width:76px;">
         </colgroup>
         <thead><tr>
           <th>Fecha</th><th>Cantidad</th><th>Precio unit.</th><th>Total</th><th>Ganancia</th>
@@ -5339,10 +5413,58 @@ function renderVentasTablaHTML(p, invId) {
           <th id="th-estado">${renderThEstadoHTML(invId)}</th>
           <th></th>
         </tr></thead>
-        <tbody>${filasHtml}</tbody>
+        <tbody id="vh-tbody">${filasHtml}</tbody>
       </table>
-    </div>
-    ${paginacionHtml}`;
+    </div>`;
+}
+
+// Inserta UNA venta nueva en la tabla ya pintada, sin redibujarla: la fila
+// entra deslizándose y las de abajo bajan suavemente (técnica FLIP).
+function insertarFilaVentaAnimada(ventaId, invId) {
+  const tbody = document.getElementById('vh-tbody');
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  const venta = (STATE.db.ventasInv||[]).find(v=>v.id===ventaId);
+  if (!tbody || !inv || !venta) return false;
+  if (!ventaPasaFiltros(venta)) return true; // no aplica al filtro actual: nada que mostrar
+  const p = enriquecerInversion(inv);
+  const visibles = [...p.ventas].sort(ordenarVentasRecientes).filter(ventaPasaFiltros);
+  const pos = visibles.findIndex(v => v.id === ventaId);
+  const siguiente = visibles[pos+1] ? document.getElementById('venta-fila-'+visibles[pos+1].id) : null;
+
+  document.getElementById('vh-fila-vacia')?.remove();
+  // FIRST: posición actual de las filas existentes
+  const filas = [...tbody.querySelectorAll('tr')];
+  const antes = new Map(filas.map(tr => [tr, tr.getBoundingClientRect().top]));
+
+  const tmp = document.createElement('tbody');
+  tmp.innerHTML = renderVentaFilaHTML(venta, p, invId, 'vh-fila-nueva').trim();
+  const fila = tmp.firstElementChild;
+  if (siguiente && siguiente.parentElement === tbody) tbody.insertBefore(fila, siguiente);
+  else tbody.appendChild(fila);
+  fila.addEventListener('animationend', e => { if (e.target === fila) fila.classList.remove('vh-fila-nueva'); }, { once: true });
+
+  // LAST + INVERT + PLAY: las filas desplazadas arrancan donde estaban y bajan
+  filas.forEach(tr => {
+    const dy = antes.get(tr) - tr.getBoundingClientRect().top;
+    if (!dy) return;
+    tr.style.transition = 'none';
+    tr.style.transform = `translateY(${dy}px)`;
+  });
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    filas.forEach(tr => {
+      if (!tr.style.transform) return;
+      tr.style.transition = 'transform .45s cubic-bezier(.22,.8,.3,1)';
+      tr.style.transform = '';
+      tr.addEventListener('transitionend', () => { tr.style.transition = ''; }, { once: true });
+    });
+  }));
+  // Si la fila queda fuera de la vista del scroll, llevarla a la vista suavemente
+  const sc = tbody.closest('.inv-tab-scroll');
+  if (sc) {
+    const r = fila.getBoundingClientRect(), rs = sc.getBoundingClientRect();
+    if (r.top < rs.top + 40 || r.bottom > rs.bottom) sc.scrollTo({ top: Math.max(0, fila.offsetTop - 40), behavior: 'smooth' });
+  }
+  return true;
 }
 
 function refrescarVentasTabla(invId) {
@@ -5358,6 +5480,7 @@ function refrescarVentasTabla(invId) {
     cont.classList.remove('inv-tabla-fade');
     void cont.offsetWidth;
     cont.classList.add('inv-tabla-fade');
+    programarAjusteAlturasInv();
     if (buscarActivo) {
       const inputNuevo = document.getElementById('vh-buscar');
       if (inputNuevo) {
@@ -5406,6 +5529,7 @@ function switchInvTab(invId, tab) {
   void panel.offsetWidth;
   panel.innerHTML = renderInvTabContenidoHTML(p, invId, tab);
   panel.classList.add('inv-tab-panel');
+  programarAjusteAlturasInv();
 }
 
 // Mueve suavemente la línea azul indicadora debajo de la pestaña activa.
@@ -5503,14 +5627,27 @@ async function despacharVentaInv(ventaId, invId) {
   if (!confirma) return;
 
   venta.despachado = true;
-  renderDetalleInv(invId);
 
-  // Pequeña animación de confirmación sobre la fila recién actualizada
-  const fila = document.getElementById('venta-fila-'+ventaId);
-  if (fila) {
-    fila.style.transition = 'background-color .3s ease';
-    fila.style.backgroundColor = 'var(--green-light)';
-    setTimeout(() => { fila.style.backgroundColor = ''; }, 800);
+  // Solo cambia la celda de estado (con una pequeña animación) y la tarjeta de
+  // stock; el resto de la tabla NO se vuelve a dibujar.
+  const celda = document.getElementById('venta-estado-'+ventaId);
+  const stockCard = document.getElementById('inv-stock-card');
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  if (celda && inv) {
+    celda.innerHTML = renderEstadoVentaHTML(venta, invId);
+    celda.querySelector('.vh-estado-despachado')?.classList.add('vh-despacho-pop');
+    if (stockCard) stockCard.innerHTML = renderStockBodegaHTML(enriquecerInversion(inv));
+    // Si la tabla está filtrada por "Pendiente", la fila sale con un desvanecido
+    if ((window._vhEstadoFiltro||'todos') === 'pendiente') {
+      const fila = document.getElementById('venta-fila-'+ventaId);
+      if (fila) setTimeout(() => {
+        fila.style.transition = 'opacity .35s ease';
+        fila.style.opacity = '0';
+        setTimeout(() => fila.remove(), 360);
+      }, 700);
+    }
+  } else {
+    renderDetalleInv(invId);
   }
 
   await saveDb(['ventasInv']);
@@ -5665,25 +5802,6 @@ async function confirmarEditarVentaInv(ventaId, invId, disponibleParaEditar, sto
   renderAll();
   await saveDb(['ventasInv','ingresos']);
   toast('Venta actualizada', 'success');
-}
-
-async function deleteInversion(idx) {
-  const inv = STATE.db.inversiones[idx];
-  if (!inv) return;
-  pedirPinParaAccion(`Eliminar "${inv.nombre}"`, async () => {
-    // Borrado en cascada: al eliminar el producto, también se eliminan sus ventas
-    // y los ingresos que esas ventas generaron (si no, quedan movimientos "huérfanos"
-    // en el historial apuntando a una inversión que ya no existe).
-    const ventaIds = (STATE.db.ventasInv||[]).filter(v=>v.invId===inv.id).map(v=>v.id);
-    STATE.db.ventasInv = (STATE.db.ventasInv||[]).filter(v=>v.invId!==inv.id);
-    if (ventaIds.length) {
-      STATE.db.ingresos = STATE.db.ingresos.filter(i => !ventaIds.includes(i.origenVentaId));
-    }
-    STATE.db.inversiones.splice(idx,1);
-    renderAll();
-    await saveDb(['inversiones','ventasInv','ingresos']);
-    toast('Inversión eliminada','info');
-  });
 }
 
 async function cambiarEstadoInv(idx, estado) {
