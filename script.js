@@ -3819,16 +3819,51 @@ function addVentaInv(v)       { if(!STATE.db.ventasInv) STATE.db.ventasInv=[]; i
 function deleteVentaInv(id)   { STATE.db.ventasInv=(STATE.db.ventasInv||[]).filter(v=>v.id!==id); }
 
 // ─── Calculations ─────────────────────────────────────────────
-function calcInversion(inv) {
-  // Capital del pedido INICIAL únicamente (usando unidadesIniciales, no inv.unidades)
-  const unidadesIniciales = Number(inv.unidadesIniciales || inv.unidades || 0);
-  const capitalBase = Number(inv.precioUSD || 0) * unidadesIniciales * Number(inv.tasa || 0);
-  const envioBase   = Number(inv.envioInicial !== undefined ? inv.envioInicial : inv.envio || 0);
-  const otrosBase   = Number(inv.otrosCostosInicial !== undefined ? inv.otrosCostosInicial : inv.otrosCostos || 0);
-  // Cada renovación ya guarda su propio costo total (inversionNueva)
+// Pedido INICIAL de un producto (sin renovaciones). Antes había dos errores
+// que inflaban lo invertido:
+//  1) Al editar el producto, "unidadesIniciales" se guardaba con el total
+//     pedido (inicial + renovaciones), así que las unidades de cada renovación
+//     se cobraban dos veces (en el pedido inicial y en la renovación).
+//  2) Cada renovación sobreescribe inv.precioUSD / inv.tasa con los del lote
+//     nuevo, y el pedido inicial se recalculaba con ese precio.
+// Las unidades iniciales se derivan siempre de: total pedido − renovaciones
+// (inv.unidades se mantiene así al crear/editar/borrar renovaciones), y el
+// precio/tasa iniciales se guardan aparte (precioUSDInicial / tasaInicial).
+function pedidoInicialInv(inv) {
+  const renov = inv.renovaciones || [];
+  const unidadesRenov = renov.reduce((s, r) => s + Number(r.nuevasUnidades || 0), 0);
+  const unidades = renov.length
+    ? Math.max(0, Number(inv.unidades || 0) - unidadesRenov)
+    : Number(inv.unidadesIniciales || inv.unidades || 0);
+  const envio = Number(inv.envioInicial !== undefined ? inv.envioInicial : inv.envio || 0);
+  const otros = Number(inv.otrosCostosInicial !== undefined ? inv.otrosCostosInicial : inv.otrosCostos || 0);
+  let capital;
+  if (inv.precioUSDInicial !== undefined) {
+    capital = Number(inv.precioUSDInicial || 0) * unidades * Number(inv.tasaInicial ?? inv.tasa ?? 0);
+  } else if (renov.length) {
+    // Datos antiguos con renovaciones: el precio inicial ya se perdió en
+    // inv.precioUSD. Se toma lo que realmente salió de la billetera al crear
+    // el producto (gasto "Inversión: <nombre>"), si existe.
+    const g = (STATE.db?.gastos || []).find(x => x.autoGenerado && x.cat === 'Inversión'
+      && x.desc === 'Inversión: ' + inv.nombre && (!inv.fecha || x.fecha === inv.fecha));
+    capital = g ? Math.max(0, Number(g.monto || 0) - envio - otros)
+                : Number(inv.precioUSD || 0) * unidades * Number(inv.tasa || 0);
+  } else {
+    capital = Number(inv.precioUSD || 0) * unidades * Number(inv.tasa || 0);
+  }
+  return { unidades, capital, envio, otros, total: capital + envio + otros };
+}
+
+// Lo invertido en COMPRAS del producto: pedido inicial + renovaciones de stock
+// (cada renovación ya guarda su costo total, con su envío, en inversionNueva).
+function calcCompradoInv(inv) {
   const capitalRenovaciones = (inv.renovaciones || []).reduce((s, r) => s + Number(r.inversionNueva || 0), 0);
+  return pedidoInicialInv(inv).total + capitalRenovaciones;
+}
+
+function calcInversion(inv) {
   const totalGastosAdicionales = (inv.gastosAdicionales || []).reduce((s, g) => s + Number(g.monto || 0), 0);
-  return capitalBase + envioBase + otrosBase + capitalRenovaciones + totalGastosAdicionales;
+  return calcCompradoInv(inv) + totalGastosAdicionales;
 }
 
 function enriquecerInversion(inv) {
@@ -3841,11 +3876,8 @@ function enriquecerInversion(inv) {
   // del promedio histórico de todas las compras. Así la ganancia por venta refleja
   // el costo real vigente y se actualiza solo con cada renovación de stock nueva.
   const renovacionesArr = inv.renovaciones || [];
-  const unidadesInicialesLote = Number(inv.unidadesIniciales || inv.unidades || 0);
-  const capitalBaseLote = Number(inv.precioUSD || 0) * unidadesInicialesLote * Number(inv.tasa || 0);
-  const envioBaseLote   = Number(inv.envioInicial !== undefined ? inv.envioInicial : inv.envio || 0);
-  const otrosBaseLote   = Number(inv.otrosCostosInicial !== undefined ? inv.otrosCostosInicial : inv.otrosCostos || 0);
-  let costoUnitarioActual = unidadesInicialesLote > 0 ? (capitalBaseLote + envioBaseLote + otrosBaseLote) / unidadesInicialesLote : costoUnitario;
+  const lote0 = pedidoInicialInv(inv);
+  let costoUnitarioActual = lote0.unidades > 0 ? lote0.total / lote0.unidades : costoUnitario;
   if (renovacionesArr.length > 0) {
     const ultimaRenov = renovacionesArr[renovacionesArr.length - 1];
     const unidadesRenov = Number(ultimaRenov.nuevasUnidades || 0);
@@ -3891,6 +3923,7 @@ function enriquecerInversion(inv) {
     unidadesPedidas: cantidad, unidadesLlegadas, unidadesPendientesLlegar,
     unidadesPreventa, disponibleVenta,
     unidadesPendientesDespacho, porDespacharAhora, esperandoLlegada,
+    totalComprado: calcCompradoInv(inv), pedidoInicial: lote0,
     gastosAdicionales: inv.gastosAdicionales || [],
     renovaciones: inv.renovaciones || [],
     llegadasBodega: inv.llegadasBodega || [] };
@@ -4484,20 +4517,21 @@ function openModalNuevaInversion(id=null) {
                 <button type="button" id="fi-modo-unitario" onclick="setModoPrecioInv('unitario')" style="height:26px;padding:0 10px;border:none;font-size:.7rem;font-weight:600;cursor:default;background:#0f2d6b;color:#fff;">Por unidad</button>
                 <button type="button" id="fi-modo-total" onclick="setModoPrecioInv('total')" style="height:26px;padding:0 10px;border:none;font-size:.7rem;font-weight:600;cursor:default;background:none;color:var(--muted);">Total compra</button>
               </div>
-              <input type="number" class="form-control" id="fi-precio-usd" value="${inv?.precioUSD||''}" step="0.01" placeholder="0.00" oninput="calcPreviewInv()">
+              <input type="number" class="form-control" id="fi-precio-usd" value="${inv ? (inv.precioUSDInicial ?? (inv.renovaciones?.length && pedidoInicialInv(inv).unidades>0 ? +(pedidoInicialInv(inv).capital / pedidoInicialInv(inv).unidades / (inv.tasaInicial ?? inv.tasa ?? 1)).toFixed(2) : inv.precioUSD)) || '' : ''}" step="0.01" placeholder="0.00" oninput="calcPreviewInv()">
               <small id="fi-precio-hint" style="color:var(--muted);font-size:.72rem;display:block;margin-top:4px;"></small>
             </div>
             <div class="form-group"><label>Tasa dólar (COP) *</label>
-              <input type="text" inputmode="numeric" class="form-control" id="fi-tasa" value="${inv?.tasa||4200}" oninput="fmtMontoInput(this);calcPreviewInv()">
+              <input type="text" inputmode="numeric" class="form-control" id="fi-tasa" value="${inv?.tasaInicial ?? inv?.tasa ?? 4200}" oninput="fmtMontoInput(this);calcPreviewInv()">
             </div>
             <div class="form-group"><label>Cantidad comprada *</label>
-              <input type="number" class="form-control" id="fi-unidades" value="${inv?.unidades||''}" placeholder="Ej: 6" oninput="calcPreviewInv()">
+              <input type="number" class="form-control" id="fi-unidades" value="${inv ? (pedidoInicialInv(inv).unidades || '') : ''}" placeholder="Ej: 6" oninput="calcPreviewInv()">
+              ${inv?.renovaciones?.length ? `<small style="color:var(--muted);font-size:.72rem;display:block;margin-top:4px;">Solo el pedido inicial. Las renovaciones se suman aparte (${fmtNum(inv.renovaciones.reduce((s,r)=>s+Number(r.nuevasUnidades||0),0))} uds).</small>` : ''}
             </div>
             <div class="form-group"><label>Envío internacional (COP)</label>
-              <input type="text" inputmode="numeric" class="form-control" id="fi-envio" value="${inv?.envio||0}" placeholder="0" oninput="fmtMontoInput(this);calcPreviewInv()">
+              <input type="text" inputmode="numeric" class="form-control" id="fi-envio" value="${inv ? pedidoInicialInv(inv).envio : 0}" placeholder="0" oninput="fmtMontoInput(this);calcPreviewInv()">
             </div>
             <div class="form-group"><label>Otros costos (COP)</label>
-              <input type="text" inputmode="numeric" class="form-control" id="fi-otros" value="${inv?.otrosCostos||0}" placeholder="0" oninput="fmtMontoInput(this);calcPreviewInv()">
+              <input type="text" inputmode="numeric" class="form-control" id="fi-otros" value="${inv ? pedidoInicialInv(inv).otros : 0}" placeholder="0" oninput="fmtMontoInput(this);calcPreviewInv()">
             </div>
             <div class="form-group"><label>Precio sugerido venta (COP)</label>
               <input type="text" inputmode="numeric" class="form-control" id="fi-precio-sugerido" value="${inv?.precioSugerido||''}" placeholder="0" oninput="fmtMontoInput(this)">
@@ -4688,9 +4722,21 @@ async function guardarInversion(id=null) {
     billeteraId,
   };
 
+  datos.precioUSDInicial = precioUSD;
+  datos.tasaInicial = tasa;
   if(id && id!=='') {
     const idx = STATE.db.inversiones.findIndex(i=>i.id===id);
-    if(idx!==-1) STATE.db.inversiones[idx] = { ...STATE.db.inversiones[idx], ...datos };
+    const prev = STATE.db.inversiones[idx];
+    // Al editar, el formulario muestra SOLO el pedido inicial: el total pedido
+    // es ese pedido + las renovaciones, y el precio/tasa "actuales" (del último
+    // lote renovado) no se tocan.
+    if (prev?.renovaciones?.length) {
+      datos.unidades = unidades + prev.renovaciones.reduce((s,r)=>s+Number(r.nuevasUnidades||0),0);
+      datos.precioUSD = prev.precioUSD;
+      datos.tasa = prev.tasa;
+      datos.capitalUSD = prev.capitalUSD;
+    }
+    if(idx!==-1) STATE.db.inversiones[idx] = { ...prev, ...datos };
     toast('Inversión actualizada','success');
   } else {
     STATE.db.inversiones.push({ id:uid(), ...datos });
@@ -5122,16 +5168,19 @@ function calcTotalesDetalleInv(p, rawInv) {
   // después, aparte) también cuentan como envío, no como gasto genérico.
   const gastosEnvioAdic = (p.gastosAdicionales||[]).filter(g=>g.motivo==='Envío').reduce((a,g)=>a+Number(g.monto),0);
   const gastosOtrosAdic = totalGastosAdic - gastosEnvioAdic;
-  const totalEnvios = Number(rawInv.envio||0) + (rawInv.renovaciones||[]).reduce((a,r)=>a+Number(r.envio||0),0) + gastosEnvioAdic;
+  const enviosCompras = p.pedidoInicial.envio + (rawInv.renovaciones||[]).reduce((a,r)=>a+Number(r.envio||0),0);
+  const totalEnvios = enviosCompras + gastosEnvioAdic;
   const totalCapital = p.inversionTotal - gastosOtrosAdic - totalEnvios;
-  return { totalEnvios, totalCapital };
+  return { totalEnvios, totalCapital, enviosCompras };
 }
 
 function renderKpisDetalleHTML(p, rawInv, anim) {
-  const { totalEnvios, totalCapital } = calcTotalesDetalleInv(p, rawInv);
+  const { totalCapital, enviosCompras } = calcTotalesDetalleInv(p, rawInv);
+  // Total invertido = pedido inicial + renovaciones de stock de ESTE producto
+  // (con sus envíos). No incluye los gastos adicionales.
   return [
-    ['total','Total invertido',numSpan('kpi-total',p.inversionTotal,'cop'),'#0f2d6b','#e8eefb','<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
-      `<span style="color:#b45309;">+ Envíos ${numSpan('kpi-envios',totalEnvios,'cop')}</span>`],
+    ['total','Total invertido',numSpan('kpi-total',p.totalComprado,'cop'),'#0f2d6b','#e8eefb','<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+      `<span style="color:#b45309;">+ Envíos ${numSpan('kpi-envios',enviosCompras,'cop')}</span>`],
     ['capital','Capital',numSpan('kpi-capital',totalCapital,'cop'),'var(--text)','var(--bg2)','<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>'],
     ['costo','Costo unitario',numSpan('kpi-costo',p.costoUnitarioActual,'cop'),'var(--text)','var(--bg2)','<path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>'],
     ['recuperado','Recuperado',numSpan('kpi-recuperado',p.totalRecuperado,'cop'),'var(--green)','var(--green-light)','<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>'],
@@ -6167,6 +6216,12 @@ async function confirmarRenovarStock(invId, stockActual) {
   const yaEnBodegaAntes = (inv.unidadesEnBodega !== undefined && inv.unidadesEnBodega !== null)
     ? Number(inv.unidadesEnBodega) : Number(inv.unidades || 0);
   inv.unidadesEnBodega = yaEnBodegaAntes;
+  // Conservar el precio/tasa del pedido inicial antes de pasar al lote nuevo
+  if (inv.precioUSDInicial === undefined && !(inv.renovaciones||[]).length) {
+    inv.precioUSDInicial = Number(inv.precioUSD || 0);
+    inv.tasaInicial = Number(inv.tasa || 0);
+  }
+  inv.unidadesIniciales = pedidoInicialInv(inv).unidades;
   inv.unidades    = (inv.unidades || 0) + nuevas;
   if (precioUSD) inv.precioUSD = precioUSD;
   if (tasa) inv.tasa = tasa;
