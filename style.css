@@ -1835,3 +1835,120 @@ input:hover, select:hover, textarea:hover, label:hover { filter: none; }
 [data-numkey] { transition: color .4s ease; font-variant-numeric: tabular-nums; }
 [data-numkey].num-sube { color: var(--green); }
 [data-numkey].num-baja { color: var(--red); }
+
+/* ══ Detalle de inversión: tablas centradas ══ */
+#inv-tab-panel .inv-table-compact th,
+#inv-tab-panel .inv-table-compact td { text-align: center; }
+.inv-ventas-table th { overflow: visible !important; }
+
+/* Buscador de ventas en la barra de pestañas */
+.vh-buscar-wrap {
+  display: flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 8px 0 10px; width: 220px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--muted);
+  transition: border-color .2s ease, box-shadow .2s ease, width .25s ease;
+}
+.vh-buscar-wrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); width: 250px; }
+.vh-buscar-wrap input { flex: 1; min-width: 0; border: none; outline: none; background: none; color: var(--text); font-size: .76rem; }
+.vh-buscar-wrap button { border: none; background: none; color: var(--muted); font-size: .72rem; cursor: default; padding: 0 2px; }
+
+/* Encabezado "Estado" con menú flotante (no cambia el tamaño del encabezado) */
+.vh-th-estado { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 5px; cursor: default; user-select: none; }
+.vh-th-estado.filtrado { color: var(--accent); }
+.vh-th-estado.filtrado::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.vh-estado-menu {
+  position: absolute; top: calc(100% + 8px); left: 50%; z-index: 30;
+  min-width: 150px; padding: 4px; border-radius: 9px;
+  background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow-md);
+  opacity: 0; pointer-events: none; transform: translate(-50%, -4px);
+  transition: opacity .16s ease, transform .16s ease;
+  text-transform: none; letter-spacing: 0;
+}
+.vh-estado-menu.abierto { opacity: 1; pointer-events: auto; transform: translate(-50%, 0); }
+.vh-estado-opt {
+  display: flex; align-items: center; justify-content: space-between; width: 100%;
+  padding: 7px 10px; border: none; background: none; border-radius: 6px;
+  font-size: .78rem; font-weight: 600; color: var(--text); cursor: default; text-align: left;
+}
+.vh-estado-opt:hover { background: var(--bg2); }
+.vh-estado-opt .vh-check { opacity: 0; color: var(--accent); }
+.vh-estado-opt.activo { color: var(--accent); }
+.vh-estado-opt.activo .vh-check { opacity: 1; }
+
+/* Filtro animado: salen, se juntan y entran */
+.inv-ventas-table tbody tr.vh-fila-filtro-sale { transition: opacity .2s ease, transform .2s ease; opacity: 0; transform: scale(.985); }
+@keyframes vhFiltroEntra { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.inv-ventas-table tbody tr.vh-fila-filtro-entra { animation: vhFiltroEntra .35s cubic-bezier(.22,.8,.3,1) both; }
+
+/* ID de venta: copiar + ir a Mercado Libre */
+.vh-id-cell { display: inline-flex; align-items: center; justify-content: center; gap: 6px; max-width: 100%; }
+.vh-id-copiar {
+  font-variant-numeric: tabular-nums; color: var(--text); font-size: .8rem;
+  padding: 2px 6px; border-radius: 6px; cursor: copy;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transition: background .15s ease, color .15s ease;
+}
+.vh-id-copiar:hover { background: var(--bg2); color: var(--accent); }
+@keyframes vhCopiado { 0% { background: var(--green-light); color: var(--green); } 100% { background: transparent; } }
+.vh-id-copiar.copiado { animation: vhCopiado .9s ease; }
+.vh-ml-btn {
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #fff8d6; color: #8a6d00; border: 1px solid #f5e08a; text-decoration: none;
+  transition: transform .15s ease, background .15s ease;
+}
+.vh-ml-btn:hover { background: #ffe600; transform: translateY(-1px); }
+
+/* Confirmación de despacho */
+.desp-resumen { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 9px; background: var(--bg2); border: 1px solid var(--border); text-align: left; }
+.desp-resumen div { display: flex; justify-content: space-between; gap: 12px; font-size: .82rem; }
+.desp-resumen span { color: var(--muted); }
+.desp-resumen strong { color: var(--text); text-align: right; word-break: break-all; }
+.desp-ml-link {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+  padding: 6px 12px; border-radius: 8px; font-size: .78rem; font-weight: 700; text-decoration: none;
+  background: #ffe600; color: #2d3277; border: 1px solid #f0d800;
+}
+.desp-ml-link:hover { filter: brightness(.97); }
+
+/* Carga entre pestañas: tres puntos */
+.inv-tab-loader { height: 100%; min-height: 180px; display: flex; align-items: center; justify-content: center; gap: 7px; animation: invTabFade .2s ease both; }
+.inv-tab-loader span { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); opacity: .3; animation: invDots 1s ease-in-out infinite; }
+.inv-tab-loader span:nth-child(2) { animation-delay: .15s; }
+.inv-tab-loader span:nth-child(3) { animation-delay: .3s; }
+@keyframes invDots { 0%, 80%, 100% { opacity: .25; transform: translateY(0) scale(.85); } 40% { opacity: 1; transform: translateY(-5px) scale(1); } }
+
+/* ══ Tarjeta "Stock físico en bodega" ══ */
+.stk-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.stk-title { font-size: .67rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.stk-pill { font-size: .66rem; font-weight: 700; color: #b45309; background: #fff7ed; border: 1px solid #fde4c0; padding: 1px 8px; border-radius: 10px; }
+.stk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stk-tile { padding: 8px 10px; border-radius: 9px; background: var(--bg2); border: 1px solid var(--border-light, var(--border)); }
+.stk-tile-label { font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.stk-tile-value { font-size: 1.15rem; font-weight: 800; line-height: 1.25; margin-top: 2px; }
+.stk-tile-value small { font-size: .72rem; font-weight: 600; color: var(--muted); }
+.stk-progress { height: 5px; border-radius: 10px; margin: 10px 0; }
+.stk-progress .progress-fill { background: #b45309; border-radius: 10px; }
+.stk-rows { display: flex; flex-direction: column; gap: 5px; }
+.stk-row {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 30px; padding: 0 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--card); color: var(--muted);
+  transition: background .3s ease, border-color .3s ease, color .3s ease;
+}
+.stk-row-label { display: flex; align-items: center; gap: 7px; font-size: .72rem; font-weight: 600; }
+.stk-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .55; }
+.stk-row-value { font-size: .82rem; font-weight: 800; }
+.stk-row-value small { font-size: .66rem; font-weight: 600; opacity: .8; }
+.stk-row-green  { background: var(--green-light); border-color: rgba(22,163,74,.25); color: var(--green); }
+.stk-row-orange { background: #fff7ed; border-color: #fde4c0; color: #b45309; }
+.stk-row-gray   { background: var(--bg2); color: var(--text); }
+.stk-row-green .stk-dot, .stk-row-orange .stk-dot, .stk-row-gray .stk-dot { opacity: 1; }
+.stk-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.stk-btn { height: 30px; border-radius: 8px; font-size: .72rem; font-weight: 700; cursor: default; }
+.stk-btn-ghost { border: 1px solid var(--border); background: var(--card); color: var(--muted); }
+.stk-btn-ghost:hover { background: var(--bg2); }
+.stk-btn-primary { border: none; background: #b45309; color: #fff; }
+.stk-btn-primary:hover { filter: brightness(1.06); }
+.stk-nota { margin-top: 10px; font-size: .71rem; color: var(--muted); text-align: center; }
+#inv-tab-panel .vh-hora { justify-content: center; }
