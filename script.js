@@ -5175,12 +5175,13 @@ function calcTotalesDetalleInv(p, rawInv) {
 }
 
 function renderKpisDetalleHTML(p, rawInv, anim) {
-  const { totalCapital, enviosCompras } = calcTotalesDetalleInv(p, rawInv);
-  // Total invertido = pedido inicial + renovaciones de stock de ESTE producto
-  // (con sus envíos). No incluye los gastos adicionales.
+  const { totalCapital, totalEnvios, enviosCompras } = calcTotalesDetalleInv(p, rawInv);
+  // Total invertido = pedido inicial + renovaciones de stock de ESTE producto,
+  // con TODOS sus envíos ya sumados (los de cada compra y los registrados
+  // aparte como gasto adicional con motivo "Envío").
+  const totalInvertido = p.totalComprado + (totalEnvios - enviosCompras);
   return [
-    ['total','Total invertido',numSpan('kpi-total',p.totalComprado,'cop'),'#0f2d6b','#e8eefb','<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
-      `<span style="color:#b45309;">+ Envíos ${numSpan('kpi-envios',enviosCompras,'cop')}</span>`],
+    ['total','Total invertido',numSpan('kpi-total',totalInvertido,'cop'),'#0f2d6b','#e8eefb','<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'],
     ['capital','Capital',numSpan('kpi-capital',totalCapital,'cop'),'var(--text)','var(--bg2)','<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>'],
     ['costo','Costo unitario',numSpan('kpi-costo',p.costoUnitarioActual,'cop'),'var(--text)','var(--bg2)','<path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>'],
     ['recuperado','Recuperado',numSpan('kpi-recuperado',p.totalRecuperado,'cop'),'var(--green)','var(--green-light)','<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>'],
