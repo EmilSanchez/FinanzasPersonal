@@ -5800,6 +5800,7 @@ async function despacharVentaInv(ventaId, invId) {
     <div style="margin-bottom:12px;">¿Seguro que ya despachaste esta venta?</div>
     <div class="desp-resumen">
       <div><span>Producto</span><strong>${escAttr(inv0?.nombre||'—')}</strong></div>
+      <div><span>Cliente</span><strong>${escAttr((venta.obs||'').trim() && venta.obs.trim() !== (venta.cliente||'').trim() ? venta.obs.trim() : '—')}</strong></div>
       <div><span>Cantidad</span><strong>${fmtNum(venta.cantidad||0)} ud${(venta.cantidad||0)===1?'':'s'}</strong></div>
       <div><span>N.º de venta</span><strong>${escAttr(idVenta)}</strong></div>
     </div>
