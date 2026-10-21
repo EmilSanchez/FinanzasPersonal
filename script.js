@@ -4962,7 +4962,7 @@ async function guardarVentaInv(invId, disponibleVenta, stockFisico, pendientesLl
   }
   const esPreventa = cantidad > (stockFisico||0);
   const ventaId = uid();
-  addVentaInv({ id: ventaId, invId, fecha, cantidad, precioUnitario:precio, cliente, obs, billeteraId, preventa: esPreventa, despachado: !esPreventa });
+  addVentaInv({ id: ventaId, invId, fecha, cantidad, precioUnitario:precio, cliente, obs, billeteraId, preventa: esPreventa, despachado: false }); // toda venta nueva queda Pendiente hasta presionar el botón de despacho
 
   const inv = STATE.db.inversiones.find(i=>i.id===invId);
   const billNombre = STATE.db.billeteras?.find(b=>b.id===billeteraId)?.nombre || '';
