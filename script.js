@@ -3884,8 +3884,20 @@ function enriquecerInversion(inv) {
     if (unidadesRenov > 0) costoUnitarioActual = Number(ultimaRenov.inversionNueva || 0) / unidadesRenov;
   }
 
-  const unidadesVendidas = ventas.reduce((s,v)=>s+(v.cantidad||0), 0);
-  const totalRecuperado  = ventas.reduce((s,v)=>s+((v.cantidad||0)*(v.precioUnitario||0)), 0);
+  // Devoluciones: una venta devuelta deja de contar como vendida y su dinero
+  // queda en $0. Sus unidades salieron de bodega y:
+  //  - 'en_camino': vienen de regreso (aún no están en bodega)
+  //  - 'reventa'  : llegaron en buen estado y vuelven al inventario
+  //  - 'perdida'  : llegaron pero no se pueden revender (pérdida = su costo)
+  const devUds = est => ventas.filter(v => v.devolucion?.estado === est).reduce((s,v)=>s+(v.cantidad||0), 0);
+  const devolucionesEnCamino = devUds('en_camino');
+  const devolucionesReventa  = devUds('reventa');
+  const devolucionesPerdida  = devUds('perdida');
+  const ventasVigentes   = ventas.filter(v => !v.devolucion);
+  const unidadesVendidas = ventasVigentes.reduce((s,v)=>s+(v.cantidad||0), 0);
+  const totalRecuperado  = ventasVigentes.reduce((s,v)=>s+((v.cantidad||0)*(v.precioUnitario||0)), 0);
+  // Unidades que salieron de bodega y no han vuelto (o no volverán al inventario)
+  const unidadesFueraPorDevolucion = devolucionesEnCamino + devolucionesPerdida;
 
   // Unidades que ya llegaron físicamente a bodega. Si el campo nunca se ha
   // usado (inversiones creadas antes de este seguimiento), se asume que ya
@@ -3894,7 +3906,7 @@ function enriquecerInversion(inv) {
     ? Number(inv.unidadesEnBodega) : cantidad;
   const unidadesPendientesLlegar = Math.max(0, cantidad - unidadesLlegadas);
 
-  const stockActual    = Math.max(0, unidadesLlegadas - unidadesVendidas);
+  const stockActual    = Math.max(0, unidadesLlegadas - unidadesVendidas - unidadesFueraPorDevolucion);
   // Unidades vendidas que aún no se pueden entregar porque no han llegado
   // físicamente a bodega (preventas: ya se vendieron, pero el pedido sigue
   // en camino). Se calculan contra lo que YA llegó, no contra lo pedido.
@@ -3903,17 +3915,19 @@ function enriquecerInversion(inv) {
   // camino) menos lo ya vendido. Vender contra un pedido en camino es una
   // preventa válida — el cliente paga, pero la entrega queda pendiente hasta
   // que la mercancía llegue a bodega.
-  const disponibleVenta = Math.max(0, cantidad - unidadesVendidas);
+  const disponibleVenta = Math.max(0, cantidad - unidadesVendidas - unidadesFueraPorDevolucion);
   // Ventas (normalmente preventas) que aún no se han despachado al cliente.
   // De ellas, las que ya tienen mercancía física en bodega se pueden despachar
   // YA ("por despachar ahora"); el resto sigue esperando que llegue el pedido.
-  const unidadesPendientesDespacho = ventas.filter(v=>v.despachado===false).reduce((s,v)=>s+(v.cantidad||0), 0);
-  const unidadesDespachadas = Math.max(0, unidadesVendidas - unidadesPendientesDespacho);
+  const unidadesPendientesDespacho = ventasVigentes.filter(v=>v.despachado===false).reduce((s,v)=>s+(v.cantidad||0), 0);
+  const unidadesDespachadas = Math.max(0, unidadesVendidas - unidadesPendientesDespacho) + unidadesFueraPorDevolucion;
   const fisicoEnBodega = Math.max(0, unidadesLlegadas - unidadesDespachadas);
   const porDespacharAhora = Math.min(unidadesPendientesDespacho, fisicoEnBodega);
   const esperandoLlegada = Math.max(0, unidadesPendientesDespacho - porDespacharAhora);
   const costoVendido   = costoUnitarioActual * unidadesVendidas;
-  const ganancia       = totalRecuperado - costoVendido;
+  // Lo devuelto que no se puede revender es pérdida: su costo sale de la ganancia
+  const perdidaDevoluciones = costoUnitarioActual * devolucionesPerdida;
+  const ganancia       = totalRecuperado - costoVendido - perdidaDevoluciones;
   const recuperacionPct = inversionTotal > 0 ? (totalRecuperado/inversionTotal)*100 : 0;
   let estadoStock = 'ok';
   if (stockActual === 0) estadoStock = 'agotado';
@@ -3923,6 +3937,7 @@ function enriquecerInversion(inv) {
     unidadesPedidas: cantidad, unidadesLlegadas, unidadesPendientesLlegar,
     unidadesPreventa, disponibleVenta,
     unidadesPendientesDespacho, porDespacharAhora, esperandoLlegada,
+    devolucionesEnCamino, devolucionesReventa, devolucionesPerdida, perdidaDevoluciones,
     totalComprado: calcCompradoInv(inv), pedidoInicial: lote0,
     gastosAdicionales: inv.gastosAdicionales || [],
     renovaciones: inv.renovaciones || [],
@@ -4376,11 +4391,11 @@ function renderInvMovimientos() {
     // Ventas registradas
     const ventas = (STATE.db.ventasInv || []).filter(v => v.invId === inv.id);
     ventas.forEach(v => {
-      const total = (v.cantidad || 0) * (v.precioUnitario || 0);
+      const total = v.devolucion ? 0 : (v.cantidad || 0) * (v.precioUnitario || 0);
       movs.push({
         fecha: v.fecha || '—',
         tipo: 'venta',
-        concepto: `Venta: ${inv.nombre}${v.cliente ? ' → ' + v.cliente : ''}`,
+        concepto: `Venta${v.devolucion ? ' (devuelta)' : ''}: ${inv.nombre}${v.cliente ? ' → ' + v.cliente : ''}`,
         producto: inv.nombre,
         monto: total,
         label: `${v.cantidad} uds × ${fmtCOP(v.precioUnitario)}`,
@@ -5276,6 +5291,12 @@ function renderStockBodegaHTML(p) {
       ${fila('Por despachar ahora', 'stk-despachar', p.porDespacharAhora, 'green')}
       ${fila('Preventas esperando llegada', 'stk-esperando', p.esperandoLlegada, 'gray')}
       ${fila('Disponible para preventa', 'stk-preventa', capacidadPreventa, 'orange')}
+      ${p.devolucionesEnCamino>0 ? fila('Devoluciones en camino', 'stk-dev-camino', p.devolucionesEnCamino, 'purple') : ''}
+      ${p.perdidaDevoluciones>0 ? `
+      <div class="stk-row stk-row-red">
+        <span class="stk-row-label"><span class="stk-dot"></span>Pérdida por devoluciones (${fmtNum(p.devolucionesPerdida)} uds)</span>
+        <span class="stk-row-value">−${numSpan('stk-dev-perdida', p.perdidaDevoluciones, 'cop')}</span>
+      </div>` : ''}
     </div>
     ${p.unidadesPendientesLlegar>0?`
     <div class="stk-actions">
@@ -5408,7 +5429,7 @@ function renderThEstadoHTML(invId) {
       <span>Estado</span>
       <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"><polyline points="6 9 12 15 18 9"/></svg>
       <div id="vh-estado-menu" class="vh-estado-menu">
-        ${opt('todos','Todos')}${opt('pendiente','Pendientes')}${opt('despachado','Despachados')}
+        ${opt('todos','Todos')}${opt('pendiente','Pendientes')}${opt('despachado','Despachados')}${opt('devolucion','Devoluciones')}
       </div>
     </div>`;
 }
@@ -5441,33 +5462,46 @@ function ordenarVentasRecientes(a, b) {
 function ventaPasaFiltros(v) {
   const q = (window._vhQuery || '').trim().toLowerCase();
   const filtroEstado = window._vhEstadoFiltro || 'todos';
-  const pendiente = v.despachado === false;
-  const pasaEstado = filtroEstado==='todos' || (filtroEstado==='pendiente' ? pendiente : !pendiente);
+  const pendiente = v.despachado === false && !v.devolucion;
+  const pasaEstado = filtroEstado==='todos'
+    || (filtroEstado==='pendiente' && pendiente)
+    || (filtroEstado==='despachado' && !pendiente && !v.devolucion)
+    || (filtroEstado==='devolucion' && !!v.devolucion);
   return (!q || (v.cliente||'').toLowerCase().includes(q)) && pasaEstado;
 }
 
 function renderEstadoVentaHTML(v, invId) {
+  const d = v.devolucion;
+  if (d) {
+    if (d.estado === 'en_camino') return `<button class="vh-dev-badge vh-dev-camino" onclick="event.stopPropagation();openModalLlegoDevolucion('${v.id}','${invId}')" title="Marcar que ya llegó la devolución">Devolución en camino</button>`;
+    if (d.estado === 'reventa')   return `<span class="vh-dev-badge vh-dev-reventa" title="Llegó en buen estado y volvió al inventario">Devuelta · al stock</span>`;
+    return `<span class="vh-dev-badge vh-dev-perdida" title="Llegó pero no es revendible">Devuelta · pérdida</span>`;
+  }
   return v.despachado === false
     ? `<button onclick="event.stopPropagation();despacharVentaInv('${v.id}','${invId}')" style="border:1px solid #fde4c0;background:#fff7ed;color:#b45309;font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:12px;cursor:default;white-space:nowrap;">Pendiente</button>`
     : `<span class="vh-estado-despachado" style="display:inline-block;border:1px solid var(--green-light);background:var(--green-light);color:var(--green);font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:12px;white-space:nowrap;">Despachado</span>`;
 }
 
 function renderVentaFilaHTML(v, p, invId, extraClase = '') {
-  const totalVenta    = (v.cantidad||0)*(v.precioUnitario||0);
-  const gananciaVenta = ((v.precioUnitario||0) - p.costoUnitarioActual) * (v.cantidad||0);
+  const dev = v.devolucion;
+  const totalVenta    = dev ? 0 : (v.cantidad||0)*(v.precioUnitario||0);
+  // Devuelta: ganancia 0 (o la pérdida del costo si no se puede revender)
+  const gananciaVenta = dev
+    ? (dev.estado === 'perdida' ? -p.costoUnitarioActual * (v.cantidad||0) : 0)
+    : ((v.precioUnitario||0) - p.costoUnitarioActual) * (v.cantidad||0);
   // Ventas antiguas sin "creadoEn": se usa la hora del ingreso que generaron
   const hora = fmtHoraRegistro(v.creadoEn) || (STATE.db.ingresos||[]).find(i=>i.origenVentaId===v.id)?.hora || '';
   const sel = window._vhSelId === v.id ? ' vh-fila-sel' : '';
   return `
-      <tr id="venta-fila-${v.id}" class="${(extraClase+sel).trim()}" onclick="seleccionarFilaVenta('${v.id}', event)">
+      <tr id="venta-fila-${v.id}" class="${(extraClase+sel+(dev?' vh-fila-devuelta':'')).trim()}" onclick="seleccionarFilaVenta('${v.id}', event)">
         <td>
           <div class="vh-fecha">${fmtFechaLarga(v.fecha)}</div>
           <div class="vh-hora">${hora||''}${v.preventa?'<span style="display:inline-block;padding:0 5px;border-radius:4px;background:#fff7ed;color:#b45309;font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">Preventa</span>':''}</div>
         </td>
         <td style="font-weight:600">${v.cantidad}</td>
         <td>${fmtCOP(v.precioUnitario)}</td>
-        <td style="font-weight:700;color:var(--green)">${fmtCOP(totalVenta)}</td>
-        <td style="font-weight:700;color:${gananciaVenta>=0?'var(--green)':'var(--red)'}">${gananciaVenta>=0?'+':''}${fmtCOP(gananciaVenta)}</td>
+        <td style="font-weight:700;color:${dev?'var(--muted)':'var(--green)'}">${fmtCOP(totalVenta)}${dev?`<div style="font-size:.66rem;font-weight:600;text-decoration:line-through;">${fmtCOP((v.cantidad||0)*(v.precioUnitario||0))}</div>`:''}</td>
+        <td style="font-weight:700;color:${dev&&gananciaVenta===0?'var(--muted)':gananciaVenta>=0?'var(--green)':'var(--red)'}">${gananciaVenta>0?'+':gananciaVenta<0?'−':''}${fmtCOP(Math.abs(gananciaVenta))}</td>
         <td>${v.cliente ? `<div class="vh-id-cell">
             <span class="vh-id-copiar" title="Clic para copiar" onclick="copiarIdVenta(event, this)" data-id="${escAttr(v.cliente)}">${escAttr(v.cliente)}</span>
             ${esIdVentaML(v.cliente) ? `<a class="vh-ml-btn" href="${ML_VENTA_URL(v.cliente.trim())}" target="_blank" rel="noopener" title="Ver venta en Mercado Libre" onclick="event.stopPropagation()">${ICONO_EXTERNO}</a>` : ''}
@@ -5475,9 +5509,12 @@ function renderVentaFilaHTML(v, p, invId, extraClase = '') {
         <td style="color:var(--muted)">${escAttr(v.obs)||'—'}</td>
         <td id="venta-estado-${v.id}">${renderEstadoVentaHTML(v, invId)}</td>
         <td><div style="display:flex;gap:4px;justify-content:center;">
-          <button class="btn btn-ghost btn-sm inv-row-action-btn" onclick="event.stopPropagation();editarVentaInv('${v.id}','${invId}')" style="padding:4px 8px;">
+          ${!dev && v.despachado !== false ? `<button class="btn btn-ghost btn-sm inv-row-action-btn" onclick="event.stopPropagation();openModalDevolucionVenta('${v.id}','${invId}')" title="Registrar devolución" style="padding:4px 8px;color:#7c3aed;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+          </button>` : ''}
+          ${dev ? '' : `<button class="btn btn-ghost btn-sm inv-row-action-btn" onclick="event.stopPropagation();editarVentaInv('${v.id}','${invId}')" style="padding:4px 8px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          </button>
+          </button>`}
           <button class="btn btn-danger btn-sm inv-row-action-btn" onclick="event.stopPropagation();eliminarVentaInv('${v.id}','${invId}')">
             <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
           </button>
@@ -5509,8 +5546,8 @@ function renderVentasTablaHTML(p, invId) {
     <div class="table-wrap inv-tab-scroll">
       <table class="data-table inv-table-compact inv-ventas-table">
         <colgroup>
-          <col style="width:14%;"><col style="width:8%;"><col style="width:10%;"><col style="width:10%;"><col style="width:10%;">
-          <col style="width:17%;"><col style="width:13%;"><col style="width:10%;"><col style="width:8%;">
+          <col style="width:14%;"><col style="width:7%;"><col style="width:9%;"><col style="width:10%;"><col style="width:10%;">
+          <col style="width:19%;"><col style="width:10%;"><col style="width:12%;"><col style="width:9%;">
         </colgroup>
         <thead><tr>
           <th>Fecha</th><th>Cantidad</th><th>Precio unit.</th><th>Total</th><th>Ganancia</th>
@@ -5839,12 +5876,170 @@ async function despacharVentaInv(ventaId, invId) {
   toast('Venta marcada como despachada', 'success');
 }
 
+// ─── Devoluciones ─────────────────────────────────────────────
+// 1) Registrar devolución: la venta deja de contar, su dinero queda en $0
+//    (también el ingreso que generó en la billetera) y las unidades quedan
+//    "en camino" de regreso.
+// 2) Al llegar: o vuelven al inventario (revendibles) o se asumen como
+//    pérdida (su costo se descuenta de la ganancia).
+function _resumenVentaHTML(venta, inv) {
+  const cliente = (venta.obs||'').trim() && venta.obs.trim() !== (venta.cliente||'').trim() ? venta.obs.trim() : '—';
+  return `
+    <div class="desp-resumen">
+      <div><span>Producto</span><strong>${escAttr(inv?.nombre||'—')}</strong></div>
+      <div><span>Cliente</span><strong>${escAttr(cliente)}</strong></div>
+      <div><span>Cantidad</span><strong>${fmtNum(venta.cantidad||0)} ud${(venta.cantidad||0)===1?'':'s'}</strong></div>
+      <div><span>N.º de venta</span><strong>${escAttr(venta.cliente||'sin ID')}</strong></div>
+      <div><span>Valor de la venta</span><strong>${fmtCOP((venta.cantidad||0)*(venta.precioUnitario||0))}</strong></div>
+    </div>`;
+}
+function _abrirOverlayInv(html) {
+  const overlay = document.getElementById('modal-inv-form-overlay');
+  overlay.innerHTML = html;
+  overlay.style.display = 'flex';
+  overlay.classList.remove('open');
+  requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('open')));
+}
+// Actualiza solo la fila de la venta (y los números del detalle) sin redibujar la página
+function actualizarFilaVentaEnSitio(ventaId, invId) {
+  const enDetalle = STATE.currentPage === 'detalle-inv' && STATE.navParam === invId;
+  if (!enDetalle || !actualizarDetalleInvEnSitio(invId)) { renderAll(); return; }
+  const fila = document.getElementById('venta-fila-'+ventaId);
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  const venta = (STATE.db.ventasInv||[]).find(v=>v.id===ventaId);
+  if (!fila || !inv || !venta) return;
+  if (!ventaPasaFiltros(venta)) { quitarFilaVentaAnimada(fila, invId); return; }
+  const tmp = document.createElement('tbody');
+  tmp.innerHTML = renderVentaFilaHTML(venta, enriquecerInversion(inv), invId, 'vh-fila-actualizada').trim();
+  const nueva = tmp.firstElementChild;
+  fila.replaceWith(nueva);
+  nueva.addEventListener('animationend', () => nueva.classList.remove('vh-fila-actualizada'), { once: true });
+}
+
+function openModalDevolucionVenta(ventaId, invId) {
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  const venta = (STATE.db.ventasInv||[]).find(v=>v.id===ventaId);
+  if (!inv || !venta) return;
+  if (venta.devolucion) return toast('Esta venta ya tiene una devolución registrada', 'info');
+  const bill = STATE.db.billeteras?.find(b=>b.id===venta.billeteraId);
+  _abrirOverlayInv(`
+    <div class="modal" style="max-width:460px;width:100%;">
+      <div class="modal-title" style="display:flex;align-items:center;gap:10px;">
+        <span style="flex:1;">Registrar devolución</span>
+        <button onclick="closeInvModal()" style="background:none;border:none;font-size:1rem;color:var(--muted);cursor:default;">✕</button>
+      </div>
+      <div class="modal-body-wrap" style="display:flex;flex-direction:column;gap:14px;">
+        ${_resumenVentaHTML(venta, inv)}
+        <div class="dev-aviso">
+          El dinero de esta venta quedará en <strong>$0</strong>${bill?` y se descontará de <strong>${escAttr(bill.nombre)}</strong>`:''}.
+          Las unidades quedan <strong>en camino de regreso</strong> hasta que marques que llegaron.
+        </div>
+        <div class="form-grid">
+          <div class="form-group"><label>Fecha de la devolución *</label><input type="date" class="form-control" id="dev-fecha" value="${fechaHoy()}"></div>
+          <div class="form-group"><label>Motivo / nota</label><input type="text" class="form-control" id="dev-nota" placeholder="Ej: El cliente no lo quiso"></div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeInvModal()">Cancelar</button>
+        <button class="btn btn-primary" style="background:#7c3aed;border-color:#7c3aed;" onclick="confirmarDevolucionVenta('${ventaId}','${invId}')">Registrar devolución</button>
+      </div>
+    </div>`);
+}
+
+async function confirmarDevolucionVenta(ventaId, invId) {
+  const venta = (STATE.db.ventasInv||[]).find(v=>v.id===ventaId);
+  if (!venta) return toast('Venta no encontrada', 'error');
+  const fecha = document.getElementById('dev-fecha')?.value;
+  const nota = document.getElementById('dev-nota')?.value.trim() || '';
+  if (!fecha) return toast('La fecha es obligatoria', 'error');
+
+  venta.devolucion = { estado: 'en_camino', fecha, hora: horaActual(), nota, registradaEn: new Date().toISOString() };
+  // El ingreso que generó la venta queda en $0 (se guarda el monto original por si se anula)
+  const ingreso = STATE.db.ingresos.find(i => i.origenVentaId === ventaId);
+  if (ingreso && !ingreso.devuelto) {
+    ingreso.montoOriginal = ingreso.monto;
+    ingreso.monto = 0;
+    ingreso.devuelto = true;
+    ingreso.fuente = (ingreso.fuente || '') + ' (devuelta)';
+  }
+  closeInvModal();
+  actualizarFilaVentaEnSitio(ventaId, invId);
+  await saveDb(['ventasInv','ingresos']);
+  toast('Devolución registrada — el dinero de la venta quedó en $0', 'info');
+}
+
+function openModalLlegoDevolucion(ventaId, invId) {
+  const inv = STATE.db.inversiones.find(i=>i.id===invId);
+  const venta = (STATE.db.ventasInv||[]).find(v=>v.id===ventaId);
+  if (!inv || !venta?.devolucion) return;
+  const costo = enriquecerInversion(inv).costoUnitarioActual * (venta.cantidad||0);
+  _abrirOverlayInv(`
+    <div class="modal" style="max-width:480px;width:100%;">
+      <div class="modal-title" style="display:flex;align-items:center;gap:10px;">
+        <span style="flex:1;">¿Llegó la devolución?</span>
+        <button onclick="closeInvModal()" style="background:none;border:none;font-size:1rem;color:var(--muted);cursor:default;">✕</button>
+      </div>
+      <div class="modal-body-wrap" style="display:flex;flex-direction:column;gap:14px;">
+        ${_resumenVentaHTML(venta, inv)}
+        ${venta.devolucion.nota?`<div style="font-size:.8rem;color:var(--muted);">Motivo: <em>${escAttr(venta.devolucion.nota)}</em></div>`:''}
+        <div style="font-size:.84rem;font-weight:600;">¿En qué estado llegó el producto?</div>
+        <div class="dev-opciones">
+          <button class="dev-opcion dev-opcion-ok" onclick="resolverDevolucion('${ventaId}','${invId}','reventa')">
+            <strong>Volver al inventario</strong>
+            <span>Está en buenas condiciones: +${fmtNum(venta.cantidad||0)} ud${(venta.cantidad||0)===1?'':'s'} disponibles para vender de nuevo</span>
+          </button>
+          <button class="dev-opcion dev-opcion-mal" onclick="resolverDevolucion('${ventaId}','${invId}','perdida')">
+            <strong>No es revendible</strong>
+            <span>Se registra como pérdida: −${fmtCOP(costo)} de la ganancia (su costo)</span>
+          </button>
+        </div>
+      </div>
+      <div class="modal-actions" style="justify-content:space-between;">
+        <button class="btn btn-ghost" style="color:var(--red);" onclick="anularDevolucion('${ventaId}','${invId}')">Anular devolución</button>
+        <button class="btn btn-ghost" onclick="closeInvModal()">Aún no llega</button>
+      </div>
+    </div>`);
+}
+
+async function resolverDevolucion(ventaId, invId, estado) {
+  const venta = (STATE.db.ventasInv||[]).find(v=>v.id===ventaId);
+  if (!venta?.devolucion) return;
+  venta.devolucion.estado = estado;
+  venta.devolucion.llegoFecha = fechaHoy();
+  venta.devolucion.llegoHora = horaActual();
+  closeInvModal();
+  actualizarFilaVentaEnSitio(ventaId, invId);
+  await saveDb(['ventasInv']);
+  toast(estado === 'reventa'
+    ? `Devolución recibida: +${venta.cantidad} ud(s) de vuelta al inventario`
+    : 'Devolución recibida como pérdida (no revendible)', estado === 'reventa' ? 'success' : 'info');
+}
+
+async function anularDevolucion(ventaId, invId) {
+  const venta = (STATE.db.ventasInv||[]).find(v=>v.id===ventaId);
+  if (!venta?.devolucion) return;
+  if (!await appConfirm('Anular devolución', 'La venta vuelve a contar como vendida y su dinero se restaura en la billetera. ¿Continuar?', { tipo: 'warning', textoConfirmar: 'Sí, anular', textoCancelar: 'Cancelar' })) return;
+  delete venta.devolucion;
+  const ingreso = STATE.db.ingresos.find(i => i.origenVentaId === ventaId);
+  if (ingreso?.devuelto) {
+    ingreso.monto = ingreso.montoOriginal ?? Math.round((venta.cantidad||0)*(venta.precioUnitario||0));
+    delete ingreso.montoOriginal;
+    delete ingreso.devuelto;
+    ingreso.fuente = (ingreso.fuente || '').replace(/ \(devuelta\)$/, '');
+  }
+  closeInvModal();
+  actualizarFilaVentaEnSitio(ventaId, invId);
+  await saveDb(['ventasInv','ingresos']);
+  toast('Devolución anulada', 'success');
+}
+
 // ─── Editar venta existente ───────────────────────────────────
 function editarVentaInv(ventaId, invId) {
   const inv = STATE.db.inversiones.find(i=>i.id===invId);
   if (!inv) return;
   const venta = (STATE.db.ventasInv||[]).find(v=>v.id===ventaId);
   if (!venta) return;
+  if (venta.devolucion) return toast('Esta venta fue devuelta: no se puede editar. Si fue un error, anula la devolución mientras está en camino.', 'info');
   const p = enriquecerInversion(inv);
   // Al editar, se le "devuelve" a lo disponible lo que esta misma venta ya
   // estaba usando, antes de validar la nueva cantidad.
